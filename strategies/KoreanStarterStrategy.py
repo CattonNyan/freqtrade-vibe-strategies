@@ -32,6 +32,7 @@ class KoreanStarterStrategy(IStrategy):
     ignore_roi_if_entry_signal = False
 
     buy_rsi = IntParameter(35, 55, default=45, space="buy", optimize=True)
+    buy_adx = IntParameter(15, 35, default=20, space="buy", optimize=True)
     sell_rsi = IntParameter(60, 80, default=70, space="sell", optimize=True)
 
     order_types = {
@@ -62,9 +63,10 @@ class KoreanStarterStrategy(IStrategy):
         dataframe.loc[
             (
                 (dataframe["close"] > dataframe["ema_200"])
+                & (dataframe["close"] > dataframe["ema_20"])
                 & (dataframe["ema_20"] > dataframe["ema_50"])
                 & qtpylib.crossed_above(dataframe["rsi"], self.buy_rsi.value)
-                & (dataframe["adx"] > 20)
+                & (dataframe["adx"] > self.buy_adx.value)
                 & (dataframe["volume"] > dataframe["volume_mean_20"])
                 & (dataframe["volume"] > 0)
             ),
@@ -77,7 +79,7 @@ class KoreanStarterStrategy(IStrategy):
             (
                 (
                     qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
-                    | (dataframe["rsi"] > self.sell_rsi.value)
+                    | qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
                 )
                 & (dataframe["volume"] > 0)
             ),

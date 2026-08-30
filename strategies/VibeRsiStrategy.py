@@ -4,6 +4,7 @@ from pandas import DataFrame
 import talib.abstract as ta
 
 from freqtrade.strategy import IStrategy
+from technical import qtpylib
 
 
 class VibeRsiStrategy(IStrategy):
@@ -32,17 +33,24 @@ class VibeRsiStrategy(IStrategy):
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (
-                (dataframe["rsi"] < 30)
+                qtpylib.crossed_above(dataframe["rsi"], 30)
                 & (dataframe["ema20"] > dataframe["ema50"])
+                & (dataframe["close"] > dataframe["ema20"])
                 & (dataframe["volume"] > 0)
             ),
-            "enter_long",
-        ] = 1
+            ["enter_long", "enter_tag"],
+        ] = (1, "rsi_recovery_with_trend")
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
-            ((dataframe["rsi"] > 70) & (dataframe["volume"] > 0)),
-            "exit_long",
-        ] = 1
+            (
+                (
+                    qtpylib.crossed_above(dataframe["rsi"], 70)
+                    | qtpylib.crossed_below(dataframe["ema20"], dataframe["ema50"])
+                )
+                & (dataframe["volume"] > 0)
+            ),
+            ["exit_long", "exit_tag"],
+        ] = (1, "rsi_or_trend_exit")
         return dataframe
