@@ -1,0 +1,86 @@
+"""Conservative dry-run starter strategy for Freqtrade."""
+
+from pandas import DataFrame
+import talib.abstract as ta
+
+from freqtrade.strategy import IStrategy, IntParameter
+from technical import qtpylib
+
+
+class KoreanStarterStrategy(IStrategy):
+    INTERFACE_VERSION = 3
+
+    can_short = False
+    timeframe = "15m"
+    process_only_new_candles = True
+    startup_candle_count = 220
+
+    minimal_roi = {
+        "0": 0.03,
+        "60": 0.015,
+        "180": 0.0,
+    }
+
+    stoploss = -0.08
+    trailing_stop = True
+    trailing_stop_positive = 0.01
+    trailing_stop_positive_offset = 0.025
+    trailing_only_offset_is_reached = True
+
+    use_exit_signal = True
+    exit_profit_only = False
+    ignore_roi_if_entry_signal = False
+
+    buy_rsi = IntParameter(35, 55, default=45, space="buy", optimize=True)
+    sell_rsi = IntParameter(60, 80, default=70, space="sell", optimize=True)
+
+    order_types = {
+        "entry": "limit",
+        "exit": "limit",
+        "emergency_exit": "market",
+        "force_entry": "market",
+        "force_exit": "market",
+        "stoploss": "market",
+        "stoploss_on_exchange": False,
+    }
+
+    order_time_in_force = {
+        "entry": "GTC",
+        "exit": "GTC",
+    }
+
+    def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["ema_20"] = ta.EMA(dataframe, timeperiod=20)
+        dataframe["ema_50"] = ta.EMA(dataframe, timeperiod=50)
+        dataframe["ema_200"] = ta.EMA(dataframe, timeperiod=200)
+        dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
+        dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
+        dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean()
+        return dataframe
+
+    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe.loc[
+            (
+                (dataframe["close"] > dataframe["ema_200"])
+                & (dataframe["ema_20"] > dataframe["ema_50"])
+                & qtpylib.crossed_above(dataframe["rsi"], self.buy_rsi.value)
+                & (dataframe["adx"] > 20)
+                & (dataframe["volume"] > dataframe["volume_mean_20"])
+                & (dataframe["volume"] > 0)
+            ),
+            ["enter_long", "enter_tag"],
+        ] = (1, "trend_rsi_volume")
+        return dataframe
+
+    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe.loc[
+            (
+                (
+                    qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
+                    | (dataframe["rsi"] > self.sell_rsi.value)
+                )
+                & (dataframe["volume"] > 0)
+            ),
+            ["exit_long", "exit_tag"],
+        ] = (1, "trend_or_rsi_exit")
+        return dataframe
