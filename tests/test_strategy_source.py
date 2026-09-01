@@ -12,6 +12,10 @@ STRATEGIES = {
     "VibeRsiStrategy.py": "VibeRsiStrategy",
     "KoreanStarterStrategy.py": "KoreanStarterStrategy",
 }
+VERIFIED_STARTUP_COUNTS = {
+    "VibeRsiStrategy": 199,
+    "KoreanStarterStrategy": 799,
+}
 REQUIRED_METHODS = {
     "populate_indicators",
     "populate_entry_trend",
@@ -75,6 +79,11 @@ class StrategySourceTests(unittest.TestCase):
                     assignments["startup_candle_count"],
                     max(periods),
                     "startup_candle_count must at least cover the longest indicator period",
+                )
+                self.assertEqual(
+                    assignments["startup_candle_count"],
+                    VERIFIED_STARTUP_COUNTS[class_name],
+                    "startup count must match the verified recursive-analysis result",
                 )
 
     def test_no_explicit_future_shift_or_positional_access(self) -> None:

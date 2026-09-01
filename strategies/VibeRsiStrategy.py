@@ -13,7 +13,7 @@ class VibeRsiStrategy(IStrategy):
     timeframe = "5m"
     can_short = False
     process_only_new_candles = True
-    startup_candle_count = 60
+    startup_candle_count = 199
 
     minimal_roi = {
         "0": 0.04,

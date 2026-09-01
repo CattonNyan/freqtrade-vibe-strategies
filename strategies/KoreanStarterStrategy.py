@@ -13,7 +13,7 @@ class KoreanStarterStrategy(IStrategy):
     can_short = False
     timeframe = "15m"
     process_only_new_candles = True
-    startup_candle_count = 220
+    startup_candle_count = 799
 
     minimal_roi = {
         "0": 0.03,
