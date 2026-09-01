@@ -31,6 +31,22 @@ docker compose run --rm freqtrade backtesting `
 
 검증 환경은 Freqtrade `2026.7` Docker 이미지에 고정되어 있습니다. 먼저 Docker Desktop을 설치한 뒤 예제 설정의 거래소와 페어를 검토하세요. 예제 설정은 현물·dry-run 전용이며 실제 API 키를 요구하지 않습니다.
 
+Docker를 사용할 수 없으면 저장소 내부 가상환경을 사용할 수 있습니다.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-runtime.txt
+```
+
+검증 스크립트는 Docker가 있으면 Docker를 우선 사용하고, 없으면 `.venv`의 Freqtrade를 자동으로 사용합니다.
+
+Windows 실행 정책이 스크립트를 차단하면 현재 프로세스에만 적용되는 Bypass 옵션으로 실행합니다.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  .\scripts\Get-MarketData.ps1 -Days 365
+```
+
 시장 데이터를 내려받습니다.
 
 ```powershell

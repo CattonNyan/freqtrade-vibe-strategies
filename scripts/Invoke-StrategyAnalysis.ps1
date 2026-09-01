@@ -22,46 +22,50 @@ param(
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repositoryRoot
-
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw "Docker를 찾을 수 없습니다. Docker Desktop을 설치하고 다시 실행하세요."
-}
+. (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 
 foreach ($strategy in $Strategies) {
     Write-Host "[$strategy] recursive-analysis 실행"
-    $recursiveArguments = @(
-        "compose", "run", "--rm", "freqtrade",
+    $recursiveCommonArguments = @(
         "recursive-analysis",
-        "--config", "/freqtrade/user_data/config/backtest.example.json",
         "--strategy", $strategy,
-        "--strategy-path", "/freqtrade/user_data/strategies",
         "--timerange", $Timerange,
         "--pairs", $Pair,
         "--startup-candle"
     ) + $StartupCandles
 
-    & docker @recursiveArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$strategy recursive-analysis가 종료 코드 $LASTEXITCODE 로 실패했습니다."
-    }
+    Invoke-FreqtradeCommand `
+        -DockerArguments ($recursiveCommonArguments + @(
+            "--config", "/freqtrade/user_data/config/backtest.example.json",
+            "--strategy-path", "/freqtrade/user_data/strategies"
+        )) `
+        -NativeArguments ($recursiveCommonArguments + @(
+            "--config", ".\config\backtest.example.json",
+            "--strategy-path", ".\strategies"
+        )) `
+        -FailureMessage "$strategy recursive-analysis에 실패했습니다."
 
     Write-Host "[$strategy] lookahead-analysis 실행"
-    $lookaheadResult = "/freqtrade/user_data/backtest_results/lookahead-$strategy-$Timerange.csv"
-    $lookaheadArguments = @(
-        "compose", "run", "--rm", "freqtrade",
+    $lookaheadName = "lookahead-$strategy-$Timerange.csv"
+    $lookaheadCommonArguments = @(
         "lookahead-analysis",
-        "--config", "/freqtrade/user_data/config/backtest.example.json",
         "--strategy", $strategy,
-        "--strategy-path", "/freqtrade/user_data/strategies",
         "--timerange", $Timerange,
         "--pairs", $Pair,
         "--minimum-trade-amount", $MinimumTradeAmount,
-        "--targeted-trade-amount", $TargetedTradeAmount,
-        "--lookahead-analysis-exportfilename", $lookaheadResult
+        "--targeted-trade-amount", $TargetedTradeAmount
     )
 
-    & docker @lookaheadArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$strategy lookahead-analysis가 종료 코드 $LASTEXITCODE 로 실패했습니다."
-    }
+    Invoke-FreqtradeCommand `
+        -DockerArguments ($lookaheadCommonArguments + @(
+            "--config", "/freqtrade/user_data/config/backtest.example.json",
+            "--strategy-path", "/freqtrade/user_data/strategies",
+            "--lookahead-analysis-exportfilename", "/freqtrade/user_data/backtest_results/$lookaheadName"
+        )) `
+        -NativeArguments ($lookaheadCommonArguments + @(
+            "--config", ".\config\backtest.example.json",
+            "--strategy-path", ".\strategies",
+            "--lookahead-analysis-exportfilename", ".\user_data\backtest_results\$lookaheadName"
+        )) `
+        -FailureMessage "$strategy lookahead-analysis에 실패했습니다."
 }

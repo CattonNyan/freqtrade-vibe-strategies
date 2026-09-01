@@ -54,9 +54,6 @@
     "token": "",
     "chat_id": ""
   },
-  "api_server": {
-    "enabled": false
-  },
   "bot_name": "freqtrade-vibe-validation",
   "initial_state": "stopped",
   "force_entry_enable": false,
