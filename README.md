@@ -60,3 +60,5 @@ python -B -m unittest discover -s tests -v
 ```
 
 `recursive-analysis` 결과를 검토한 뒤에만 각 전략의 `startup_candle_count`를 확정합니다. 신호가 적어 lookahead 검사가 중단되면 기간을 넓히거나 `MinimumTradeAmount`를 조정하되, 검사하지 못한 신호를 편향 없음으로 간주하지 마세요.
+
+세부 통과 조건과 기간 외 검증 절차는 [`docs/VALIDATION.md`](docs/VALIDATION.md)를 따릅니다. 전략 수치 변경은 이 절차의 결과를 남긴 뒤 별도 커밋으로 진행합니다.
