@@ -210,6 +210,27 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(supported, set(STRATEGIES.values()))
         self.assertEqual(defaults, supported)
 
+    def test_market_data_script_downloads_every_strategy_timeframe(self) -> None:
+        required_timeframes: set[str] = set()
+        for filename, class_name in STRATEGIES.items():
+            _, strategy = self.strategy_class(filename, class_name)
+            assignments = class_assignments(strategy)
+            required_timeframes.add(assignments["timeframe"])  # type: ignore[arg-type]
+            if "informative_timeframe" in assignments:
+                required_timeframes.add(assignments["informative_timeframe"])  # type: ignore[arg-type]
+
+        source = self.script_source("Get-MarketData.ps1")
+        match = re.search(
+            r'"--timeframes"\s*,(?P<values>.*?)\s*,\s*"--pairs"',
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "download-data timeframes are missing")
+        downloaded_timeframes = set(
+            re.findall(r'"([^"]+)"', match.group("values"))  # type: ignore[union-attr]
+        )
+        self.assertTrue(required_timeframes.issubset(downloaded_timeframes))
+
 
 if __name__ == "__main__":
     unittest.main()

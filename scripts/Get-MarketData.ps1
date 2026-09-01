@@ -14,7 +14,7 @@ Set-Location -LiteralPath $repositoryRoot
 $commonArguments = @(
     "download-data",
     "--days", $Days,
-    "--timeframes", "5m", "15m",
+    "--timeframes", "5m", "15m", "1h",
     "--pairs"
 ) + $Pairs
 
