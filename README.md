@@ -46,3 +46,17 @@ docker compose run --rm freqtrade backtesting `
 ```
 
 생성된 데이터와 결과는 `user_data/` 아래에 저장되며 Git에는 포함되지 않습니다. 서로 다른 결과를 비교할 때는 Freqtrade 이미지 버전, 설정, 페어, 기간과 전략 커밋을 동일하게 유지하세요.
+
+전략 소스의 기본 계약과 명시적인 미래 봉 참조를 의존성 없이 검사할 수 있습니다.
+
+```powershell
+python -B -m unittest discover -s tests -v
+```
+
+충분한 데이터가 준비되면 재귀 지표 안정성과 lookahead bias를 함께 검사합니다. 최소 5,000봉 이상이 포함되는 기간을 사용하세요.
+
+```powershell
+.\scripts\Invoke-StrategyAnalysis.ps1 -Timerange 20250101-20260101
+```
+
+`recursive-analysis` 결과를 검토한 뒤에만 각 전략의 `startup_candle_count`를 확정합니다. 신호가 적어 lookahead 검사가 중단되면 기간을 넓히거나 `MinimumTradeAmount`를 조정하되, 검사하지 못한 신호를 편향 없음으로 간주하지 마세요.
