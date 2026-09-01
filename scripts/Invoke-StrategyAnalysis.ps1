@@ -4,8 +4,12 @@ param(
     [ValidatePattern("^\d{8}-\d{8}$")]
     [string]$Timerange,
 
-    [ValidateSet("VibeRsiStrategy", "KoreanStarterStrategy")]
-    [string[]]$Strategies = @("VibeRsiStrategy", "KoreanStarterStrategy"),
+    [ValidateSet("VibeRsiStrategy", "KoreanStarterStrategy", "MultiTimeframeAtrStrategy")]
+    [string[]]$Strategies = @(
+        "VibeRsiStrategy",
+        "KoreanStarterStrategy",
+        "MultiTimeframeAtrStrategy"
+    ),
 
     [string]$Pair = "BTC/USDT",
 

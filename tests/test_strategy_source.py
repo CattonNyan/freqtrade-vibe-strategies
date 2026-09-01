@@ -195,6 +195,21 @@ class StrategySourceTests(unittest.TestCase):
             set(STRATEGIES.values()),
         )
 
+    def test_analysis_script_supports_every_strategy(self) -> None:
+        source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        supported = self.script_validate_set("Invoke-StrategyAnalysis.ps1", "Strategies")
+        default_match = re.search(
+            r'\[string\[\]\]\$Strategies\s*=\s*@\((?P<values>.*?)\)\s*,',
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(default_match, "Strategies default list is missing")
+        defaults = set(
+            re.findall(r'"([^"]+)"', default_match.group("values"))  # type: ignore[union-attr]
+        )
+        self.assertEqual(supported, set(STRATEGIES.values()))
+        self.assertEqual(defaults, supported)
+
 
 if __name__ == "__main__":
     unittest.main()
