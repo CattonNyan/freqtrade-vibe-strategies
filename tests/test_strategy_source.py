@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 import unittest
 
@@ -146,6 +147,34 @@ class StrategySourceTests(unittest.TestCase):
         ]
         self.assertEqual(len(shift_calls), 1)
         self.assertEqual(ast.literal_eval(shift_calls[0].args[0]), 1)
+
+    def test_operating_protections_are_declared_by_every_strategy(self) -> None:
+        expected_methods = {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"}
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                protections = next(
+                    (
+                        node
+                        for node in strategy.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "protections"
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(protections)
+                string_literals = {
+                    node.value
+                    for node in ast.walk(protections)  # type: ignore[arg-type]
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                }
+                self.assertTrue(expected_methods.issubset(string_literals))
+
+    def test_dry_run_example_cannot_place_live_orders(self) -> None:
+        config_path = ROOT / "config" / "dry-run.example.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertIs(config.get("dry_run"), True)
+        self.assertEqual(config["exchange"].get("key"), "")
+        self.assertEqual(config["exchange"].get("secret"), "")
 
 
 if __name__ == "__main__":

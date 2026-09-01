@@ -8,7 +8,7 @@
 - `KoreanStarterStrategy`: 15분봉 EMA·RSI·ADX·거래량 필터와 트레일링 스탑을 사용하는 보수적 시작 전략
 - `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
-두 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
+세 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
 
 ## 사용법
 
@@ -79,3 +79,5 @@ python -B -m unittest discover -s tests -v
 `recursive-analysis` 결과를 검토한 뒤에만 각 전략의 `startup_candle_count`를 확정합니다. 신호가 적어 lookahead 검사가 중단되면 기간을 넓히거나 `MinimumTradeAmount`를 조정하되, 검사하지 못한 신호를 편향 없음으로 간주하지 마세요.
 
 세부 통과 조건과 기간 외 검증 절차는 [`docs/VALIDATION.md`](docs/VALIDATION.md)를 따릅니다. 전략 수치 변경은 이 절차의 결과를 남긴 뒤 별도 커밋으로 진행합니다.
+
+모의투자를 시작하기 전에는 [`docs/DRY_RUN.md`](docs/DRY_RUN.md)의 안전 절차를 따릅니다. 기본 명령은 설정만 검증하며 `-Start`를 명시해야 dry-run 프로세스가 시작됩니다.

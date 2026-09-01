@@ -61,6 +61,28 @@ class MultiTimeframeAtrStrategy(IStrategy):
         "exit": "GTC",
     }
 
+    @property
+    def protections(self) -> list[dict]:
+        return [
+            {"method": "CooldownPeriod", "stop_duration": 60},
+            {
+                "method": "StoplossGuard",
+                "lookback_period": 43200,
+                "trade_limit": 2,
+                "stop_duration": 10080,
+                "required_profit": 0.0,
+                "only_per_pair": False,
+            },
+            {
+                "method": "MaxDrawdown",
+                "lookback_period": 86400,
+                "trade_limit": 8,
+                "stop_duration": 20160,
+                "max_allowed_drawdown": 0.05,
+                "calculation_mode": "equity",
+            },
+        ]
+
     def informative_pairs(self):
         """Define pairs and timeframes to download and cache."""
         pairs = self.dp.current_whitelist()

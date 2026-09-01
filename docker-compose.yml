@@ -6,4 +6,5 @@ services:
       - ./config:/freqtrade/user_data/config:ro
       - ./user_data/data:/freqtrade/user_data/data
       - ./user_data/backtest_results:/freqtrade/user_data/backtest_results
+      - ./user_data/db:/freqtrade/user_data/db
     command: --version
