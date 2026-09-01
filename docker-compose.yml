@@ -1,0 +1,9 @@
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:2026.7
+    volumes:
+      - ./strategies:/freqtrade/user_data/strategies:ro
+      - ./config:/freqtrade/user_data/config:ro
+      - ./user_data/data:/freqtrade/user_data/data
+      - ./user_data/backtest_results:/freqtrade/user_data/backtest_results
+    command: --version

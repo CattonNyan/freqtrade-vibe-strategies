@@ -26,3 +26,23 @@ docker compose run --rm freqtrade backtesting `
 ```
 
 실거래 전에 장기간 백테스트와 dry-run을 수행하고 거래소 API에는 출금 권한을 부여하지 마세요.
+
+## 재현 가능한 백테스트
+
+검증 환경은 Freqtrade `2026.7` Docker 이미지에 고정되어 있습니다. 먼저 Docker Desktop을 설치한 뒤 예제 설정의 거래소와 페어를 검토하세요. 예제 설정은 현물·dry-run 전용이며 실제 API 키를 요구하지 않습니다.
+
+시장 데이터를 내려받습니다.
+
+```powershell
+.\scripts\Get-MarketData.ps1 -Days 365
+```
+
+명시적인 기간으로 전략을 백테스트합니다.
+
+```powershell
+.\scripts\Invoke-Backtest.ps1 `
+  -Strategy KoreanStarterStrategy `
+  -Timerange 20250101-20260101
+```
+
+생성된 데이터와 결과는 `user_data/` 아래에 저장되며 Git에는 포함되지 않습니다. 서로 다른 결과를 비교할 때는 Freqtrade 이미지 버전, 설정, 페어, 기간과 전략 커밋을 동일하게 유지하세요.

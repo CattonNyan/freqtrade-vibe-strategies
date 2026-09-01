@@ -6,3 +6,4 @@ __pycache__/
 backtest_results/
 data/
 logs/
+user_data/
