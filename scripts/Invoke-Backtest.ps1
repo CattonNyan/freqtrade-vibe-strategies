@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet("VibeRsiStrategy", "KoreanStarterStrategy")]
+    [ValidateSet("VibeRsiStrategy", "KoreanStarterStrategy", "MultiTimeframeAtrStrategy")]
     [string]$Strategy,
 
     [Parameter(Mandatory)]

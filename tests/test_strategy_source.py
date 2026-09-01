@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+import re
 import unittest
 
 
@@ -40,6 +41,18 @@ def class_assignments(node: ast.ClassDef) -> dict[str, object]:
 
 
 class StrategySourceTests(unittest.TestCase):
+    def script_source(self, filename: str) -> str:
+        return (ROOT / "scripts" / filename).read_text(encoding="utf-8-sig")
+
+    def script_validate_set(self, filename: str, parameter: str) -> set[str]:
+        source = self.script_source(filename)
+        match = re.search(
+            rf'\[ValidateSet\((?P<values>[^)]*)\)\]\s*\[string(?:\[\])?\]\${parameter}\b',
+            source,
+        )
+        self.assertIsNotNone(match, f"{parameter} ValidateSet is missing in {filename}")
+        return set(re.findall(r'"([^"]+)"', match.group("values")))  # type: ignore[union-attr]
+
     def strategy_class(self, filename: str, class_name: str) -> tuple[ast.Module, ast.ClassDef]:
         path = ROOT / "strategies" / filename
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -175,6 +188,12 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIs(config.get("dry_run"), True)
         self.assertEqual(config["exchange"].get("key"), "")
         self.assertEqual(config["exchange"].get("secret"), "")
+
+    def test_backtest_script_supports_every_strategy(self) -> None:
+        self.assertEqual(
+            self.script_validate_set("Invoke-Backtest.ps1", "Strategy"),
+            set(STRATEGIES.values()),
+        )
 
 
 if __name__ == "__main__":
