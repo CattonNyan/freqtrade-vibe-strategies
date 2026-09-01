@@ -75,14 +75,15 @@ class KoreanStarterStrategy(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        has_volume = dataframe["volume"] > 0
+        rsi_exit = qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
+        trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
+
+        dataframe["exit_tag"] = ""
         dataframe.loc[
-            (
-                (
-                    qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
-                    | qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
-                )
-                & (dataframe["volume"] > 0)
-            ),
-            ["exit_long", "exit_tag"],
-        ] = (1, "trend_or_rsi_exit")
+            (rsi_exit | trend_exit) & has_volume,
+            "exit_long",
+        ] = 1
+        dataframe.loc[rsi_exit & has_volume, "exit_tag"] += "rsi_overbought "
+        dataframe.loc[trend_exit & has_volume, "exit_tag"] += "ema_bearish_cross "
         return dataframe

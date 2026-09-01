@@ -43,14 +43,15 @@ class VibeRsiStrategy(IStrategy):
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        has_volume = dataframe["volume"] > 0
+        rsi_exit = qtpylib.crossed_above(dataframe["rsi"], 70)
+        trend_exit = qtpylib.crossed_below(dataframe["ema20"], dataframe["ema50"])
+
+        dataframe["exit_tag"] = ""
         dataframe.loc[
-            (
-                (
-                    qtpylib.crossed_above(dataframe["rsi"], 70)
-                    | qtpylib.crossed_below(dataframe["ema20"], dataframe["ema50"])
-                )
-                & (dataframe["volume"] > 0)
-            ),
-            ["exit_long", "exit_tag"],
-        ] = (1, "rsi_or_trend_exit")
+            (rsi_exit | trend_exit) & has_volume,
+            "exit_long",
+        ] = 1
+        dataframe.loc[rsi_exit & has_volume, "exit_tag"] += "rsi_overbought "
+        dataframe.loc[trend_exit & has_volume, "exit_tag"] += "ema_bearish_cross "
         return dataframe

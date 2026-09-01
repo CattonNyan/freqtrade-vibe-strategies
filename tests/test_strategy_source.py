@@ -96,6 +96,18 @@ class StrategySourceTests(unittest.TestCase):
                     )
                     self.assertFalse(is_negative, "negative shift reads future candles")
 
+    def test_exit_causes_have_distinct_tags(self) -> None:
+        expected_tags = {"rsi_overbought ", "ema_bearish_cross "}
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                tree, _ = self.strategy_class(filename, class_name)
+                string_literals = {
+                    node.value
+                    for node in ast.walk(tree)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                }
+                self.assertTrue(expected_tags.issubset(string_literals))
+
 
 if __name__ == "__main__":
     unittest.main()
