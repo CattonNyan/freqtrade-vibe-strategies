@@ -8,10 +8,12 @@
 - 명시적인 음수 `shift` 및 `iloc` 참조 검사: 통과
 - Freqtrade 런타임 전략 로딩: 미실행
 - `recursive-analysis`: 2026-09-01 실행 완료
-- `lookahead-analysis`: 미실행
+- `lookahead-analysis`: 2026-09-01 실행 완료(Korean 통과, Vibe 표본 부족)
 - 백테스트 및 워크포워드 비교: 미실행
 
 재귀 분석의 조건과 결과는 [`results/2026-09-01-recursive-analysis.md`](results/2026-09-01-recursive-analysis.md)에 기록되어 있습니다. 정적 검사와 재귀 분석 통과를 수익성 또는 전체 신호의 lookahead 검증으로 해석하지 마세요.
+
+전체 신호 편향 검사 결과는 [`results/2026-09-01-lookahead-analysis.md`](results/2026-09-01-lookahead-analysis.md)에 기록되어 있습니다. Vibe 전략은 표본 부족으로 제한적인 결과만 얻었습니다.
 
 ## 1. 데이터 준비
 
