@@ -59,11 +59,13 @@ foreach ($strategy in $Strategies) {
     Invoke-FreqtradeCommand `
         -DockerArguments ($lookaheadCommonArguments + @(
             "--config", "/freqtrade/user_data/config/backtest.example.json",
+            "--config", "/freqtrade/user_data/config/lookahead.json",
             "--strategy-path", "/freqtrade/user_data/strategies",
             "--lookahead-analysis-exportfilename", "/freqtrade/user_data/backtest_results/$lookaheadName"
         )) `
         -NativeArguments ($lookaheadCommonArguments + @(
             "--config", ".\config\backtest.example.json",
+            "--config", ".\config\lookahead.json",
             "--strategy-path", ".\strategies",
             "--lookahead-analysis-exportfilename", ".\user_data\backtest_results\$lookaheadName"
         )) `
