@@ -29,6 +29,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repositoryRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
+Assert-ValidTimerange -Timerange $Timerange
 
 foreach ($strategy in $Strategies) {
     Write-Host "[$strategy] recursive-analysis 실행"

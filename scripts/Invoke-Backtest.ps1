@@ -13,6 +13,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repositoryRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
+Assert-ValidTimerange -Timerange $Timerange
 
 $resultName = "{0}-{1}.json" -f $Strategy, $Timerange
 $commonArguments = @(

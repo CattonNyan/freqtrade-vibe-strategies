@@ -249,6 +249,17 @@ class StrategySourceTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(match, f"{parameter} pair validation is missing")
 
+    def test_timerange_scripts_apply_semantic_date_validation(self) -> None:
+        runtime_source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn("function Assert-ValidTimerange", runtime_source)
+        self.assertEqual(runtime_source.count("[datetime]::ParseExact("), 2)
+        self.assertIn("if ($startDate -ge $endDate)", runtime_source)
+
+        for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
+            with self.subTest(script=filename):
+                source = self.script_source(filename)
+                self.assertIn("Assert-ValidTimerange -Timerange $Timerange", source)
+
 
 if __name__ == "__main__":
     unittest.main()

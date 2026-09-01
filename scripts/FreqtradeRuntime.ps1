@@ -1,3 +1,32 @@
+function Assert-ValidTimerange {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Timerange
+    )
+
+    $parts = $Timerange -split "-", 2
+    try {
+        $startDate = [datetime]::ParseExact(
+            $parts[0],
+            "yyyyMMdd",
+            [Globalization.CultureInfo]::InvariantCulture
+        )
+        $endDate = [datetime]::ParseExact(
+            $parts[1],
+            "yyyyMMdd",
+            [Globalization.CultureInfo]::InvariantCulture
+        )
+    }
+    catch {
+        throw "Timerange에 유효하지 않은 날짜가 있습니다: $Timerange"
+    }
+
+    if ($startDate -ge $endDate) {
+        throw "Timerange 시작일은 종료일보다 이전이어야 합니다: $Timerange"
+    }
+}
+
 function Invoke-FreqtradeCommand {
     [CmdletBinding()]
     param(
