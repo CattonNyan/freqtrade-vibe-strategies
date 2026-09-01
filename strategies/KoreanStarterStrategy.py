@@ -56,7 +56,7 @@ class KoreanStarterStrategy(IStrategy):
         dataframe["ema_200"] = ta.EMA(dataframe, timeperiod=200)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["adx"] = ta.ADX(dataframe, timeperiod=14)
-        dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean()
+        dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean().shift(1)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:

@@ -108,6 +108,34 @@ class StrategySourceTests(unittest.TestCase):
                 }
                 self.assertTrue(expected_tags.issubset(string_literals))
 
+    def test_volume_baseline_uses_only_completed_prior_candles(self) -> None:
+        filename = "KoreanStarterStrategy.py"
+        tree, _ = self.strategy_class(filename, STRATEGIES[filename])
+        volume_mean_assignment = next(
+            (
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.slice, ast.Constant)
+                    and target.slice.value == "volume_mean_20"
+                    for target in node.targets
+                )
+            ),
+            None,
+        )
+        self.assertIsNotNone(volume_mean_assignment)
+        shift_calls = [
+            node
+            for node in ast.walk(volume_mean_assignment.value)  # type: ignore[union-attr]
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "shift"
+        ]
+        self.assertEqual(len(shift_calls), 1)
+        self.assertEqual(ast.literal_eval(shift_calls[0].args[0]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
