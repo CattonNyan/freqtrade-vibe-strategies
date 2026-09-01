@@ -231,6 +231,24 @@ class StrategySourceTests(unittest.TestCase):
         )
         self.assertTrue(required_timeframes.issubset(downloaded_timeframes))
 
+    def test_market_pair_parameters_reject_malformed_values(self) -> None:
+        pair_pattern = (
+            r'\[ValidateNotNullOrEmpty\(\)\]\s*'
+            r'\[ValidatePattern\("\^\[A-Za-z0-9\._-\]\+/'
+        )
+        for filename, parameter in (
+            ("Get-MarketData.ps1", "Pairs"),
+            ("Invoke-StrategyAnalysis.ps1", "Pair"),
+        ):
+            with self.subTest(script=filename):
+                source = self.script_source(filename)
+                match = re.search(
+                    pair_pattern + rf'.*?\[string(?:\[\])?\]\${parameter}\b',
+                    source,
+                    re.DOTALL,
+                )
+                self.assertIsNotNone(match, f"{parameter} pair validation is missing")
+
 
 if __name__ == "__main__":
     unittest.main()

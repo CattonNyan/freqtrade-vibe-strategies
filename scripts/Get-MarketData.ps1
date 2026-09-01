@@ -3,6 +3,8 @@ param(
     [ValidateRange(30, 3650)]
     [int]$Days = 365,
 
+    [ValidateNotNullOrEmpty()]
+    [ValidatePattern("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")]
     [string[]]$Pairs = @("BTC/USDT", "ETH/USDT")
 )
 

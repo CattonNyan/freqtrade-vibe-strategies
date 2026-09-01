@@ -11,6 +11,8 @@ param(
         "MultiTimeframeAtrStrategy"
     ),
 
+    [ValidateNotNullOrEmpty()]
+    [ValidatePattern("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")]
     [string]$Pair = "BTC/USDT",
 
     [ValidateRange(1, 10000)]
