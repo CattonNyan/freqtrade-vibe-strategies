@@ -11,10 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 STRATEGIES = {
     "VibeRsiStrategy.py": "VibeRsiStrategy",
     "KoreanStarterStrategy.py": "KoreanStarterStrategy",
+    "MultiTimeframeAtrStrategy.py": "MultiTimeframeAtrStrategy",
 }
 VERIFIED_STARTUP_COUNTS = {
     "VibeRsiStrategy": 199,
     "KoreanStarterStrategy": 799,
+    "MultiTimeframeAtrStrategy": 799,
 }
 REQUIRED_METHODS = {
     "populate_indicators",

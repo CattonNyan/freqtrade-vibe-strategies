@@ -6,6 +6,7 @@
 
 - `VibeRsiStrategy`: 5분봉 RSI 과매도와 EMA 추세 필터를 사용하는 간단한 전략
 - `KoreanStarterStrategy`: 15분봉 EMA·RSI·ADX·거래량 필터와 트레일링 스탑을 사용하는 보수적 시작 전략
+- `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
 두 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
 
