@@ -27,6 +27,18 @@ function Assert-ValidTimerange {
     }
 }
 
+function Initialize-FreqtradeDirectory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RelativePath
+    )
+
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $directoryPath = Join-Path $repositoryRoot $RelativePath
+    [void](New-Item -ItemType Directory -Path $directoryPath -Force)
+}
+
 function Invoke-FreqtradeCommand {
     [CmdletBinding()]
     param(

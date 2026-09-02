@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Assert-ValidTimerange -Timerange $Timerange
+Initialize-FreqtradeDirectory -RelativePath "user_data/backtest_results"
 
 $strategyPath = Join-Path $repositoryRoot "strategies\$Strategy.py"
 if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {

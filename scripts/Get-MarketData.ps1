@@ -12,6 +12,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
+Initialize-FreqtradeDirectory -RelativePath "user_data/data"
 
 $commonArguments = @(
     "download-data",

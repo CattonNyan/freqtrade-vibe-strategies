@@ -317,6 +317,23 @@ class StrategySourceTests(unittest.TestCase):
                 source = path.read_text(encoding="utf-8-sig")
                 self.assertIn("Set-StrictMode -Version Latest", source)
 
+    def test_scripts_initialize_their_output_directories(self) -> None:
+        expected_directories = {
+            "Get-MarketData.ps1": "user_data/data",
+            "Invoke-Backtest.ps1": "user_data/backtest_results",
+            "Invoke-DryRun.ps1": "user_data/db",
+            "Invoke-StrategyAnalysis.ps1": "user_data/backtest_results",
+        }
+        runtime_source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn("function Initialize-FreqtradeDirectory", runtime_source)
+        for filename, relative_path in expected_directories.items():
+            with self.subTest(script=filename):
+                source = self.script_source(filename)
+                self.assertIn(
+                    f'Initialize-FreqtradeDirectory -RelativePath "{relative_path}"',
+                    source,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

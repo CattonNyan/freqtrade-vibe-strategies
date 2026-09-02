@@ -30,6 +30,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Assert-ValidTimerange -Timerange $Timerange
+Initialize-FreqtradeDirectory -RelativePath "user_data/backtest_results"
 if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
     throw "MinimumTradeAmount는 TargetedTradeAmount보다 클 수 없습니다."
 }
