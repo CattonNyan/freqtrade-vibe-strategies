@@ -58,7 +58,11 @@ function Invoke-FreqtradeCommand {
         $dockerReady = $false
         if (Get-Command docker -ErrorAction SilentlyContinue) {
             & docker info --format "{{.ServerVersion}}" *> $null
-            $dockerReady = $LASTEXITCODE -eq 0
+            $dockerEngineReady = $LASTEXITCODE -eq 0
+            if ($dockerEngineReady) {
+                & docker compose version *> $null
+                $dockerReady = $LASTEXITCODE -eq 0
+            }
         }
 
         if ($dockerReady) {

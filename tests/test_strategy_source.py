@@ -312,7 +312,8 @@ class StrategySourceTests(unittest.TestCase):
     def test_runtime_checks_the_docker_engine_before_use(self) -> None:
         source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn('docker info --format "{{.ServerVersion}}"', source)
-        self.assertIn("$dockerReady = $LASTEXITCODE -eq 0", source)
+        self.assertIn("$dockerEngineReady = $LASTEXITCODE -eq 0", source)
+        self.assertIn("docker compose version", source)
         self.assertIn("if ($dockerReady)", source)
 
     def test_runtime_supports_cross_platform_virtual_environments(self) -> None:
