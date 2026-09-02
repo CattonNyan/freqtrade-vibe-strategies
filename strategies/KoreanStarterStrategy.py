@@ -46,8 +46,8 @@ class KoreanStarterStrategy(IStrategy):
     }
 
     order_time_in_force = {
-        "entry": "GTC",
-        "exit": "GTC",
+        "entry": "gtc",
+        "exit": "gtc",
     }
 
     @property
