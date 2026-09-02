@@ -38,6 +38,14 @@ if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
 }
 $normalizedStartupCandles = @($StartupCandles | Sort-Object -Unique)
 $pairSlug = $Pair -replace '[/:]', '-'
+$requiredTimeframes = foreach ($strategy in $Strategies) {
+    switch ($strategy) {
+        "VibeRsiStrategy" { "5m" }
+        "KoreanStarterStrategy" { "15m" }
+        "MultiTimeframeAtrStrategy" { "5m"; "1h" }
+    }
+}
+Assert-MarketDataAvailable -Pairs @($Pair) -Timeframes $requiredTimeframes
 
 foreach ($strategy in $Strategies) {
     $lookaheadName = "lookahead-$strategy-$pairSlug-$Timerange.csv"

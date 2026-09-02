@@ -28,6 +28,12 @@ if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
 }
 
 $normalizedPairs = @($Pairs | Sort-Object -Unique)
+$requiredTimeframes = switch ($Strategy) {
+    "VibeRsiStrategy" { @("5m") }
+    "KoreanStarterStrategy" { @("15m") }
+    "MultiTimeframeAtrStrategy" { @("5m", "1h") }
+}
+Assert-MarketDataAvailable -Pairs $normalizedPairs -Timeframes $requiredTimeframes
 $pairSlug = ($normalizedPairs | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
 $resultName = "{0}-{1}-{2}.json" -f $Strategy, $pairSlug, $Timerange
 $resultPath = Join-Path $repositoryRoot "user_data/backtest_results/$resultName"

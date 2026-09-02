@@ -374,6 +374,17 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn("[switch]$Force", source)
                 self.assertIn("Initialize-FreqtradeOutputFile", source)
 
+    def test_backtest_and_analysis_preflight_market_data(self) -> None:
+        runtime_source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn("function Assert-MarketDataAvailable", runtime_source)
+        self.assertIn("Get-MarketData.ps1을 먼저 실행하세요", runtime_source)
+        for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
+            with self.subTest(script=filename):
+                source = self.script_source(filename)
+                self.assertIn("Assert-MarketDataAvailable", source)
+                self.assertIn('"MultiTimeframeAtrStrategy"', source)
+                self.assertIn('"1h"', source)
+
 
 if __name__ == "__main__":
     unittest.main()

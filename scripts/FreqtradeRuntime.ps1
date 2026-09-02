@@ -57,6 +57,39 @@ function Initialize-FreqtradeOutputFile {
     Remove-Item -LiteralPath $Path -Force
 }
 
+function Assert-MarketDataAvailable {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Pairs,
+
+        [Parameter(Mandatory)]
+        [string[]]$Timeframes
+    )
+
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $dataRoot = Join-Path $repositoryRoot "user_data/data"
+    if (-not (Test-Path -LiteralPath $dataRoot -PathType Container)) {
+        throw "시장 데이터 디렉터리가 없습니다. Get-MarketData.ps1을 먼저 실행하세요."
+    }
+    $missingData = @()
+    foreach ($pair in ($Pairs | Sort-Object -Unique)) {
+        $pairSlug = $pair -replace '[/:]', '_'
+        foreach ($timeframe in ($Timeframes | Sort-Object -Unique)) {
+            $pattern = "$pairSlug-$timeframe.*"
+            $dataFile = Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter $pattern |
+                Select-Object -First 1
+            if (-not $dataFile) {
+                $missingData += "$pair $timeframe"
+            }
+        }
+    }
+
+    if ($missingData.Count -gt 0) {
+        throw "시장 데이터가 없습니다: $($missingData -join ', '). Get-MarketData.ps1을 먼저 실행하세요."
+    }
+}
+
 function Invoke-FreqtradeCommand {
     [CmdletBinding()]
     param(
