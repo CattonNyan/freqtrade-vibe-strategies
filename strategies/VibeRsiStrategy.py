@@ -24,6 +24,10 @@ class VibeRsiStrategy(IStrategy):
     stoploss = -0.05
     trailing_stop = False
 
+    use_exit_signal = True
+    exit_profit_only = False
+    ignore_roi_if_entry_signal = False
+
     order_types = {
         "entry": "limit",
         "exit": "limit",
