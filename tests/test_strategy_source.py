@@ -161,6 +161,13 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(len(shift_calls), 1)
         self.assertEqual(ast.literal_eval(shift_calls[0].args[0]), 1)
 
+    def test_mtf_strategy_does_not_compute_unused_atr(self) -> None:
+        source = (ROOT / "strategies" / "MultiTimeframeAtrStrategy.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("ta.ATR(", source)
+        self.assertIn("does not depend on ATR", source)
+
     def test_operating_protections_are_declared_by_every_strategy(self) -> None:
         expected_methods = {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"}
         for filename, class_name in STRATEGIES.items():

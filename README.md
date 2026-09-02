@@ -9,6 +9,7 @@
 - `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
 세 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
+`MultiTimeframeAtrStrategy` 이름은 기존 설정 호환성을 위해 유지하지만, 현재 손절 로직은 ATR이 아닌 수익률 임계값을 사용합니다.
 
 ## 사용법
 

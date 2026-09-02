@@ -19,6 +19,9 @@ class MultiTimeframeAtrStrategy(IStrategy):
     - 1h informative timeframe for macro trend direction (EMA 50 / EMA 200)
     - 5m base timeframe for entry timing and momentum (EMA, RSI, Volume)
     - Dynamic break-even and profit-securing custom stoploss
+
+    The class name is retained for configuration compatibility. The current
+    stoploss uses profit thresholds and does not depend on ATR.
     """
 
     INTERFACE_VERSION = 3
@@ -94,7 +97,6 @@ class MultiTimeframeAtrStrategy(IStrategy):
         dataframe["ema_20"] = ta.EMA(dataframe, timeperiod=20)
         dataframe["ema_50"] = ta.EMA(dataframe, timeperiod=50)
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
-        dataframe["atr"] = ta.ATR(dataframe, timeperiod=14)
         dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean().shift(1)
 
         # --- Informative Timeframe (1h) Indicators ---
