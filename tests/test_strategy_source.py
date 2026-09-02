@@ -212,6 +212,8 @@ class StrategySourceTests(unittest.TestCase):
         )
         self.assertEqual(supported, set(STRATEGIES.values()))
         self.assertEqual(defaults, supported)
+        self.assertIn(r"strategies\$strategy.py", source)
+        self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
 
     def test_market_data_script_downloads_every_strategy_timeframe(self) -> None:
         required_timeframes: set[str] = set()

@@ -32,6 +32,11 @@ Set-Location -LiteralPath $repositoryRoot
 Assert-ValidTimerange -Timerange $Timerange
 
 foreach ($strategy in $Strategies) {
+    $strategyPath = Join-Path $repositoryRoot "strategies\$strategy.py"
+    if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
+        throw "전략 파일을 찾을 수 없습니다: $strategyPath"
+    }
+
     Write-Host "[$strategy] recursive-analysis 실행"
     $recursiveCommonArguments = @(
         "recursive-analysis",
