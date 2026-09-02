@@ -51,6 +51,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
   .\scripts\Get-MarketData.ps1 -Days 365
 ```
 
+각 PowerShell 스크립트의 상세 파라미터와 사용 예시는 PowerShell 내장 도움말로 확인할 수 있습니다.
+
+```powershell
+Get-Help .\scripts\Get-MarketData.ps1 -Detailed
+Get-Help .\scripts\Invoke-Backtest.ps1 -Detailed
+Get-Help .\scripts\Invoke-DryRun.ps1 -Detailed
+Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
+```
+
 시장 데이터를 내려받습니다.
 
 ```powershell
