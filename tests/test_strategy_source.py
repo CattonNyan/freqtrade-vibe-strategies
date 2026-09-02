@@ -303,6 +303,12 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("$dockerReady = $LASTEXITCODE -eq 0", source)
         self.assertIn("if ($dockerReady)", source)
 
+    def test_runtime_supports_cross_platform_virtual_environments(self) -> None:
+        source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn('".venv/Scripts/freqtrade.exe"', source)
+        self.assertIn('".venv/bin/freqtrade"', source)
+        self.assertIn("Select-Object -First 1", source)
+
     def test_entry_scripts_enable_strict_mode(self) -> None:
         for path in (ROOT / "scripts").glob("*.ps1"):
             if path.name == "FreqtradeRuntime.ps1":

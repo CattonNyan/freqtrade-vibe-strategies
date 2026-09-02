@@ -54,8 +54,14 @@ function Invoke-FreqtradeCommand {
             & docker compose run --rm freqtrade @dockerArgs
         }
         else {
-            $nativeExecutable = Join-Path $repositoryRoot ".venv\Scripts\freqtrade.exe"
-            if (-not (Test-Path -LiteralPath $nativeExecutable -PathType Leaf)) {
+            $nativeCandidates = @(
+                (Join-Path $repositoryRoot ".venv/Scripts/freqtrade.exe"),
+                (Join-Path $repositoryRoot ".venv/bin/freqtrade")
+            )
+            $nativeExecutable = $nativeCandidates |
+                Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+                Select-Object -First 1
+            if (-not $nativeExecutable) {
                 throw "Freqtrade 실행 환경을 찾을 수 없습니다. Docker 엔진을 시작하거나 requirements-runtime.txt로 .venv를 구성하세요."
             }
             $nativeArgs = @($NativeArguments)
