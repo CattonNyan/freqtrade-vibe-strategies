@@ -43,6 +43,11 @@ foreach ($strategy in $Strategies) {
     $lookaheadName = "lookahead-$strategy-$pairSlug-$Timerange.csv"
     $lookaheadPath = Join-Path $repositoryRoot "user_data/backtest_results/$lookaheadName"
     Initialize-FreqtradeOutputFile -Path $lookaheadPath -Force:$Force
+    foreach ($analysisType in ("recursive", "lookahead")) {
+        $logName = "$analysisType-$strategy-$pairSlug-$Timerange.log"
+        $logPath = Join-Path $repositoryRoot "user_data/backtest_results/$logName"
+        Initialize-FreqtradeOutputFile -Path $logPath -Force:$Force
+    }
 }
 
 foreach ($strategy in $Strategies) {
@@ -52,6 +57,8 @@ foreach ($strategy in $Strategies) {
     }
 
     Write-Host "[$strategy] recursive-analysis 실행"
+    $recursiveLogName = "recursive-$strategy-$pairSlug-$Timerange.log"
+    $recursiveLogPath = Join-Path $repositoryRoot "user_data/backtest_results/$recursiveLogName"
     $recursiveCommonArguments = @(
         "recursive-analysis",
         "--strategy", $strategy,
@@ -69,10 +76,13 @@ foreach ($strategy in $Strategies) {
             "--config", ".\config\backtest.example.json",
             "--strategy-path", ".\strategies"
         )) `
-        -FailureMessage "$strategy recursive-analysis에 실패했습니다."
+        -FailureMessage "$strategy recursive-analysis에 실패했습니다." `
+        -LogPath $recursiveLogPath
 
     Write-Host "[$strategy] lookahead-analysis 실행"
     $lookaheadName = "lookahead-$strategy-$pairSlug-$Timerange.csv"
+    $lookaheadLogName = "lookahead-$strategy-$pairSlug-$Timerange.log"
+    $lookaheadLogPath = Join-Path $repositoryRoot "user_data/backtest_results/$lookaheadLogName"
     $lookaheadCommonArguments = @(
         "lookahead-analysis",
         "--strategy", $strategy,
@@ -95,5 +105,6 @@ foreach ($strategy in $Strategies) {
             "--strategy-path", ".\strategies",
             "--lookahead-analysis-exportfilename", ".\user_data\backtest_results\$lookaheadName"
         )) `
-        -FailureMessage "$strategy lookahead-analysis에 실패했습니다."
+        -FailureMessage "$strategy lookahead-analysis에 실패했습니다." `
+        -LogPath $lookaheadLogPath
 }

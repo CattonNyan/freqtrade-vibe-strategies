@@ -306,6 +306,15 @@ class StrategySourceTests(unittest.TestCase):
             source,
         )
 
+    def test_analysis_persists_command_logs(self) -> None:
+        runtime_source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn("[string]$LogPath", runtime_source)
+        self.assertIn("Tee-Object -FilePath $LogPath", runtime_source)
+        source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        self.assertIn('"recursive-$strategy-$pairSlug-$Timerange.log"', source)
+        self.assertIn('"lookahead-$strategy-$pairSlug-$Timerange.log"', source)
+        self.assertEqual(source.count("-LogPath $"), 2)
+
     def test_scripts_restore_the_callers_working_directory(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("Push-Location -LiteralPath $repositoryRoot", runtime_source)

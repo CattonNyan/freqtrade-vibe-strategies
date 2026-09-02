@@ -67,7 +67,9 @@ function Invoke-FreqtradeCommand {
         [string[]]$NativeArguments,
 
         [Parameter(Mandatory)]
-        [string]$FailureMessage
+        [string]$FailureMessage,
+
+        [string]$LogPath
     )
 
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
@@ -85,7 +87,13 @@ function Invoke-FreqtradeCommand {
 
         if ($dockerReady) {
             $dockerArgs = @($DockerArguments)
-            & docker compose run --rm freqtrade @dockerArgs
+            if ($LogPath) {
+                & docker compose run --rm freqtrade @dockerArgs 2>&1 |
+                    Tee-Object -FilePath $LogPath
+            }
+            else {
+                & docker compose run --rm freqtrade @dockerArgs
+            }
         }
         else {
             $nativeCandidates = @(
@@ -99,7 +107,12 @@ function Invoke-FreqtradeCommand {
                 throw "Freqtrade 실행 환경을 찾을 수 없습니다. Docker 엔진을 시작하거나 requirements-runtime.txt로 .venv를 구성하세요."
             }
             $nativeArgs = @($NativeArguments)
-            & $nativeExecutable @nativeArgs
+            if ($LogPath) {
+                & $nativeExecutable @nativeArgs 2>&1 | Tee-Object -FilePath $LogPath
+            }
+            else {
+                & $nativeExecutable @nativeArgs
+            }
         }
         $exitCode = $LASTEXITCODE
     }
