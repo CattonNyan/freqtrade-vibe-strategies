@@ -7,6 +7,7 @@ param(
     [switch]$Start
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")

@@ -303,6 +303,14 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("$dockerReady = $LASTEXITCODE -eq 0", source)
         self.assertIn("if ($dockerReady)", source)
 
+    def test_entry_scripts_enable_strict_mode(self) -> None:
+        for path in (ROOT / "scripts").glob("*.ps1"):
+            if path.name == "FreqtradeRuntime.ps1":
+                continue
+            with self.subTest(script=path.name):
+                source = path.read_text(encoding="utf-8-sig")
+                self.assertIn("Set-StrictMode -Version Latest", source)
+
 
 if __name__ == "__main__":
     unittest.main()

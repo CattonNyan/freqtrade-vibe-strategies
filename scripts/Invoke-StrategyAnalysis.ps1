@@ -25,6 +25,7 @@ param(
     [int[]]$StartupCandles = @(49, 99, 199, 399, 799, 1599)
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
