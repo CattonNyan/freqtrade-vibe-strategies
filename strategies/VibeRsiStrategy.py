@@ -24,6 +24,21 @@ class VibeRsiStrategy(IStrategy):
     stoploss = -0.05
     trailing_stop = False
 
+    order_types = {
+        "entry": "limit",
+        "exit": "limit",
+        "emergency_exit": "market",
+        "force_entry": "market",
+        "force_exit": "market",
+        "stoploss": "market",
+        "stoploss_on_exchange": False,
+    }
+
+    order_time_in_force = {
+        "entry": "gtc",
+        "exit": "gtc",
+    }
+
     @property
     def protections(self) -> list[dict]:
         return [
