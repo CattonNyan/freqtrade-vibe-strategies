@@ -1,3 +1,40 @@
+<#
+.SYNOPSIS
+    Freqtrade 전략의 재귀 지표 안정성(recursive-analysis) 및 미래 참조 편향(lookahead-analysis)을 심층 검증합니다.
+
+.DESCRIPTION
+    지정된 기간(Timerange) 동안 각 전략에 대해:
+    1. recursive-analysis: 초기 캔들 개수(startup_candle_count)에 따른 지표 안정성 검증
+    2. lookahead-analysis: 미래 봉 데이터 참조(Lookahead bias) 여부 검증
+    결과는 user_data/backtest_results에 CSV 및 로그 형태로 저장됩니다.
+
+.PARAMETER Timerange
+    분석 대상 기간 (YYYYMMDD-YYYYMMDD 형식, 예: 20250101-20260101). 최소 5,000봉 이상 권장.
+
+.PARAMETER Strategies
+    분석 대상 전략 목록 (기본값: 전체 3종 전략).
+
+.PARAMETER Pair
+    분석 대상 거래 페어 (기본값: "BTC/USDT").
+
+.PARAMETER MinimumTradeAmount
+    Lookahead 분석에 필요한 최소 거래 횟수 (기본값: 20).
+
+.PARAMETER TargetedTradeAmount
+    Lookahead 분석의 목표 거래 횟수 (기본값: 100).
+
+.PARAMETER StartupCandles
+    재귀 지표 안정성 테스트용 캔들 수 목록 (기본값: 49, 99, 199, 399, 799, 1599).
+
+.PARAMETER Force
+    동일한 이름의 이전 분석 로그 및 CSV 결과 파일 덮어쓰기 허용 스위치.
+
+.EXAMPLE
+    .\scripts\Invoke-StrategyAnalysis.ps1 -Timerange 20250101-20260101
+
+.EXAMPLE
+    .\scripts\Invoke-StrategyAnalysis.ps1 -Timerange 20250101-20260101 -Strategies @("KoreanStarterStrategy") -Force
+#>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
