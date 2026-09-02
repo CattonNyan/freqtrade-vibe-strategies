@@ -272,6 +272,11 @@ class StrategySourceTests(unittest.TestCase):
             source,
         )
 
+    def test_analysis_normalizes_startup_candle_candidates(self) -> None:
+        source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        self.assertIn("$StartupCandles | Sort-Object -Unique", source)
+        self.assertIn(") + $normalizedStartupCandles", source)
+
 
 if __name__ == "__main__":
     unittest.main()

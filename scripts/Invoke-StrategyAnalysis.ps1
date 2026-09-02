@@ -33,6 +33,7 @@ Assert-ValidTimerange -Timerange $Timerange
 if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
     throw "MinimumTradeAmount는 TargetedTradeAmount보다 클 수 없습니다."
 }
+$normalizedStartupCandles = @($StartupCandles | Sort-Object -Unique)
 
 foreach ($strategy in $Strategies) {
     $strategyPath = Join-Path $repositoryRoot "strategies\$strategy.py"
@@ -47,7 +48,7 @@ foreach ($strategy in $Strategies) {
         "--timerange", $Timerange,
         "--pairs", $Pair,
         "--startup-candle"
-    ) + $StartupCandles
+    ) + $normalizedStartupCandles
 
     Invoke-FreqtradeCommand `
         -DockerArguments ($recursiveCommonArguments + @(
