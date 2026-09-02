@@ -30,6 +30,9 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repositoryRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Assert-ValidTimerange -Timerange $Timerange
+if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
+    throw "MinimumTradeAmount는 TargetedTradeAmount보다 클 수 없습니다."
+}
 
 foreach ($strategy in $Strategies) {
     $strategyPath = Join-Path $repositoryRoot "strategies\$strategy.py"

@@ -265,6 +265,13 @@ class StrategySourceTests(unittest.TestCase):
                 source = self.script_source(filename)
                 self.assertIn("Assert-ValidTimerange -Timerange $Timerange", source)
 
+    def test_analysis_trade_amount_bounds_are_consistent(self) -> None:
+        source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        self.assertIn(
+            "if ($MinimumTradeAmount -gt $TargetedTradeAmount)",
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
