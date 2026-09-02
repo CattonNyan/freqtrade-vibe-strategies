@@ -189,6 +189,16 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(config["exchange"].get("key"), "")
         self.assertEqual(config["exchange"].get("secret"), "")
 
+    def test_backtest_example_remains_safe_for_local_validation(self) -> None:
+        config_path = ROOT / "config" / "backtest.example.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertIs(config.get("dry_run"), True)
+        self.assertEqual(config.get("trading_mode"), "spot")
+        self.assertIs(config.get("force_entry_enable"), False)
+        self.assertEqual(config["exchange"].get("key"), "")
+        self.assertEqual(config["exchange"].get("secret"), "")
+        self.assertIs(config["telegram"].get("enabled"), False)
+
     def test_backtest_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-Backtest.ps1")
         self.assertEqual(
