@@ -347,6 +347,17 @@ class StrategySourceTests(unittest.TestCase):
                     source,
                 )
 
+    def test_result_scripts_require_force_before_overwriting(self) -> None:
+        runtime_source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn("function Initialize-FreqtradeOutputFile", runtime_source)
+        self.assertIn("if (-not $Force)", runtime_source)
+        self.assertIn("Remove-Item -LiteralPath $Path -Force", runtime_source)
+        for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
+            with self.subTest(script=filename):
+                source = self.script_source(filename)
+                self.assertIn("[switch]$Force", source)
+                self.assertIn("Initialize-FreqtradeOutputFile", source)
+
 
 if __name__ == "__main__":
     unittest.main()

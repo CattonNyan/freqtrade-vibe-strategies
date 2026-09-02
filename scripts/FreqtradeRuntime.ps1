@@ -39,6 +39,24 @@ function Initialize-FreqtradeDirectory {
     [void](New-Item -ItemType Directory -Path $directoryPath -Force)
 }
 
+function Initialize-FreqtradeOutputFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [switch]$Force
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return
+    }
+    if (-not $Force) {
+        throw "결과 파일이 이미 존재합니다. 덮어쓰려면 -Force를 지정하세요: $Path"
+    }
+    Remove-Item -LiteralPath $Path -Force
+}
+
 function Invoke-FreqtradeCommand {
     [CmdletBinding()]
     param(

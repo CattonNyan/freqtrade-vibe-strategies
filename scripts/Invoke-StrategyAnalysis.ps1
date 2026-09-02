@@ -22,7 +22,9 @@ param(
     [int]$TargetedTradeAmount = 100,
 
     [ValidateRange(2, 4999)]
-    [int[]]$StartupCandles = @(49, 99, 199, 399, 799, 1599)
+    [int[]]$StartupCandles = @(49, 99, 199, 399, 799, 1599),
+
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -36,6 +38,12 @@ if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
 }
 $normalizedStartupCandles = @($StartupCandles | Sort-Object -Unique)
 $pairSlug = $Pair -replace '[/:]', '-'
+
+foreach ($strategy in $Strategies) {
+    $lookaheadName = "lookahead-$strategy-$pairSlug-$Timerange.csv"
+    $lookaheadPath = Join-Path $repositoryRoot "user_data/backtest_results/$lookaheadName"
+    Initialize-FreqtradeOutputFile -Path $lookaheadPath -Force:$Force
+}
 
 foreach ($strategy in $Strategies) {
     $strategyPath = Join-Path $repositoryRoot "strategies\$strategy.py"

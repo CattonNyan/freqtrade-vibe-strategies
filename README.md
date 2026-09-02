@@ -64,6 +64,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
   -Timerange 20250101-20260101
 ```
 
+같은 이름의 결과 파일이 있으면 스크립트가 중단됩니다. 기존 결과를 의도적으로 교체할 때만 `-Force`를 추가하세요.
+
 생성된 데이터와 결과는 `user_data/` 아래에 저장되며 Git에는 포함되지 않습니다. 서로 다른 결과를 비교할 때는 Freqtrade 이미지 버전, 설정, 페어, 기간과 전략 커밋을 동일하게 유지하세요.
 
 개인 API 키가 포함된 설정은 `config/*.private.json` 또는 `config/*.local.json` 이름으로 저장하세요. 해당 파일과 `config/live.json`, `config/live-*.json`, 환경별 `.env.*` 파일은 Git에서 제외됩니다.

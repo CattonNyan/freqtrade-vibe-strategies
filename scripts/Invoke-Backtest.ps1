@@ -6,7 +6,9 @@ param(
 
     [Parameter(Mandatory)]
     [ValidatePattern("^\d{8}-\d{8}$")]
-    [string]$Timerange
+    [string]$Timerange,
+
+    [switch]$Force
 )
 
 Set-StrictMode -Version Latest
@@ -22,6 +24,8 @@ if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
 }
 
 $resultName = "{0}-{1}.json" -f $Strategy, $Timerange
+$resultPath = Join-Path $repositoryRoot "user_data/backtest_results/$resultName"
+Initialize-FreqtradeOutputFile -Path $resultPath -Force:$Force
 $commonArguments = @(
     "backtesting",
     "--strategy", $Strategy,
