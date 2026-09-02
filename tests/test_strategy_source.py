@@ -182,6 +182,42 @@ class StrategySourceTests(unittest.TestCase):
                 }
                 self.assertTrue(expected_methods.issubset(string_literals))
 
+    def test_protection_settings_are_consistent_and_valid(self) -> None:
+        baseline: list[dict[str, object]] | None = None
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                protections_method = next(
+                    node
+                    for node in strategy.body
+                    if isinstance(node, ast.FunctionDef) and node.name == "protections"
+                )
+                return_node = next(
+                    node for node in protections_method.body if isinstance(node, ast.Return)
+                )
+                protections = ast.literal_eval(return_node.value)
+                by_method = {item["method"]: item for item in protections}
+
+                self.assertEqual(
+                    set(by_method),
+                    {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"},
+                )
+                for protection in protections:
+                    for key in ("lookback_period", "trade_limit", "stop_duration"):
+                        if key in protection:
+                            self.assertIsInstance(protection[key], int)
+                            self.assertGreater(protection[key], 0)
+
+                max_drawdown = by_method["MaxDrawdown"]
+                self.assertGreater(max_drawdown["max_allowed_drawdown"], 0)
+                self.assertLessEqual(max_drawdown["max_allowed_drawdown"], 1)
+                self.assertEqual(max_drawdown["calculation_mode"], "equity")
+
+                if baseline is None:
+                    baseline = protections
+                else:
+                    self.assertEqual(protections, baseline)
+
     def test_dry_run_example_cannot_place_live_orders(self) -> None:
         config_path = ROOT / "config" / "dry-run.example.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
