@@ -35,6 +35,7 @@ if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
     throw "MinimumTradeAmount는 TargetedTradeAmount보다 클 수 없습니다."
 }
 $normalizedStartupCandles = @($StartupCandles | Sort-Object -Unique)
+$pairSlug = $Pair -replace '[/:]', '-'
 
 foreach ($strategy in $Strategies) {
     $strategyPath = Join-Path $repositoryRoot "strategies\$strategy.py"
@@ -63,7 +64,7 @@ foreach ($strategy in $Strategies) {
         -FailureMessage "$strategy recursive-analysis에 실패했습니다."
 
     Write-Host "[$strategy] lookahead-analysis 실행"
-    $lookaheadName = "lookahead-$strategy-$Timerange.csv"
+    $lookaheadName = "lookahead-$strategy-$pairSlug-$Timerange.csv"
     $lookaheadCommonArguments = @(
         "lookahead-analysis",
         "--strategy", $strategy,

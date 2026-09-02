@@ -287,6 +287,14 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("$StartupCandles | Sort-Object -Unique", source)
         self.assertIn(") + $normalizedStartupCandles", source)
 
+    def test_lookahead_results_include_the_pair_name(self) -> None:
+        source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        self.assertIn("$pairSlug = $Pair -replace '[/:]', '-'", source)
+        self.assertIn(
+            '"lookahead-$strategy-$pairSlug-$Timerange.csv"',
+            source,
+        )
+
     def test_scripts_restore_the_callers_working_directory(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("Push-Location -LiteralPath $repositoryRoot", runtime_source)
