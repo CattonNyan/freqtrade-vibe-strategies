@@ -16,6 +16,7 @@
 - `initial_state: running`
 - 대상 페어와 주문 금액이 의도한 값인지
 - API 키가 예제 설정이나 Git 추적 파일에 없는지
+- Telegram 등 외부 알림이 비활성 상태인지
 - SQLite DB가 `user_data/db/tradesv3.dryrun.sqlite`를 사용하는지
 
 ## 2. 모의투자 시작

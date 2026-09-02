@@ -26,6 +26,9 @@ if ($dryRunConfig.dry_run -ne $true) {
 if ($dryRunConfig.exchange.key -or $dryRunConfig.exchange.secret) {
     throw "예제 dry-run 설정에 거래소 API 키를 저장하지 마세요."
 }
+if ($dryRunConfig.telegram.enabled -ne $false) {
+    throw "예제 dry-run 설정에서 Telegram 외부 알림을 활성화하지 마세요."
+}
 
 [string[]]$commonArguments = if ($Start) {
     @("trade", "--strategy", $Strategy)

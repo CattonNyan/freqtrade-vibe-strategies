@@ -188,6 +188,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIs(config.get("dry_run"), True)
         self.assertEqual(config["exchange"].get("key"), "")
         self.assertEqual(config["exchange"].get("secret"), "")
+        self.assertIs(config["telegram"].get("enabled"), False)
+
+        script_source = self.script_source("Invoke-DryRun.ps1")
+        self.assertIn("$dryRunConfig.telegram.enabled -ne $false", script_source)
 
     def test_backtest_example_remains_safe_for_local_validation(self) -> None:
         config_path = ROOT / "config" / "backtest.example.json"
