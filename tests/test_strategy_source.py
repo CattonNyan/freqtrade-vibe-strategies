@@ -257,6 +257,7 @@ class StrategySourceTests(unittest.TestCase):
         )
         for filename, parameter in (
             ("Get-MarketData.ps1", "Pairs"),
+            ("Invoke-Backtest.ps1", "Pairs"),
             ("Invoke-StrategyAnalysis.ps1", "Pair"),
         ):
             with self.subTest(script=filename):
@@ -267,6 +268,12 @@ class StrategySourceTests(unittest.TestCase):
                     re.DOTALL,
                 )
                 self.assertIsNotNone(match, f"{parameter} pair validation is missing")
+
+    def test_backtest_accepts_and_names_requested_pairs(self) -> None:
+        source = self.script_source("Invoke-Backtest.ps1")
+        self.assertIn("$Pairs | Sort-Object -Unique", source)
+        self.assertIn("$pairSlug", source)
+        self.assertIn('"--pairs"', source)
 
     def test_timerange_scripts_apply_semantic_date_validation(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")

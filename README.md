@@ -61,7 +61,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
 ```powershell
 .\scripts\Invoke-Backtest.ps1 `
   -Strategy KoreanStarterStrategy `
-  -Timerange 20250101-20260101
+  -Timerange 20250101-20260101 `
+  -Pairs BTC/USDT,ETH/USDT
 ```
 
 같은 이름의 결과 파일이 있으면 스크립트가 중단됩니다. 기존 결과를 의도적으로 교체할 때만 `-Force`를 추가하세요.
