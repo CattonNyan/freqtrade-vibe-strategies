@@ -40,7 +40,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-runtime.txt
 ```
 
-검증 스크립트는 Docker가 있으면 Docker를 우선 사용하고, 없으면 `.venv`의 Freqtrade를 자동으로 사용합니다.
+검증 스크립트는 Docker 엔진에 연결할 수 있으면 Docker를 우선 사용하고, 그렇지 않으면 `.venv`의 Freqtrade를 자동으로 사용합니다.
 
 Windows 실행 정책이 스크립트를 차단하면 현재 프로세스에만 적용되는 Bypass 옵션으로 실행합니다.
 

@@ -287,6 +287,12 @@ class StrategySourceTests(unittest.TestCase):
             with self.subTest(script=path.name):
                 self.assertNotIn("Set-Location", path.read_text(encoding="utf-8-sig"))
 
+    def test_runtime_checks_the_docker_engine_before_use(self) -> None:
+        source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn('docker info --format "{{.ServerVersion}}"', source)
+        self.assertIn("$dockerReady = $LASTEXITCODE -eq 0", source)
+        self.assertIn("if ($dockerReady)", source)
+
 
 if __name__ == "__main__":
     unittest.main()
