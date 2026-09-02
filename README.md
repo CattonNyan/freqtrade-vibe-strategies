@@ -22,7 +22,8 @@ Copy-Item strategies/KoreanStarterStrategy.py ../freqtrade/user_data/strategies/
 
 ```powershell
 docker compose run --rm freqtrade backtesting `
-  --config user_data/config.json `
+  --config /freqtrade/user_data/config/backtest.example.json `
+  --strategy-path /freqtrade/user_data/strategies `
   --strategy KoreanStarterStrategy
 ```
 
