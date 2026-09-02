@@ -77,6 +77,21 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertTrue(assignments.get("process_only_new_candles"))
                 self.assertTrue(REQUIRED_METHODS.issubset(methods))
 
+    def test_order_types_and_time_in_force_declared_by_every_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+
+                order_types = assignments.get("order_types")
+                self.assertIsInstance(order_types, dict)
+                self.assertTrue({"entry", "exit", "stoploss"}.issubset(order_types.keys()))
+
+                tif = assignments.get("order_time_in_force")
+                self.assertIsInstance(tif, dict)
+                self.assertEqual(tif.get("entry"), "gtc")
+                self.assertEqual(tif.get("exit"), "gtc")
+
     def test_startup_count_covers_longest_indicator_period(self) -> None:
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):
