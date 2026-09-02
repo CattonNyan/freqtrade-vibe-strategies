@@ -77,6 +77,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
 
 ```powershell
 python -B -m unittest discover -s tests -v
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  .\tests\Test-PowerShellScripts.ps1
 ```
 
 충분한 데이터가 준비되면 재귀 지표 안정성과 lookahead bias를 함께 검사합니다. 최소 5,000봉 이상이 포함되는 기간을 사용하세요.

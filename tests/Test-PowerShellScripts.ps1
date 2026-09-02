@@ -1,0 +1,86 @@
+[CmdletBinding()]
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $repositoryRoot "scripts/FreqtradeRuntime.ps1")
+
+Assert-ValidTimerange -Timerange "20250101-20260101"
+$caughtMessage = $null
+try {
+    Assert-ValidTimerange -Timerange "20260101-20250101"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "A reversed timerange was not rejected."
+}
+
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Get-MarketData.ps1") -Pairs "BTC-USDT"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "A malformed pair was not rejected."
+}
+
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-StrategyAnalysis.ps1") `
+        -Timerange "20250101-20260101" `
+        -MinimumTradeAmount 101 `
+        -TargetedTradeAmount 100
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "MinimumTradeAmount") {
+    throw "Invalid sample bounds were not rejected: $caughtMessage"
+}
+
+$guardFile = [IO.Path]::GetTempFileName()
+try {
+    $caughtMessage = $null
+    try {
+        Initialize-FreqtradeOutputFile -Path $guardFile
+    }
+    catch {
+        $caughtMessage = $_.Exception.Message
+    }
+    if (-not $caughtMessage -or $caughtMessage -notmatch "-Force") {
+        throw "An existing output file was not protected: $caughtMessage"
+    }
+    Initialize-FreqtradeOutputFile -Path $guardFile -Force
+    if (Test-Path -LiteralPath $guardFile) {
+        throw "-Force did not remove the existing output file."
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $guardFile) {
+        Remove-Item -LiteralPath $guardFile -Force
+    }
+}
+
+$originalLocation = (Get-Location).Path
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-Backtest.ps1") `
+        -Strategy "VibeRsiStrategy" `
+        -Timerange "20260101-20250101"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "The backtest script accepted a reversed timerange."
+}
+if ((Get-Location).Path -ne $originalLocation) {
+    throw "The caller working directory was not restored."
+}
+
+Write-Output "PowerShell behavior tests passed."

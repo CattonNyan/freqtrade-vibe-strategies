@@ -43,5 +43,9 @@ jobs:
             throw "PowerShell syntax validation failed."
           }
 
+      - name: Run PowerShell behavior tests
+        shell: pwsh
+        run: ./tests/Test-PowerShellScripts.ps1
+
       - name: Run dependency-free strategy checks
         run: python -B -m unittest discover -s tests -v
