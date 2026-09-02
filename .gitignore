@@ -2,8 +2,14 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
+.env.*
+!.env.example
 *.sqlite*
 backtest_results/
 data/
 logs/
 user_data/
+config/*.local.json
+config/*.private.json
+config/live.json
+config/live-*.json
