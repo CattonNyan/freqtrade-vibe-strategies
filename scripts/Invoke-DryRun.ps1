@@ -1,3 +1,23 @@
+<#
+.SYNOPSIS
+    Freqtrade 전략의 가상 모의투자(Dry-run) 설정을 검증하거나 실행합니다.
+
+.DESCRIPTION
+    예제 설정 파일(config/dry-run.example.json)의 dry_run=true 여부 및 API 키/텔레그램 비활성화를 검증합니다.
+    기본 실행 시에는 show-config 모드로 설정 유효성만 확인하며, -Start 스위치를 지정해야 실제 가상 거래 봇이 시작됩니다.
+
+.PARAMETER Strategy
+    모의투자를 실행할 전략 이름 (VibeRsiStrategy, KoreanStarterStrategy, MultiTimeframeAtrStrategy 중 선택).
+
+.PARAMETER Start
+    실제 모의투자(Dry-run trade) 프로세스를 시작하는 스위치. 미지정 시 설정 검증(show-config)만 수행.
+
+.EXAMPLE
+    .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy
+
+.EXAMPLE
+    .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
+#>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
