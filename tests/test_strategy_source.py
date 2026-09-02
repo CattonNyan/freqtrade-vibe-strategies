@@ -190,10 +190,13 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(config["exchange"].get("secret"), "")
 
     def test_backtest_script_supports_every_strategy(self) -> None:
+        source = self.script_source("Invoke-Backtest.ps1")
         self.assertEqual(
             self.script_validate_set("Invoke-Backtest.ps1", "Strategy"),
             set(STRATEGIES.values()),
         )
+        self.assertIn(r"strategies\$Strategy.py", source)
+        self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
 
     def test_analysis_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-StrategyAnalysis.ps1")

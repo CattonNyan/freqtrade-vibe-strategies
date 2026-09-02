@@ -15,6 +15,11 @@ Set-Location -LiteralPath $repositoryRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Assert-ValidTimerange -Timerange $Timerange
 
+$strategyPath = Join-Path $repositoryRoot "strategies\$Strategy.py"
+if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
+    throw "전략 파일을 찾을 수 없습니다: $strategyPath"
+}
+
 $resultName = "{0}-{1}.json" -f $Strategy, $Timerange
 $commonArguments = @(
     "backtesting",
