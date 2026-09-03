@@ -13,3 +13,15 @@ config/*.local.json
 config/*.private.json
 config/live.json
 config/live-*.json
+
+# IDE / Editor workspaces
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing / Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
