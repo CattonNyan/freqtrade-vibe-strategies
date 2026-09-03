@@ -83,4 +83,19 @@ if ((Get-Location).Path -ne $originalLocation) {
     throw "The caller working directory was not restored."
 }
 
+$scriptsWithHelp = @(
+    "scripts/Get-MarketData.ps1",
+    "scripts/Invoke-Backtest.ps1",
+    "scripts/Invoke-DryRun.ps1",
+    "scripts/Invoke-StrategyAnalysis.ps1",
+    "scripts/FreqtradeRuntime.ps1"
+)
+foreach ($scriptRelative in $scriptsWithHelp) {
+    $scriptFullPath = Join-Path $repositoryRoot $scriptRelative
+    $content = Get-Content -LiteralPath $scriptFullPath -Raw
+    if ($content -notmatch "\.SYNOPSIS") {
+        throw "Script $scriptRelative is missing a .SYNOPSIS comment-based help block."
+    }
+}
+
 Write-Output "PowerShell behavior tests passed."
