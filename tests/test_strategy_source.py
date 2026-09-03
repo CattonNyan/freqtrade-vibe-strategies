@@ -75,6 +75,10 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertEqual(assignments.get("INTERFACE_VERSION"), 3)
                 self.assertFalse(assignments.get("can_short"))
                 self.assertTrue(assignments.get("process_only_new_candles"))
+                valid_timeframes = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"}
+                self.assertIn(assignments.get("timeframe"), valid_timeframes)
+                if "informative_timeframe" in assignments:
+                    self.assertIn(assignments.get("informative_timeframe"), valid_timeframes)
                 self.assertTrue(REQUIRED_METHODS.issubset(methods))
 
     def test_order_types_and_time_in_force_declared_by_every_strategy(self) -> None:
