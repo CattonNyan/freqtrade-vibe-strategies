@@ -16,9 +16,9 @@ from technical import qtpylib
 class MultiTimeframeAtrStrategy(IStrategy):
     """
     Multi-timeframe strategy combining:
-    - 1h informative timeframe for macro trend direction (EMA 50 / EMA 200)
-    - 5m base timeframe for entry timing and momentum (EMA, RSI, Volume)
-    - Dynamic break-even and profit-securing custom stoploss
+    - 1h informative timeframe for macro trend direction (EMA 50 / EMA 200, RSI > 45)
+    - 5m base timeframe for entry timing and momentum (EMA 20/50, RSI pullback, Volume)
+    - Dynamic break-even and profit-securing custom stoploss (profit >= 3% secure 1.5%, profit >= 1.5% break-even)
 
     The class name is retained for configuration compatibility. The current
     stoploss uses profit thresholds and does not depend on ATR.
