@@ -41,7 +41,11 @@ $commonArguments = @(
     "--pairs"
 ) + $Pairs
 
+Write-Host "[*] 시장 데이터 다운로드 시작 (기간: ${Days}일, 대상: $($Pairs -join ', '))"
+
 Invoke-FreqtradeCommand `
     -DockerArguments ($commonArguments + @("--config", "/freqtrade/user_data/config/backtest.example.json")) `
     -NativeArguments ($commonArguments + @("--config", ".\config\backtest.example.json")) `
     -FailureMessage "시장 데이터 다운로드에 실패했습니다."
+
+Write-Host "[+] 시장 데이터 다운로드가 완료되었습니다. (저장 위치: user_data/data)"
