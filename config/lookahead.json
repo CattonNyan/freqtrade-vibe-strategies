@@ -1,5 +1,6 @@
 {
   "$schema": "https://schema.freqtrade.io/schema.json",
+  "dry_run": true,
   "entry_pricing": {
     "price_side": "other",
     "use_order_book": true,
