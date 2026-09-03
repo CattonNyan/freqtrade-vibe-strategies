@@ -1,4 +1,17 @@
+<#
+.SYNOPSIS
+    Freqtrade Vibe Strategies 공통 실행 런타임 및 안전 가드 모듈.
+
+.DESCRIPTION
+    Docker 환경 감지, 가상환경(.venv) 실행 파일 탐색, 입력 기간 검증,
+    시장 데이터 유효성 확인 및 Freqtrade 프로세스 실행 공통 헬퍼를 제공합니다.
+#>
+
 function Assert-ValidTimerange {
+    <#
+    .SYNOPSIS
+        YYYYMMDD-YYYYMMDD 형식의 기간 문자열 유효성 및 시작일/종료일 순서를 검증합니다.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
