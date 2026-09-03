@@ -8,6 +8,14 @@ from technical import qtpylib
 
 
 class KoreanStarterStrategy(IStrategy):
+    """
+    보수적 15분봉 시작 전략 (Conservative Trend Starter Strategy).
+
+    - 진입 조건: Close > EMA(200/20), EMA(20) > EMA(50), RSI 상향돌파, ADX > 20, 완료봉 거래량 돌파
+    - 청산 조건: RSI > 70 과매수, EMA(20/50) 데드크로스, ROI 테이블
+    - 리스크 관리: -8% 손절, 트레일링 스탑(+2.5% 도달 시 +1% 추적), 3대 보호장치
+    """
+
     INTERFACE_VERSION = 3
 
     can_short = False
