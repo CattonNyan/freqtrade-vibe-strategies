@@ -1,2 +1,7 @@
+# Freqtrade Vibe Strategies - Runtime Dependencies
+# Fixed to match the official Docker image version (freqtradeorg/freqtrade:2026.7)
 freqtrade[hyperopt]==2026.7
+
+# Multiprocessing serialization library required for hyperopt and strategy analysis
 joblib>=1.2,<1.6
+
