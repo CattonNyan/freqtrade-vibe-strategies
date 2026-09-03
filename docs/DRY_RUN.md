@@ -4,7 +4,7 @@
 
 ## 1. 설정 검증
 
-기본 실행은 봇을 시작하지 않고 병합된 설정만 검사합니다.
+스크립트의 상세 파라미터는 `Get-Help .\scripts\Invoke-DryRun.ps1 -Detailed`로 확인할 수 있습니다. 기본 실행은 봇을 시작하지 않고 병합된 설정만 검사합니다.
 
 ```powershell
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy
@@ -39,7 +39,15 @@
 
 보호장치는 새 진입을 잠그지만 이미 열린 포지션의 손실을 대신 제한하지 않습니다. 전략 stoploss와 별도로 동작합니다.
 
-## 4. 실거래 전 금지 사항
+## 4. 표준 주문 실행 정책 (order_types & order_time_in_force)
+
+모든 전략은 안정적인 체결과 슬리피지 통제를 위해 공통된 주문 방식을 명시적으로 선언합니다:
+- 진입(entry) / 일반 청산(exit): `limit` (지정가 주문)
+- 긴급/강제 탈출(emergency_exit, force_exit): `market` (시장가 즉시 체결)
+- 손절(stoploss): `market` (로컬 감시 시장가 손절, stoploss_on_exchange=False)
+- 유효 시간(order_time_in_force): `gtc` (Good 'Til Cancelled)
+
+## 5. 실거래 전 금지 사항
 
 - 검증 결과가 음수인 현재 상태에서 `dry_run`을 끄지 않습니다.
 - API 키, 비공개 실거래 config, Telegram 토큰을 저장소에 커밋하지 않습니다.
