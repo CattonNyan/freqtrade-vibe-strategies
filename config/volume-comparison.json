@@ -1,4 +1,5 @@
 {
   "$schema": "https://schema.freqtrade.io/schema.json",
+  "dry_run": true,
   "startup_candle_count": 799
 }
