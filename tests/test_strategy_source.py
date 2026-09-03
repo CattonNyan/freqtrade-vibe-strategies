@@ -92,6 +92,24 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertEqual(tif.get("entry"), "gtc")
                 self.assertEqual(tif.get("exit"), "gtc")
 
+    def test_risk_parameters_are_strictly_bounded(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+
+                stoploss = assignments.get("stoploss")
+                self.assertIsInstance(stoploss, (int, float))
+                self.assertLess(stoploss, 0, "stoploss must be negative in Freqtrade")
+                self.assertGreaterEqual(stoploss, -1.0, "stoploss cannot exceed -100%")
+
+                roi = assignments.get("minimal_roi")
+                self.assertIsInstance(roi, dict)
+                self.assertTrue(len(roi) > 0, "minimal_roi table must not be empty")
+                for minutes, target in roi.items():
+                    self.assertTrue(str(minutes).isdigit(), "ROI table keys must be minute strings")
+                    self.assertGreaterEqual(target, 0.0, "ROI targets must be non-negative")
+
     def test_startup_count_covers_longest_indicator_period(self) -> None:
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):
