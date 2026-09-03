@@ -4,8 +4,11 @@
 
 ## 현재 검증 상태
 
-- Python AST 기반 소스 계약 검사: 통과
+- Python AST 기반 소스 계약 검사: 통과 (INTERFACE_VERSION=3, can_short=False 등)
 - 명시적인 음수 `shift` 및 `iloc` 참조 검사: 통과
+- 전략별 `order_types` 및 소문자 `order_time_in_force: gtc` 선언 검사: 통과
+- 예제 JSON 설정(`config/*.json`)의 `dry_run: true` 및 외부 알림 비활성화 검사: 통과
+- PowerShell 검증 스크립트의 `Get-Help` 표준 주석 및 매개변수 유효성 검사: 통과
 - Freqtrade 런타임 전략 로딩: 미실행
 - `recursive-analysis`: 2026-09-01 실행 완료
 - `lookahead-analysis`: 2026-09-01 실행 완료(Korean 통과, Vibe 표본 부족)
