@@ -258,6 +258,16 @@ class StrategySourceTests(unittest.TestCase):
                 else:
                     self.assertEqual(protections, baseline)
 
+    def test_all_tracked_configs_are_valid_json_with_schema(self) -> None:
+        config_files = list((ROOT / "config").glob("*.json"))
+        self.assertGreaterEqual(len(config_files), 4, "at least 4 config files expected")
+        for config_path in config_files:
+            with self.subTest(config=config_path.name):
+                content = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertIsInstance(content, dict)
+                self.assertIn("$schema", content)
+                self.assertTrue(content["$schema"].startswith("https://schema.freqtrade.io/"))
+
     def test_dry_run_example_cannot_place_live_orders(self) -> None:
         config_path = ROOT / "config" / "dry-run.example.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
