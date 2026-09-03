@@ -101,6 +101,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
 
 `recursive-analysis` 결과를 검토한 뒤에만 각 전략의 `startup_candle_count`를 확정합니다. 신호가 적어 lookahead 검사가 중단되면 기간을 넓히거나 `MinimumTradeAmount`를 조정하되, 검사하지 못한 신호를 편향 없음으로 간주하지 마세요.
 
-세부 통과 조건과 기간 외 검증 절차는 [`docs/VALIDATION.md`](docs/VALIDATION.md)를 따릅니다. 전략 수치 변경은 이 절차의 결과를 남긴 뒤 별도 커밋으로 진행합니다.
+세부 통과 조건과 기간 외 검증 절차는 [`docs/VALIDATION.md`](docs/VALIDATION.md)를 따르며, 과거 분석 및 백테스트 결과 기록과 신규 결과 작성 템플릿은 [`docs/results/README.md`](docs/results/README.md)에서 확인할 수 있습니다. 전략 수치 변경은 이 절차의 결과를 남긴 뒤 별도 커밋으로 진행합니다.
 
 모의투자를 시작하기 전에는 [`docs/DRY_RUN.md`](docs/DRY_RUN.md)의 안전 절차를 따릅니다. 기본 명령은 설정만 검증하며 `-Start`를 명시해야 dry-run 프로세스가 시작됩니다.
