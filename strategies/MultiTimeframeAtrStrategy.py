@@ -159,8 +159,11 @@ class MultiTimeframeAtrStrategy(IStrategy):
             (rsi_exit | trend_exit) & has_volume,
             "exit_long",
         ] = 1
-        dataframe.loc[rsi_exit & has_volume, "exit_tag"] += "rsi_overbought "
-        dataframe.loc[trend_exit & has_volume, "exit_tag"] += "ema_bearish_cross "
+        dataframe.loc[rsi_exit & has_volume, "exit_tag"] = "rsi_overbought"
+        dataframe.loc[trend_exit & has_volume, "exit_tag"] = "ema_bearish_cross"
+        dataframe.loc[rsi_exit & trend_exit & has_volume, "exit_tag"] = (
+            "rsi_overbought+ema_bearish_cross"
+        )
         return dataframe
 
     def custom_stoploss(
