@@ -3,7 +3,7 @@
 from pandas import DataFrame
 import talib.abstract as ta
 
-from freqtrade.strategy import IStrategy
+from freqtrade.strategy import IStrategy, IntParameter
 from technical import qtpylib
 
 
@@ -35,6 +35,9 @@ class VibeRsiStrategy(IStrategy):
     use_exit_signal = True
     exit_profit_only = False
     ignore_roi_if_entry_signal = False
+
+    buy_rsi = IntParameter(20, 50, default=35, space="buy", optimize=True)
+    sell_rsi = IntParameter(60, 85, default=70, space="sell", optimize=True)
 
     order_types = {
         "entry": "limit",
@@ -77,6 +80,7 @@ class VibeRsiStrategy(IStrategy):
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["ema_20"] = ta.EMA(dataframe, timeperiod=20)
         dataframe["ema_50"] = ta.EMA(dataframe, timeperiod=50)
+        dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean().shift(1)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -84,9 +88,10 @@ class VibeRsiStrategy(IStrategy):
         dataframe["enter_tag"] = ""
         dataframe.loc[
             (
-                qtpylib.crossed_above(dataframe["rsi"], 30)
+                qtpylib.crossed_above(dataframe["rsi"], self.buy_rsi.value)
                 & (dataframe["ema_20"] > dataframe["ema_50"])
-                & (dataframe["close"] > dataframe["ema_20"])
+                & (dataframe["close"] > dataframe["ema_50"])
+                & (dataframe["volume"] > dataframe["volume_mean_20"])
                 & (dataframe["volume"] > 0)
             ),
             ["enter_long", "enter_tag"],
@@ -95,7 +100,7 @@ class VibeRsiStrategy(IStrategy):
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         has_volume = dataframe["volume"] > 0
-        rsi_exit = qtpylib.crossed_above(dataframe["rsi"], 70)
+        rsi_exit = qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
         trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
 
         dataframe["exit_long"] = 0
