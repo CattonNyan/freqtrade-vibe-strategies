@@ -158,7 +158,10 @@ class MultiTimeframeAtrStrategy(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         has_volume = dataframe["volume"] > 0
         rsi_exit = qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
-        trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
+        # Avoid panic selling in deeply oversold conditions where a relief bounce is likely
+        trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"]) & (
+            dataframe["rsi"] > 35
+        )
 
         dataframe["exit_long"] = 0
         dataframe["exit_tag"] = ""
