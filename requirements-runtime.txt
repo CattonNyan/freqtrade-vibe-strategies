@@ -5,3 +5,8 @@ freqtrade[hyperopt]==2026.7
 # Multiprocessing serialization library required for hyperopt and strategy analysis
 joblib>=1.2,<1.6
 
+# Note for Windows local environments:
+# TA-Lib requires C binaries. On Windows, if installing into .venv fails,
+# download the pre-compiled wheel (.whl) for your Python version from:
+# https://github.com/cgohlke/talib-build/releases or use the Docker environment.
+
