@@ -20,6 +20,17 @@ if (-not $caughtMessage) {
 
 $caughtMessage = $null
 try {
+    Assert-ValidTimerange -Timerange "20250101/20260101"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "YYYYMMDD-YYYYMMDD") {
+    throw "A malformed timerange did not produce the expected format error: $caughtMessage"
+}
+
+$caughtMessage = $null
+try {
     & (Join-Path $repositoryRoot "scripts/Get-MarketData.ps1") -Pairs "BTC-USDT"
 }
 catch {

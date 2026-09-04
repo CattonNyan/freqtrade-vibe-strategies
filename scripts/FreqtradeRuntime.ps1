@@ -18,6 +18,10 @@ function Assert-ValidTimerange {
         [string]$Timerange
     )
 
+    if ($Timerange -notmatch "^\d{8}-\d{8}$") {
+        throw "Timerange 형식은 YYYYMMDD-YYYYMMDD여야 합니다: $Timerange"
+    }
+
     $parts = $Timerange -split "-", 2
     try {
         $startDate = [datetime]::ParseExact(

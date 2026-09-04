@@ -24,28 +24,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate PowerShell syntax
+      - name: Run repository checks
         shell: pwsh
-        run: |
-          $parseErrors = @()
-          Get-ChildItem scripts -Filter *.ps1 | ForEach-Object {
-            $tokens = $null
-            $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile(
-              $_.FullName,
-              [ref]$tokens,
-              [ref]$errors
-            )
-            $parseErrors += $errors
-          }
-          if ($parseErrors.Count -gt 0) {
-            $parseErrors | Format-List
-            throw "PowerShell syntax validation failed."
-          }
-
-      - name: Run PowerShell behavior tests
-        shell: pwsh
-        run: ./tests/Test-PowerShellScripts.ps1
-
-      - name: Run dependency-free strategy checks
-        run: python -B -m unittest discover -s tests -v
+        run: ./scripts/Invoke-Checks.ps1

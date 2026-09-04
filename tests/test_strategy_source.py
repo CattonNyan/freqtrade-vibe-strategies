@@ -430,6 +430,7 @@ class StrategySourceTests(unittest.TestCase):
     def test_timerange_scripts_apply_semantic_date_validation(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("function Assert-ValidTimerange", runtime_source)
+        self.assertIn('$Timerange -notmatch "^\\d{8}-\\d{8}$"', runtime_source)
         self.assertEqual(runtime_source.count("[datetime]::ParseExact("), 2)
         self.assertIn("if ($startDate -ge $endDate)", runtime_source)
 

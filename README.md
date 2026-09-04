@@ -87,6 +87,12 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
 전략 소스의 기본 계약과 명시적인 미래 봉 참조를 의존성 없이 검사할 수 있습니다.
 
 ```powershell
+.\scripts\Invoke-Checks.ps1
+```
+
+개별 검사를 직접 실행하려면 다음 명령을 사용합니다.
+
+```powershell
 python -B -m unittest discover -s tests -v
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
   .\tests\Test-PowerShellScripts.ps1
