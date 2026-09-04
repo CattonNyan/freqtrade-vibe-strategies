@@ -27,3 +27,6 @@ jobs:
       - name: Run repository checks
         shell: pwsh
         run: ./scripts/Invoke-Checks.ps1
+
+      - name: Verify strategies loading in official Freqtrade Docker image
+        run: docker compose run --rm freqtrade list-strategies --strategy-path /freqtrade/user_data/strategies
