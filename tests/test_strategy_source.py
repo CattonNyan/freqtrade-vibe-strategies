@@ -283,6 +283,15 @@ class StrategySourceTests(unittest.TestCase):
         script_source = self.script_source("Invoke-DryRun.ps1")
         self.assertIn("$dryRunConfig.telegram.enabled -ne $false", script_source)
 
+    def test_dry_run_validation_loads_the_requested_strategy(self) -> None:
+        script_source = self.script_source("Invoke-DryRun.ps1")
+        self.assertIn('@("show-config", "--strategy", $Strategy)', script_source)
+        self.assertIn(
+            '@("--strategy-path", "/freqtrade/user_data/strategies")',
+            script_source,
+        )
+        self.assertIn('@("--strategy-path", ".\\strategies")', script_source)
+
     def test_backtest_example_remains_safe_for_local_validation(self) -> None:
         config_path = ROOT / "config" / "backtest.example.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))

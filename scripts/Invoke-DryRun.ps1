@@ -54,18 +54,10 @@ if ($dryRunConfig.telegram.enabled -ne $false) {
     @("trade", "--strategy", $Strategy)
 }
 else {
-    @("show-config")
+    @("show-config", "--strategy", $Strategy)
 }
-[string[]]$dockerStrategyArguments = if ($Start) {
-    @("--strategy-path", "/freqtrade/user_data/strategies")
-} else {
-    @()
-}
-[string[]]$nativeStrategyArguments = if ($Start) {
-    @("--strategy-path", ".\strategies")
-} else {
-    @()
-}
+[string[]]$dockerStrategyArguments = @("--strategy-path", "/freqtrade/user_data/strategies")
+[string[]]$nativeStrategyArguments = @("--strategy-path", ".\strategies")
 
 Invoke-FreqtradeCommand `
     -DockerArguments ($commonArguments + @(
