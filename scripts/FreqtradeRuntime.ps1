@@ -103,6 +103,32 @@ function Assert-MarketDataAvailable {
     }
 }
 
+function Test-DockerRuntimeAvailable {
+    [CmdletBinding()]
+    param()
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    # Docker writes connection failures to stderr. Under the entry scripts'
+    # Stop preference, PowerShell 5.1 turns that probe into a terminating error
+    # before the native .venv fallback can run, so silence only these probes.
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        & docker info --format "{{.ServerVersion}}" *> $null
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+        & docker compose version *> $null
+        return $LASTEXITCODE -eq 0
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 function Invoke-FreqtradeCommand {
     [CmdletBinding()]
     param(
@@ -121,15 +147,7 @@ function Invoke-FreqtradeCommand {
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
     Push-Location -LiteralPath $repositoryRoot
     try {
-        $dockerReady = $false
-        if (Get-Command docker -ErrorAction SilentlyContinue) {
-            & docker info --format "{{.ServerVersion}}" *> $null
-            $dockerEngineReady = $LASTEXITCODE -eq 0
-            if ($dockerEngineReady) {
-                & docker compose version *> $null
-                $dockerReady = $LASTEXITCODE -eq 0
-            }
-        }
+        $dockerReady = Test-DockerRuntimeAvailable
 
         if ($dockerReady) {
             $dockerArgs = @($DockerArguments)
