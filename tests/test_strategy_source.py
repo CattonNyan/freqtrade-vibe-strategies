@@ -336,6 +336,7 @@ class StrategySourceTests(unittest.TestCase):
         config = json.loads(config_path.read_text(encoding="utf-8"))
         self.assertIs(config.get("dry_run"), True)
         self.assertEqual(config.get("trading_mode"), "spot")
+        self.assertNotIn("timeframe", config, "the strategy must control its own timeframe")
         self.assertIs(config.get("force_entry_enable"), False)
         self.assertEqual(config["exchange"].get("key"), "")
         self.assertEqual(config["exchange"].get("secret"), "")
