@@ -42,9 +42,9 @@ if (-not $caughtMessage) {
 
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
 $emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
-[void](New-Item -ItemType Directory -Path $emptyDataDirectory -Force)
-[void](New-Item -ItemType File -Path $emptyDataFile -Force)
 try {
+    [void](New-Item -ItemType Directory -Path $emptyDataDirectory -Force)
+    [void](New-Item -ItemType File -Path $emptyDataFile -Force)
     $caughtMessage = $null
     try {
         Assert-MarketDataAvailable `
@@ -60,7 +60,9 @@ try {
     }
 }
 finally {
-    Remove-Item -LiteralPath $emptyDataFile -Force
+    if (Test-Path -LiteralPath $emptyDataFile) {
+        Remove-Item -LiteralPath $emptyDataFile -Force
+    }
 }
 
 $caughtMessage = $null

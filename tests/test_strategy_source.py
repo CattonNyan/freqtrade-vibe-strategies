@@ -561,6 +561,49 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn('"MultiTimeframeAtrStrategy"', source)
                 self.assertIn('"1h"', source)
 
+    def test_signal_columns_are_default_initialized(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                for method_name, col in (
+                    ("populate_entry_trend", "enter_long"),
+                    ("populate_exit_trend", "exit_long"),
+                ):
+                    method = next(
+                        (
+                            node
+                            for node in strategy.body
+                            if isinstance(node, ast.FunctionDef) and node.name == method_name
+                        ),
+                        None,
+                    )
+                    self.assertIsNotNone(method, f"{method_name} is missing in {class_name}")
+                    assigns_zero = any(
+                        isinstance(node, ast.Assign)
+                        and any(
+                            isinstance(target, ast.Subscript)
+                            and isinstance(target.slice, ast.Constant)
+                            and target.slice.value == col
+                            for target in node.targets
+                        )
+                        and isinstance(node.value, ast.Constant)
+                        and node.value.value == 0
+                        for node in method.body  # type: ignore[union-attr]
+                    )
+                    self.assertTrue(
+                        assigns_zero,
+                        f"{col} default initialization to 0 is missing in {class_name}.{method_name}",
+                    )
+
+    def test_dynamic_runtime_import_and_indicators_if_available(self) -> None:
+        try:
+            import pandas as pd
+            import numpy as np
+            import talib.abstract as ta
+            from freqtrade.strategy import IStrategy
+        except ImportError:
+            self.skipTest("Freqtrade runtime dependencies not installed in local environment")
+
 
 if __name__ == "__main__":
     unittest.main()
