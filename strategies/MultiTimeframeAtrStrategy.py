@@ -23,6 +23,7 @@ class MultiTimeframeAtrStrategy(IStrategy):
 
     The class name is retained for configuration compatibility. The current
     stoploss uses profit thresholds and does not depend on ATR.
+    Note: Requires sufficient 1h historical candles (>= 200 candles) for macro EMA 200 convergence.
     """
 
     INTERFACE_VERSION = 3
