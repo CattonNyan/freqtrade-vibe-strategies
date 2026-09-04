@@ -127,6 +127,8 @@ class MultiTimeframeAtrStrategy(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["enter_long"] = 0
+        dataframe["enter_tag"] = ""
         macro_ema_50 = dataframe[f"ema_50_{self.informative_timeframe}"]
         macro_ema_200 = dataframe[f"ema_200_{self.informative_timeframe}"]
         macro_rsi = dataframe[f"rsi_{self.informative_timeframe}"]
@@ -154,6 +156,7 @@ class MultiTimeframeAtrStrategy(IStrategy):
         rsi_exit = qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
         trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
 
+        dataframe["exit_long"] = 0
         dataframe["exit_tag"] = ""
         dataframe.loc[
             (rsi_exit | trend_exit) & has_volume,

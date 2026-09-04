@@ -75,16 +75,18 @@ class VibeRsiStrategy(IStrategy):
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
-        dataframe["ema20"] = ta.EMA(dataframe, timeperiod=20)
-        dataframe["ema50"] = ta.EMA(dataframe, timeperiod=50)
+        dataframe["ema_20"] = ta.EMA(dataframe, timeperiod=20)
+        dataframe["ema_50"] = ta.EMA(dataframe, timeperiod=50)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["enter_long"] = 0
+        dataframe["enter_tag"] = ""
         dataframe.loc[
             (
                 qtpylib.crossed_above(dataframe["rsi"], 30)
-                & (dataframe["ema20"] > dataframe["ema50"])
-                & (dataframe["close"] > dataframe["ema20"])
+                & (dataframe["ema_20"] > dataframe["ema_50"])
+                & (dataframe["close"] > dataframe["ema_20"])
                 & (dataframe["volume"] > 0)
             ),
             ["enter_long", "enter_tag"],
@@ -94,8 +96,9 @@ class VibeRsiStrategy(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         has_volume = dataframe["volume"] > 0
         rsi_exit = qtpylib.crossed_above(dataframe["rsi"], 70)
-        trend_exit = qtpylib.crossed_below(dataframe["ema20"], dataframe["ema50"])
+        trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
 
+        dataframe["exit_long"] = 0
         dataframe["exit_tag"] = ""
         dataframe.loc[
             (rsi_exit | trend_exit) & has_volume,

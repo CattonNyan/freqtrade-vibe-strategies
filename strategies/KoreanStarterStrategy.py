@@ -90,6 +90,8 @@ class KoreanStarterStrategy(IStrategy):
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe["enter_long"] = 0
+        dataframe["enter_tag"] = ""
         dataframe.loc[
             (
                 (dataframe["close"] > dataframe["ema_200"])
@@ -109,6 +111,7 @@ class KoreanStarterStrategy(IStrategy):
         rsi_exit = qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
         trend_exit = qtpylib.crossed_below(dataframe["ema_20"], dataframe["ema_50"])
 
+        dataframe["exit_long"] = 0
         dataframe["exit_tag"] = ""
         dataframe.loc[
             (rsi_exit | trend_exit) & has_volume,
