@@ -66,7 +66,12 @@ Assert-MarketDataAvailable `
     -Pairs $normalizedPairs `
     -Timeframes $requiredTimeframes `
     -Exchange $exchangeName
-$pairSlug = ($normalizedPairs | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
+$pairSlug = if ($normalizedPairs.Count -gt 3) {
+    "{0}_{1}_and_{2}_more" -f ($normalizedPairs[0] -replace '[/:]', '-'), ($normalizedPairs[1] -replace '[/:]', '-'), ($normalizedPairs.Count - 2)
+}
+else {
+    ($normalizedPairs | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
+}
 $resultDirectoryName = "{0}-{1}-{2}" -f $Strategy, $pairSlug, $Timerange
 $resultPath = Join-Path $repositoryRoot "user_data/backtest_results/$resultDirectoryName"
 if (Test-Path -LiteralPath $resultPath) {

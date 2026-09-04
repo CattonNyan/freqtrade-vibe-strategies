@@ -24,9 +24,12 @@ $pythonExecutable = $pythonCandidates |
     Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
     Select-Object -First 1
 if (-not $pythonExecutable) {
-    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-    if ($pythonCommand) {
-        $pythonExecutable = $pythonCommand.Source
+    foreach ($cmd in @("python", "python3")) {
+        $pythonCommand = Get-Command $cmd -ErrorAction SilentlyContinue
+        if ($pythonCommand) {
+            $pythonExecutable = $pythonCommand.Source
+            break
+        }
     }
 }
 if (-not $pythonExecutable) {

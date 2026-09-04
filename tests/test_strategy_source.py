@@ -387,10 +387,16 @@ class StrategySourceTests(unittest.TestCase):
 
         source = self.script_source("Get-MarketData.ps1")
         match = re.search(
-            r'"--timeframes"\s*,(?P<values>.*?)\s*,\s*"--pairs"',
+            r'\[string\[\]\]\$Timeframes\s*=\s*@\((?P<values>.*?)\)',
             source,
             re.DOTALL,
         )
+        if match is None:
+            match = re.search(
+                r'"--timeframes"\s*,(?P<values>.*?)\s*,\s*"--pairs"',
+                source,
+                re.DOTALL,
+            )
         self.assertIsNotNone(match, "download-data timeframes are missing")
         downloaded_timeframes = set(
             re.findall(r'"([^"]+)"', match.group("values"))  # type: ignore[union-attr]

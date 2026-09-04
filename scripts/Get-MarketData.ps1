@@ -25,7 +25,10 @@ param(
 
     [ValidateNotNullOrEmpty()]
     [ValidatePattern("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")]
-    [string[]]$Pairs = @("BTC/USDT", "ETH/USDT")
+    [string[]]$Pairs = @("BTC/USDT", "ETH/USDT"),
+
+    [ValidateNotNullOrEmpty()]
+    [string[]]$Timeframes = @("5m", "15m", "1h")
 )
 
 Set-StrictMode -Version Latest
@@ -34,11 +37,13 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Initialize-FreqtradeDirectory -RelativePath "user_data/data"
 $normalizedPairs = @($Pairs | Sort-Object -Unique)
+$normalizedTimeframes = @($Timeframes | Sort-Object -Unique)
 
 $commonArguments = @(
     "download-data",
     "--days", $Days,
-    "--timeframes", "5m", "15m", "1h",
+    "--timeframes"
+) + $normalizedTimeframes + @(
     "--pairs"
 ) + $normalizedPairs
 
