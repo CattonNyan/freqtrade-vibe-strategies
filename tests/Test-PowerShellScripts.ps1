@@ -29,6 +29,29 @@ if (-not $caughtMessage) {
     throw "A malformed pair was not rejected."
 }
 
+$emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
+$emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
+[void](New-Item -ItemType Directory -Path $emptyDataDirectory -Force)
+[void](New-Item -ItemType File -Path $emptyDataFile -Force)
+try {
+    $caughtMessage = $null
+    try {
+        Assert-MarketDataAvailable `
+            -Pairs "CODEXEMPTY/USDT" `
+            -Timeframes "5m" `
+            -Exchange "binance"
+    }
+    catch {
+        $caughtMessage = $_.Exception.Message
+    }
+    if (-not $caughtMessage -or $caughtMessage -notmatch "CODEXEMPTY/USDT 5m") {
+        throw "An empty market data file was accepted: $caughtMessage"
+    }
+}
+finally {
+    Remove-Item -LiteralPath $emptyDataFile -Force
+}
+
 $caughtMessage = $null
 try {
     & (Join-Path $repositoryRoot "scripts/Invoke-StrategyAnalysis.ps1") `

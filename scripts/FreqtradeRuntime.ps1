@@ -77,11 +77,15 @@ function Assert-MarketDataAvailable {
         [string[]]$Pairs,
 
         [Parameter(Mandatory)]
-        [string[]]$Timeframes
+        [string[]]$Timeframes,
+
+        [Parameter(Mandatory)]
+        [ValidatePattern("^[A-Za-z0-9._-]+$")]
+        [string]$Exchange
     )
 
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
-    $dataRoot = Join-Path $repositoryRoot "user_data/data"
+    $dataRoot = Join-Path $repositoryRoot "user_data/data/$Exchange"
     if (-not (Test-Path -LiteralPath $dataRoot -PathType Container)) {
         throw "시장 데이터 디렉터리가 없습니다. Get-MarketData.ps1을 먼저 실행하세요."
     }
@@ -91,6 +95,7 @@ function Assert-MarketDataAvailable {
         foreach ($timeframe in ($Timeframes | Sort-Object -Unique)) {
             $pattern = "$pairSlug-$timeframe.*"
             $dataFile = Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter $pattern |
+                Where-Object { $_.Length -gt 0 } |
                 Select-Object -First 1
             if (-not $dataFile) {
                 $missingData += "$pair $timeframe"

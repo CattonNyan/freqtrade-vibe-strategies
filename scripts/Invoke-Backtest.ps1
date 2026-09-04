@@ -60,7 +60,12 @@ $requiredTimeframes = switch ($Strategy) {
     "KoreanStarterStrategy" { @("15m") }
     "MultiTimeframeAtrStrategy" { @("5m", "1h") }
 }
-Assert-MarketDataAvailable -Pairs $normalizedPairs -Timeframes $requiredTimeframes
+$backtestConfigPath = Join-Path $repositoryRoot "config/backtest.example.json"
+$exchangeName = (Get-Content -LiteralPath $backtestConfigPath -Raw | ConvertFrom-Json).exchange.name
+Assert-MarketDataAvailable `
+    -Pairs $normalizedPairs `
+    -Timeframes $requiredTimeframes `
+    -Exchange $exchangeName
 $pairSlug = ($normalizedPairs | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
 $resultDirectoryName = "{0}-{1}-{2}" -f $Strategy, $pairSlug, $Timerange
 $resultPath = Join-Path $repositoryRoot "user_data/backtest_results/$resultDirectoryName"

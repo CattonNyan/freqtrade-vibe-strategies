@@ -440,6 +440,14 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("$StartupCandles | Sort-Object -Unique", source)
         self.assertIn(") + $normalizedStartupCandles", source)
 
+    def test_analysis_runs_duplicate_strategies_only_once(self) -> None:
+        source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        self.assertIn(
+            "$normalizedStrategies = @($Strategies | Select-Object -Unique)",
+            source,
+        )
+        self.assertEqual(source.count("foreach ($strategy in $normalizedStrategies)"), 3)
+
     def test_lookahead_results_include_the_pair_name(self) -> None:
         source = self.script_source("Invoke-StrategyAnalysis.ps1")
         self.assertIn("$pairSlug = $Pair -replace '[/:]', '-'", source)
@@ -525,11 +533,14 @@ class StrategySourceTests(unittest.TestCase):
     def test_backtest_and_analysis_preflight_market_data(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("function Assert-MarketDataAvailable", runtime_source)
+        self.assertIn('"user_data/data/$Exchange"', runtime_source)
+        self.assertIn("Where-Object { $_.Length -gt 0 }", runtime_source)
         self.assertIn("Get-MarketData.ps1을 먼저 실행하세요", runtime_source)
         for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
             with self.subTest(script=filename):
                 source = self.script_source(filename)
                 self.assertIn("Assert-MarketDataAvailable", source)
+                self.assertIn("-Exchange $exchangeName", source)
                 self.assertIn('"MultiTimeframeAtrStrategy"', source)
                 self.assertIn('"1h"', source)
 

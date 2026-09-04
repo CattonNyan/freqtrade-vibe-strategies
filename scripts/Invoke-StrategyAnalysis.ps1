@@ -74,17 +74,23 @@ if ($MinimumTradeAmount -gt $TargetedTradeAmount) {
     throw "MinimumTradeAmount는 TargetedTradeAmount보다 클 수 없습니다."
 }
 $normalizedStartupCandles = @($StartupCandles | Sort-Object -Unique)
+$normalizedStrategies = @($Strategies | Select-Object -Unique)
 $pairSlug = $Pair -replace '[/:]', '-'
-$requiredTimeframes = foreach ($strategy in $Strategies) {
+$requiredTimeframes = foreach ($strategy in $normalizedStrategies) {
     switch ($strategy) {
         "VibeRsiStrategy" { "5m" }
         "KoreanStarterStrategy" { "15m" }
         "MultiTimeframeAtrStrategy" { "5m"; "1h" }
     }
 }
-Assert-MarketDataAvailable -Pairs @($Pair) -Timeframes $requiredTimeframes
+$backtestConfigPath = Join-Path $repositoryRoot "config/backtest.example.json"
+$exchangeName = (Get-Content -LiteralPath $backtestConfigPath -Raw | ConvertFrom-Json).exchange.name
+Assert-MarketDataAvailable `
+    -Pairs @($Pair) `
+    -Timeframes $requiredTimeframes `
+    -Exchange $exchangeName
 
-foreach ($strategy in $Strategies) {
+foreach ($strategy in $normalizedStrategies) {
     $lookaheadName = "lookahead-$strategy-$pairSlug-$Timerange.csv"
     $lookaheadPath = Join-Path $repositoryRoot "user_data/backtest_results/$lookaheadName"
     Initialize-FreqtradeOutputFile -Path $lookaheadPath -Force:$Force
@@ -95,7 +101,7 @@ foreach ($strategy in $Strategies) {
     }
 }
 
-foreach ($strategy in $Strategies) {
+foreach ($strategy in $normalizedStrategies) {
     $strategyPath = Join-Path $repositoryRoot "strategies\$strategy.py"
     if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
         throw "전략 파일을 찾을 수 없습니다: $strategyPath"
