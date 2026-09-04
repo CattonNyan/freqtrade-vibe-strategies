@@ -413,6 +413,7 @@ class StrategySourceTests(unittest.TestCase):
         for filename, parameter in (
             ("Get-MarketData.ps1", "Pairs"),
             ("Invoke-Backtest.ps1", "Pairs"),
+            ("Invoke-Hyperopt.ps1", "Pairs"),
             ("Invoke-StrategyAnalysis.ps1", "Pair"),
         ):
             with self.subTest(script=filename):
@@ -440,7 +441,11 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(runtime_source.count("[datetime]::ParseExact("), 2)
         self.assertIn("if ($startDate -ge $endDate)", runtime_source)
 
-        for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
+        for filename in (
+            "Invoke-Backtest.ps1",
+            "Invoke-Hyperopt.ps1",
+            "Invoke-StrategyAnalysis.ps1",
+        ):
             with self.subTest(script=filename):
                 source = self.script_source(filename)
                 self.assertIn("Assert-ValidTimerange -Timerange $Timerange", source)
@@ -521,6 +526,7 @@ class StrategySourceTests(unittest.TestCase):
             "Get-MarketData.ps1": "user_data/data",
             "Invoke-Backtest.ps1": "user_data/backtest_results",
             "Invoke-DryRun.ps1": "user_data/db",
+            "Invoke-Hyperopt.ps1": "user_data/hyperopt_results",
             "Invoke-StrategyAnalysis.ps1": "user_data/backtest_results",
         }
         runtime_source = self.script_source("FreqtradeRuntime.ps1")

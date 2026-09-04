@@ -122,7 +122,9 @@ if ((Get-Location).Path -ne $originalLocation) {
 $scriptsWithHelp = @(
     "scripts/Get-MarketData.ps1",
     "scripts/Invoke-Backtest.ps1",
+    "scripts/Invoke-Checks.ps1",
     "scripts/Invoke-DryRun.ps1",
+    "scripts/Invoke-Hyperopt.ps1",
     "scripts/Invoke-StrategyAnalysis.ps1",
     "scripts/FreqtradeRuntime.ps1"
 )
