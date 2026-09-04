@@ -313,7 +313,8 @@ class StrategySourceTests(unittest.TestCase):
 
     def test_dry_run_validation_loads_the_requested_strategy(self) -> None:
         script_source = self.script_source("Invoke-DryRun.ps1")
-        self.assertIn('@("show-config", "--strategy", $Strategy)', script_source)
+        self.assertIn('@("list-strategies")', script_source)
+        self.assertNotIn('@("show-config", "--strategy", $Strategy)', script_source)
         self.assertIn(
             '@("--strategy-path", "/freqtrade/user_data/strategies")',
             script_source,

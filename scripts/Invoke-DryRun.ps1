@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     예제 설정 파일(config/dry-run.example.json)의 dry_run=true 여부 및 API 키/텔레그램 비활성화를 검증합니다.
-    기본 실행 시에는 show-config 모드로 설정 유효성만 확인하며, -Start 스위치를 지정해야 실제 가상 거래 봇이 시작됩니다.
+    기본 실행 시에는 list-strategies로 설정과 전략 로딩을 확인하며, -Start 스위치를 지정해야 실제 가상 거래 봇이 시작됩니다.
 
 .PARAMETER Strategy
     모의투자를 실행할 전략 이름 (VibeRsiStrategy, KoreanStarterStrategy, MultiTimeframeAtrStrategy 중 선택).
@@ -54,7 +54,7 @@ if ($dryRunConfig.telegram.enabled -ne $false) {
     @("trade", "--strategy", $Strategy)
 }
 else {
-    @("show-config", "--strategy", $Strategy)
+    @("list-strategies")
 }
 [string[]]$dockerStrategyArguments = @("--strategy-path", "/freqtrade/user_data/strategies")
 [string[]]$nativeStrategyArguments = @("--strategy-path", ".\strategies")
