@@ -114,6 +114,34 @@ class StrategySourceTests(unittest.TestCase):
                     self.assertTrue(str(minutes).isdigit(), "ROI table keys must be minute strings")
                     self.assertGreaterEqual(target, 0.0, "ROI targets must be non-negative")
 
+    def test_custom_stoploss_uses_entry_relative_conversion(self) -> None:
+        filename = "MultiTimeframeAtrStrategy.py"
+        tree, strategy = self.strategy_class(filename, STRATEGIES[filename])
+        imported_helpers = {
+            alias.name
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom) and node.module == "freqtrade.strategy"
+            for alias in node.names
+        }
+        self.assertIn("stoploss_from_open", imported_helpers)
+
+        custom_stoploss = next(
+            node
+            for node in strategy.body
+            if isinstance(node, ast.FunctionDef) and node.name == "custom_stoploss"
+        )
+        helper_calls = [
+            node
+            for node in ast.walk(custom_stoploss)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "stoploss_from_open"
+        ]
+        self.assertEqual(len(helper_calls), 2)
+        for call in helper_calls:
+            keyword_names = {keyword.arg for keyword in call.keywords}
+            self.assertTrue({"is_short", "leverage"}.issubset(keyword_names))
+
     def test_startup_count_covers_longest_indicator_period(self) -> None:
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):

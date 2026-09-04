@@ -9,6 +9,7 @@ from freqtrade.strategy import (
     IStrategy,
     IntParameter,
     merge_informative_pair,
+    stoploss_from_open,
 )
 from technical import qtpylib
 
@@ -177,7 +178,17 @@ class MultiTimeframeAtrStrategy(IStrategy):
         3. Below 1.5%, standard base stoploss applies.
         """
         if current_profit >= 0.03:
-            return 0.015 - current_profit
+            return stoploss_from_open(
+                0.015,
+                current_profit,
+                is_short=trade.is_short,
+                leverage=trade.leverage,
+            )
         if current_profit >= 0.015:
-            return 0.003 - current_profit
+            return stoploss_from_open(
+                0.003,
+                current_profit,
+                is_short=trade.is_short,
+                leverage=trade.leverage,
+            )
         return None
