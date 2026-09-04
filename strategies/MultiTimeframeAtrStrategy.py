@@ -102,22 +102,26 @@ class MultiTimeframeAtrStrategy(IStrategy):
         dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean().shift(1)
 
         # --- Informative Timeframe (1h) Indicators ---
+        has_informative = False
         if getattr(self, "dp", None):
             informative = self.dp.get_pair_dataframe(
                 pair=metadata["pair"], timeframe=self.informative_timeframe
             )
-            informative["ema_50"] = ta.EMA(informative, timeperiod=50)
-            informative["ema_200"] = ta.EMA(informative, timeperiod=200)
-            informative["rsi"] = ta.RSI(informative, timeperiod=14)
+            if informative is not None and not informative.empty:
+                informative["ema_50"] = ta.EMA(informative, timeperiod=50)
+                informative["ema_200"] = ta.EMA(informative, timeperiod=200)
+                informative["rsi"] = ta.RSI(informative, timeperiod=14)
 
-            dataframe = merge_informative_pair(
-                dataframe,
-                informative,
-                self.timeframe,
-                self.informative_timeframe,
-                ffill=True,
-            )
-        else:
+                dataframe = merge_informative_pair(
+                    dataframe,
+                    informative,
+                    self.timeframe,
+                    self.informative_timeframe,
+                    ffill=True,
+                )
+                has_informative = True
+
+        if not has_informative:
             # Suppress entries when the informative timeframe cannot be loaded.
             # Reusing 5m indicators here would misrepresent them as 1h signals.
             dataframe[f"ema_50_{self.informative_timeframe}"] = float("nan")
@@ -181,13 +185,14 @@ class MultiTimeframeAtrStrategy(IStrategy):
     ) -> float | None:
         """
         Dynamic trailing stoploss with break-even protection:
-        1. When profit >= 3%, secure at least 1.5% profit.
+        1. When profit >= 3%, secure at least 1.5% profit and trail 50% of additional gains.
         2. When profit >= 1.5%, move stoploss to break-even (+0.3% to cover fees).
         3. Below 1.5%, standard base stoploss applies.
         """
         if current_profit >= 0.03:
+            secured_profit = 0.015 + (current_profit - 0.03) * 0.5
             return stoploss_from_open(
-                0.015,
+                secured_profit,
                 current_profit,
                 is_short=trade.is_short,
                 leverage=trade.leverage,
