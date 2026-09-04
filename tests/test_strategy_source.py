@@ -388,6 +388,8 @@ class StrategySourceTests(unittest.TestCase):
             re.findall(r'"([^"]+)"', match.group("values"))  # type: ignore[union-attr]
         )
         self.assertTrue(required_timeframes.issubset(downloaded_timeframes))
+        self.assertIn("$normalizedPairs = @($Pairs | Sort-Object -Unique)", source)
+        self.assertIn(") + $normalizedPairs", source)
 
     def test_market_pair_parameters_reject_malformed_values(self) -> None:
         pair_pattern = (

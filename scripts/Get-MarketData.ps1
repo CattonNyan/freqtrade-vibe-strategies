@@ -33,15 +33,16 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Initialize-FreqtradeDirectory -RelativePath "user_data/data"
+$normalizedPairs = @($Pairs | Sort-Object -Unique)
 
 $commonArguments = @(
     "download-data",
     "--days", $Days,
     "--timeframes", "5m", "15m", "1h",
     "--pairs"
-) + $Pairs
+) + $normalizedPairs
 
-Write-Host "[*] 시장 데이터 다운로드 시작 (기간: ${Days}일, 대상: $($Pairs -join ', '))"
+Write-Host "[*] 시장 데이터 다운로드 시작 (기간: ${Days}일, 대상: $($normalizedPairs -join ', '))"
 
 Invoke-FreqtradeCommand `
     -DockerArguments ($commonArguments + @("--config", "/freqtrade/user_data/config/backtest.example.json")) `
