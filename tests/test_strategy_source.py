@@ -320,6 +320,10 @@ class StrategySourceTests(unittest.TestCase):
 
         script_source = self.script_source("Invoke-DryRun.ps1")
         self.assertIn("$dryRunConfig.telegram.enabled -ne $false", script_source)
+        self.assertIn('@("key", "secret", "password", "uid")', script_source)
+        self.assertIn("foreach ($config in @($baseConfig, $dryRunConfig))", script_source)
+        self.assertIn("$config.exchange.PSObject.Properties[$field]", script_source)
+        self.assertIn('$config.telegram.PSObject.Properties[$field]', script_source)
 
     def test_dry_run_validation_loads_the_requested_strategy(self) -> None:
         script_source = self.script_source("Invoke-DryRun.ps1")

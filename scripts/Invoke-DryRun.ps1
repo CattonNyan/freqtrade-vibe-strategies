@@ -10,7 +10,7 @@
     모의투자를 실행할 전략 이름 (VibeRsiStrategy, KoreanStarterStrategy, MultiTimeframeAtrStrategy 중 선택).
 
 .PARAMETER Start
-    실제 모의투자(Dry-run trade) 프로세스를 시작하는 스위치. 미지정 시 설정 검증(show-config)만 수행.
+    실제 모의투자(Dry-run trade) 프로세스를 시작하는 스위치. 미지정 시 설정과 전략 로딩 검증만 수행.
 
 .EXAMPLE
     .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy
@@ -38,13 +38,27 @@ if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
     throw "전략 파일을 찾을 수 없습니다: $strategyPath"
 }
 
+$baseConfigPath = Join-Path $repositoryRoot "config\backtest.example.json"
 $dryRunConfigPath = Join-Path $repositoryRoot "config\dry-run.example.json"
+$baseConfig = Get-Content -LiteralPath $baseConfigPath -Raw | ConvertFrom-Json
 $dryRunConfig = Get-Content -LiteralPath $dryRunConfigPath -Raw | ConvertFrom-Json
 if ($dryRunConfig.dry_run -ne $true) {
     throw "dry-run 설정에서 dry_run=true를 확인할 수 없습니다."
 }
-if ($dryRunConfig.exchange.key -or $dryRunConfig.exchange.secret) {
-    throw "예제 dry-run 설정에 거래소 API 키를 저장하지 마세요."
+$credentialFields = @("key", "secret", "password", "uid")
+foreach ($config in @($baseConfig, $dryRunConfig)) {
+    foreach ($field in $credentialFields) {
+        $credential = $config.exchange.PSObject.Properties[$field]
+        if ($credential -and $credential.Value) {
+            throw "예제 설정에 거래소 인증 정보를 저장하지 마세요: $field"
+        }
+    }
+    foreach ($field in @("token", "chat_id")) {
+        $credential = $config.telegram.PSObject.Properties[$field]
+        if ($credential -and $credential.Value) {
+            throw "예제 설정에 Telegram 인증 정보를 저장하지 마세요: $field"
+        }
+    }
 }
 if ($dryRunConfig.telegram.enabled -ne $false) {
     throw "예제 dry-run 설정에서 Telegram 외부 알림을 활성화하지 마세요."
