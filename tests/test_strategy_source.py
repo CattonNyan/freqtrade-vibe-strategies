@@ -413,6 +413,9 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("$Pairs | Sort-Object -Unique", source)
         self.assertIn("$pairSlug", source)
         self.assertIn('"--pairs"', source)
+        self.assertIn('"--backtest-directory"', source)
+        self.assertNotIn('"--export-filename"', source)
+        self.assertIn('"--notes", $resultNotes', source)
 
     def test_timerange_scripts_apply_semantic_date_validation(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
@@ -510,11 +513,14 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("function Initialize-FreqtradeOutputFile", runtime_source)
         self.assertIn("if (-not $Force)", runtime_source)
         self.assertIn("Remove-Item -LiteralPath $Path -Force", runtime_source)
-        for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
-            with self.subTest(script=filename):
-                source = self.script_source(filename)
-                self.assertIn("[switch]$Force", source)
-                self.assertIn("Initialize-FreqtradeOutputFile", source)
+        analysis_source = self.script_source("Invoke-StrategyAnalysis.ps1")
+        self.assertIn("[switch]$Force", analysis_source)
+        self.assertIn("Initialize-FreqtradeOutputFile", analysis_source)
+
+        backtest_source = self.script_source("Invoke-Backtest.ps1")
+        self.assertIn("[switch]$Force", backtest_source)
+        self.assertIn("if (Test-Path -LiteralPath $resultPath)", backtest_source)
+        self.assertIn("Remove-Item -LiteralPath $resultPath -Recurse -Force", backtest_source)
 
     def test_backtest_and_analysis_preflight_market_data(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
