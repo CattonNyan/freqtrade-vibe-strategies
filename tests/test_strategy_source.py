@@ -233,6 +233,16 @@ class StrategySourceTests(unittest.TestCase):
         self.assertNotIn("ta.ATR(", source)
         self.assertIn("does not depend on ATR", source)
 
+    def test_mtf_strategy_fails_closed_without_informative_data(self) -> None:
+        filename = "MultiTimeframeAtrStrategy.py"
+        source = (ROOT / "strategies" / filename).read_text(encoding="utf-8")
+        self.assertIn('if not getattr(self, "dp", None):\n            return []', source)
+        self.assertEqual(source.count('float("nan")'), 3)
+        self.assertNotIn(
+            'dataframe[f"ema_50_{self.informative_timeframe}"] = dataframe["ema_50"]',
+            source,
+        )
+
     def test_operating_protections_are_declared_by_every_strategy(self) -> None:
         expected_methods = {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"}
         for filename, class_name in STRATEGIES.items():

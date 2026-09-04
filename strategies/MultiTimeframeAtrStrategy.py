@@ -87,11 +87,12 @@ class MultiTimeframeAtrStrategy(IStrategy):
             },
         ]
 
-    def informative_pairs(self):
+    def informative_pairs(self) -> list[tuple[str, str]]:
         """Define pairs and timeframes to download and cache."""
+        if not getattr(self, "dp", None):
+            return []
         pairs = self.dp.current_whitelist()
-        informative_pairs = [(pair, self.informative_timeframe) for pair in pairs]
-        return informative_pairs
+        return [(pair, self.informative_timeframe) for pair in pairs]
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # --- Base Timeframe (5m) Indicators ---
@@ -101,7 +102,7 @@ class MultiTimeframeAtrStrategy(IStrategy):
         dataframe["volume_mean_20"] = dataframe["volume"].rolling(20).mean().shift(1)
 
         # --- Informative Timeframe (1h) Indicators ---
-        if self.dp:
+        if getattr(self, "dp", None):
             informative = self.dp.get_pair_dataframe(
                 pair=metadata["pair"], timeframe=self.informative_timeframe
             )
@@ -117,10 +118,11 @@ class MultiTimeframeAtrStrategy(IStrategy):
                 ffill=True,
             )
         else:
-            # Fallback for standalone dry/test runs without dataprovider
-            dataframe[f"ema_50_{self.informative_timeframe}"] = dataframe["ema_50"]
-            dataframe[f"ema_200_{self.informative_timeframe}"] = ta.EMA(dataframe, timeperiod=200)
-            dataframe[f"rsi_{self.informative_timeframe}"] = dataframe["rsi"]
+            # Suppress entries when the informative timeframe cannot be loaded.
+            # Reusing 5m indicators here would misrepresent them as 1h signals.
+            dataframe[f"ema_50_{self.informative_timeframe}"] = float("nan")
+            dataframe[f"ema_200_{self.informative_timeframe}"] = float("nan")
+            dataframe[f"rsi_{self.informative_timeframe}"] = float("nan")
 
         return dataframe
 
