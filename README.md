@@ -1,10 +1,11 @@
+
 # Freqtrade Vibe Strategies
 
 개인 Freqtrade 전략을 독립적으로 관리하는 저장소입니다.
 
 ## 포함된 전략
 
-- `VibeRsiStrategy`: 5분봉 RSI 과매도와 EMA 추세 필터를 사용하는 간단한 전략
+- `VibeRsiStrategy`: 5분봉 RSI 과매도 회복 및 EMA 추세 지지 풀백, 직전 20봉 거래량 돌파 필터를 사용하는 전략 (하이퍼옵트 파라미터 최적화 지원)
 - `KoreanStarterStrategy`: 15분봉 EMA·RSI·ADX·거래량 필터와 트레일링 스탑을 사용하는 보수적 시작 전략
 - `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
@@ -56,14 +57,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
 ```powershell
 Get-Help .\scripts\Get-MarketData.ps1 -Detailed
 Get-Help .\scripts\Invoke-Backtest.ps1 -Detailed
+Get-Help .\scripts\Invoke-Checks.ps1 -Detailed
 Get-Help .\scripts\Invoke-DryRun.ps1 -Detailed
+Get-Help .\scripts\Invoke-Hyperopt.ps1 -Detailed
 Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
 ```
 
-시장 데이터를 내려받습니다.
+시장 데이터를 내려받습니다. 타임프레임을 지정하지 않으면 전략 기본 타임프레임(5m, 15m, 1h)이 모두 다운로드됩니다.
 
 ```powershell
 .\scripts\Get-MarketData.ps1 -Days 365
+# 특정 타임프레임 및 페어 지정 다운로드
+.\scripts\Get-MarketData.ps1 -Days 365 -Pairs BTC/USDT,ETH/USDT,SOL/USDT -Timeframes 5m,15m,1h
 ```
 
 명시적인 기간으로 전략을 백테스트합니다.
@@ -75,14 +80,21 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
   -Pairs BTC/USDT,ETH/USDT
 ```
 
+하이퍼옵트로 전략 파라미터를 최적화합니다.
+
+```powershell
+.\scripts\Invoke-Hyperopt.ps1 `
+  -Strategy VibeRsiStrategy `
+  -Timerange 20250101-20260101 `
+  -Epochs 100 `
+  -Spaces buy,sell
+```
+
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
 공통 백테스트 설정은 타임프레임을 덮어쓰지 않으며, 각 전략의 `timeframe` 값이 그대로 적용됩니다.
+상위 20개 유동성 페어를 동적으로 순위 매겨 운용하려면 `config/pairlist-volume.example.json`을 함께 적용할 수 있습니다.
 
 같은 전략·페어·기간의 결과 디렉터리가 있으면 스크립트가 중단됩니다. 기존 결과 묶음을 의도적으로 교체할 때만 `-Force`를 추가하세요.
-
-생성된 데이터와 결과는 `user_data/` 아래에 저장되며 Git에는 포함되지 않습니다. 서로 다른 결과를 비교할 때는 Freqtrade 이미지 버전, 설정, 페어, 기간과 전략 커밋을 동일하게 유지하세요.
-
-개인 API 키가 포함된 설정은 `config/*.private.json` 또는 `config/*.local.json` 이름으로 저장하세요. 해당 파일과 `config/live.json`, `config/live-*.json`, 환경별 `.env.*` 파일은 Git에서 제외됩니다.
 
 전략 소스의 기본 계약과 명시적인 미래 봉 참조를 의존성 없이 검사할 수 있습니다.
 
