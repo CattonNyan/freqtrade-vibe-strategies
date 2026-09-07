@@ -143,6 +143,20 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "MinimumTradeAmount") {
     throw "Invalid sample bounds were not rejected: $caughtMessage"
 }
 
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-Hyperopt.ps1") `
+        -Strategy "VibeRsiStrategy" `
+        -Timerange "20250101-20260101" `
+        -Spaces @("all", "buy")
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "all") {
+    throw "Conflicting hyperopt spaces were not rejected: $caughtMessage"
+}
+
 $guardFile = [IO.Path]::GetTempFileName()
 try {
     $caughtMessage = $null

@@ -74,6 +74,9 @@ if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
 
 $normalizedPairs = @($Pairs | Sort-Object -Unique)
 $normalizedSpaces = @($Spaces | Sort-Object -Unique)
+if ($normalizedSpaces -contains "all" -and $normalizedSpaces.Count -gt 1) {
+    throw "Spaces에서 all은 개별 공간과 함께 지정할 수 없습니다."
+}
 $requiredTimeframes = switch ($Strategy) {
     "VibeRsiStrategy" { @("5m") }
     "KoreanStarterStrategy" { @("15m") }
