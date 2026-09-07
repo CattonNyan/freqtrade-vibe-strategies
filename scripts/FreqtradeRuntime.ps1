@@ -93,6 +93,9 @@ function Initialize-FreqtradeOutputFile {
     if ($parentDirectory -and -not (Test-Path -LiteralPath $parentDirectory)) {
         [void](New-Item -ItemType Directory -Path $parentDirectory -Force)
     }
+    if (Test-Path -LiteralPath $resolvedPath -PathType Container) {
+        throw "결과 파일 경로가 디렉터리를 가리킵니다: $Path"
+    }
     if (-not (Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
         return
     }

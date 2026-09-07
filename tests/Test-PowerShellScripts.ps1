@@ -207,6 +207,26 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "user_data") {
     throw "An output path outside user_data was accepted: $caughtMessage"
 }
 
+$directoryOutput = Join-Path $repositoryRoot "user_data/test-directory-output-$PID"
+try {
+    [void](New-Item -ItemType Directory -Path $directoryOutput -Force)
+    $caughtMessage = $null
+    try {
+        Initialize-FreqtradeOutputFile -Path $directoryOutput
+    }
+    catch {
+        $caughtMessage = $_.Exception.Message
+    }
+    if (-not $caughtMessage) {
+        throw "A directory was accepted as an output file: $caughtMessage"
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $directoryOutput) {
+        Remove-Item -LiteralPath $directoryOutput -Recurse -Force
+    }
+}
+
 $originalLocation = (Get-Location).Path
 $caughtMessage = $null
 try {
