@@ -108,13 +108,14 @@ class VibeRsiStrategy(IStrategy):
 
         dataframe["exit_long"] = 0
         dataframe["exit_tag"] = ""
+        both_exit = rsi_exit & trend_exit & has_volume
         dataframe.loc[
             (rsi_exit | trend_exit) & has_volume,
             "exit_long",
         ] = 1
-        dataframe.loc[rsi_exit & has_volume, "exit_tag"] = "rsi_overbought"
-        dataframe.loc[trend_exit & has_volume, "exit_tag"] = "ema_bearish_cross"
-        dataframe.loc[rsi_exit & trend_exit & has_volume, "exit_tag"] = (
+        dataframe.loc[rsi_exit & ~trend_exit & has_volume, "exit_tag"] = "rsi_overbought"
+        dataframe.loc[trend_exit & ~rsi_exit & has_volume, "exit_tag"] = "ema_bearish_cross"
+        dataframe.loc[both_exit, "exit_tag"] = (
             "rsi_overbought+ema_bearish_cross"
         )
         return dataframe
