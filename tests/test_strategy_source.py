@@ -341,6 +341,14 @@ class StrategySourceTests(unittest.TestCase):
     def test_compose_does_not_force_a_global_container_name(self) -> None:
         compose_source = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
         self.assertNotIn("container_name:", compose_source)
+        for expected_mount in (
+            "./user_data/data:/freqtrade/user_data/data",
+            "./user_data/backtest_results:/freqtrade/user_data/backtest_results",
+            "./user_data/hyperopt_results:/freqtrade/user_data/hyperopt_results",
+            "./user_data/db:/freqtrade/user_data/db",
+        ):
+            with self.subTest(mount=expected_mount):
+                self.assertIn(expected_mount, compose_source)
 
     def test_dry_run_example_cannot_place_live_orders(self) -> None:
         config_path = ROOT / "config" / "dry-run.example.json"
