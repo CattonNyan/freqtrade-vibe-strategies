@@ -341,6 +341,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(config["exchange"].get("key"), "")
         self.assertEqual(config["exchange"].get("secret"), "")
         self.assertIs(config["telegram"].get("enabled"), False)
+        self.assertRegex(
+            config.get("db_url", ""),
+            r"^sqlite:///user_data/db/[A-Za-z0-9._-]+\.sqlite$",
+        )
 
         script_source = self.script_source("Invoke-DryRun.ps1")
         self.assertIn("$dryRunConfig.telegram.enabled -ne $false", script_source)
@@ -348,6 +352,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("foreach ($config in @($baseConfig, $dryRunConfig))", script_source)
         self.assertIn("$config.exchange.PSObject.Properties[$field]", script_source)
         self.assertIn('$config.telegram.PSObject.Properties[$field]', script_source)
+        self.assertIn('$dryRunConfig.db_url', script_source)
+        self.assertIn('^sqlite:///user_data/db/', script_source)
 
     def test_dry_run_validation_loads_the_requested_strategy(self) -> None:
         script_source = self.script_source("Invoke-DryRun.ps1")

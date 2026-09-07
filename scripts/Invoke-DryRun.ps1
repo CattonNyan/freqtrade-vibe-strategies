@@ -45,6 +45,10 @@ $dryRunConfig = Get-Content -LiteralPath $dryRunConfigPath -Raw | ConvertFrom-Js
 if ($dryRunConfig.dry_run -ne $true) {
     throw "dry-run 설정에서 dry_run=true를 확인할 수 없습니다."
 }
+$dryRunDatabase = [string]$dryRunConfig.db_url
+if ($dryRunDatabase -notmatch "^sqlite:///user_data/db/[A-Za-z0-9._-]+\.sqlite$") {
+    throw "dry-run 데이터베이스는 user_data/db 아래의 SQLite 파일이어야 합니다."
+}
 $credentialFields = @("key", "secret", "password", "uid")
 foreach ($config in @($baseConfig, $dryRunConfig)) {
     foreach ($field in $credentialFields) {
