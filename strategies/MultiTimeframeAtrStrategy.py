@@ -113,6 +113,7 @@ class MultiTimeframeAtrStrategy(IStrategy):
                 pair=metadata["pair"], timeframe=self.informative_timeframe
             )
             if informative is not None and not informative.empty:
+                informative = informative.copy()
                 informative["ema_50"] = ta.EMA(informative, timeperiod=50)
                 informative["ema_200"] = ta.EMA(informative, timeperiod=200)
                 informative["rsi"] = ta.RSI(informative, timeperiod=14)

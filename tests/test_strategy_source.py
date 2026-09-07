@@ -254,6 +254,15 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("dict.fromkeys(self.dp.current_whitelist() or [])", source)
         self.assertIn("if pair", source)
 
+    def test_mtf_does_not_mutate_cached_informative_data(self) -> None:
+        source = (ROOT / "strategies" / "MultiTimeframeAtrStrategy.py").read_text(
+            encoding="utf-8"
+        )
+        fetch_position = source.index("self.dp.get_pair_dataframe(")
+        copy_position = source.index("informative = informative.copy()", fetch_position)
+        indicator_position = source.index('informative["ema_50"]', fetch_position)
+        self.assertLess(copy_position, indicator_position)
+
     def test_operating_protections_are_declared_by_every_strategy(self) -> None:
         expected_methods = {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"}
         for filename, class_name in STRATEGIES.items():
