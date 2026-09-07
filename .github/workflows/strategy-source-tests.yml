@@ -15,18 +15,29 @@ jobs:
   source-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Run repository checks
         shell: pwsh
         run: ./scripts/Invoke-Checks.ps1
+
+  docker-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Verify strategies loading in official Freqtrade Docker image
         run: docker compose run --rm freqtrade list-strategies --strategy-path /freqtrade/user_data/strategies
