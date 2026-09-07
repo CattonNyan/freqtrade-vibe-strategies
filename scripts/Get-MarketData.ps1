@@ -28,6 +28,7 @@ param(
     [string[]]$Pairs = @("BTC/USDT", "ETH/USDT"),
 
     [ValidateNotNullOrEmpty()]
+    [ValidatePattern("^\d+[mhdwM]$")]
     [string[]]$Timeframes = @("5m", "15m", "1h")
 )
 

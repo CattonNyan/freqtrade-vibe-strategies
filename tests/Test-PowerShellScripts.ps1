@@ -40,6 +40,17 @@ if (-not $caughtMessage) {
     throw "A malformed pair was not rejected."
 }
 
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Get-MarketData.ps1") -Timeframes "fast"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "A malformed timeframe was not rejected."
+}
+
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
 $emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
 try {
