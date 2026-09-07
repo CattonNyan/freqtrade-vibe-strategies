@@ -12,11 +12,17 @@
 .PARAMETER Pairs
     다운로드할 거래 페어 목록 (기본값: @("BTC/USDT", "ETH/USDT")).
 
+.PARAMETER Timeframes
+    다운로드할 캔들 타임프레임 목록 (기본값: @("5m", "15m", "1h")).
+
 .EXAMPLE
     .\scripts\Get-MarketData.ps1 -Days 180
 
 .EXAMPLE
     .\scripts\Get-MarketData.ps1 -Days 365 -Pairs @("BTC/USDT", "ETH/USDT", "SOL/USDT")
+
+.EXAMPLE
+    .\scripts\Get-MarketData.ps1 -Days 365 -Pairs @("BTC/USDT") -Timeframes @("5m", "15m")
 #>
 [CmdletBinding()]
 param(

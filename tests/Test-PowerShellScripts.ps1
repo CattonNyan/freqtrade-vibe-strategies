@@ -312,6 +312,9 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     if ($content -notmatch "\.SYNOPSIS") {
         throw "Script $scriptRelative is missing a .SYNOPSIS comment-based help block."
     }
+    if ($scriptRelative -eq "scripts/Get-MarketData.ps1" -and $content -notmatch "\.PARAMETER Timeframes") {
+        throw "Script Get-MarketData.ps1 is missing a .PARAMETER Timeframes help block."
+    }
 }
 
 $global:LASTEXITCODE = 0
