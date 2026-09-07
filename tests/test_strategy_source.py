@@ -708,6 +708,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("function Assert-MarketDataAvailable", runtime_source)
         self.assertIn('"user_data/data/$Exchange"', runtime_source)
         self.assertIn("Where-Object { $_.Length -gt 0 }", runtime_source)
+        self.assertIn("$supportedExtensions", runtime_source)
         self.assertIn("Get-MarketData.ps1을 먼저 실행하세요", runtime_source)
         for filename in ("Invoke-Backtest.ps1", "Invoke-StrategyAnalysis.ps1"):
             with self.subTest(script=filename):

@@ -6,6 +6,36 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $repositoryRoot "scripts/FreqtradeRuntime.ps1")
 
+function Remove-TestItemSafely {
+    param(
+        [string]$Path,
+        [switch]$Recurse
+    )
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+    for ($i = 0; $i -lt 10; $i++) {
+        try {
+            if ($Recurse) {
+                Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            }
+            else {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
+            }
+            return
+        }
+        catch {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    if ($Recurse) {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
+    else {
+        Remove-Item -LiteralPath $Path -Force
+    }
+}
+
 Assert-ValidTimerange -Timerange "20250101-20260101"
 $caughtMessage = $null
 try {
@@ -128,9 +158,7 @@ try {
     }
 }
 finally {
-    if (Test-Path -LiteralPath $nestedOutputDirectory) {
-        Remove-Item -LiteralPath $nestedOutputDirectory -Recurse -Force
-    }
+    Remove-TestItemSafely -Path $nestedOutputDirectory -Recurse
 }
 
 $nestedLogDirectory = Join-Path $repositoryRoot "user_data/test-log-helper-$PID"
@@ -152,9 +180,7 @@ try {
     }
 }
 finally {
-    if (Test-Path -LiteralPath $nestedLogDirectory) {
-        Remove-Item -LiteralPath $nestedLogDirectory -Recurse -Force
-    }
+    Remove-TestItemSafely -Path $nestedLogDirectory -Recurse
 }
 
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
@@ -177,9 +203,28 @@ try {
     }
 }
 finally {
-    if (Test-Path -LiteralPath $emptyDataFile) {
-        Remove-Item -LiteralPath $emptyDataFile -Force
+    Remove-TestItemSafely -Path $emptyDataFile
+}
+
+$unsupportedDataFile = Join-Path $emptyDataDirectory "CODEXUNSUPPORTED_USDT-5m.tmp"
+try {
+    [IO.File]::WriteAllText($unsupportedDataFile, "dummy non-empty content")
+    $caughtMessage = $null
+    try {
+        Assert-MarketDataAvailable `
+            -Pairs "CODEXUNSUPPORTED/USDT" `
+            -Timeframes "5m" `
+            -Exchange "binance"
     }
+    catch {
+        $caughtMessage = $_.Exception.Message
+    }
+    if (-not $caughtMessage -or $caughtMessage -notmatch "CODEXUNSUPPORTED/USDT 5m") {
+        throw "An unsupported data file extension was accepted: $caughtMessage"
+    }
+}
+finally {
+    Remove-TestItemSafely -Path $unsupportedDataFile
 }
 
 $caughtMessage = $null
@@ -244,9 +289,7 @@ try {
     }
 }
 finally {
-    if (Test-Path -LiteralPath $guardFile) {
-        Remove-Item -LiteralPath $guardFile -Force
-    }
+    Remove-TestItemSafely -Path $guardFile
 }
 
 $outsideOutput = Join-Path ([IO.Path]::GetTempPath()) "freqtrade-output-$PID.log"
@@ -276,9 +319,7 @@ try {
     }
 }
 finally {
-    if (Test-Path -LiteralPath $directoryOutput) {
-        Remove-Item -LiteralPath $directoryOutput -Recurse -Force
-    }
+    Remove-TestItemSafely -Path $directoryOutput -Recurse
 }
 
 $originalLocation = (Get-Location).Path

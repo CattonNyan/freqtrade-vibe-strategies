@@ -146,6 +146,7 @@ function Assert-MarketDataAvailable {
     if (-not (Test-Path -LiteralPath $dataRoot -PathType Container)) {
         throw "시장 데이터 디렉터리가 없습니다. Get-MarketData.ps1을 먼저 실행하세요."
     }
+    $supportedExtensions = @(".feather", ".json", ".gz", ".h5", ".parquet")
     $missingData = @()
     foreach ($pair in ($Pairs | Sort-Object -Unique)) {
         $pairSlug = $pair -replace '[/:]', '_'
@@ -153,6 +154,7 @@ function Assert-MarketDataAvailable {
             $pattern = "$pairSlug-$timeframe.*"
             $dataFile = Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter $pattern |
                 Where-Object { $_.Length -gt 0 } |
+                Where-Object { $supportedExtensions -contains $_.Extension } |
                 Select-Object -First 1
             if (-not $dataFile) {
                 $missingData += "$pair $timeframe"
