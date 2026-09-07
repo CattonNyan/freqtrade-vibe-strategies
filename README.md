@@ -33,7 +33,7 @@ docker compose run --rm freqtrade backtesting `
 
 ## 재현 가능한 백테스트
 
-검증 환경은 Freqtrade `2026.7` Docker 이미지에 고정되어 있습니다. 먼저 Docker Desktop을 설치한 뒤 예제 설정의 거래소와 페어를 검토하세요. 예제 설정은 현물·dry-run 전용이며 실제 API 키를 요구하지 않습니다.
+검증 환경은 Freqtrade `2026.7` Docker 이미지에 고정되어 있습니다. Docker Compose 구성은 시장 데이터(`user_data/data`), 백테스트 결과(`user_data/backtest_results`), 하이퍼옵트 결과(`user_data/hyperopt_results`), 모의투자 데이터베이스(`user_data/db`)를 호스트와 양방향 영속 마운트합니다. 먼저 Docker Desktop을 설치한 뒤 예제 설정의 거래소와 페어를 검토하세요. 예제 설정은 현물·dry-run 전용이며 실제 API 키를 요구하지 않습니다.
 
 Docker를 사용할 수 없으면 저장소 내부 가상환경을 사용할 수 있습니다.
 
@@ -88,6 +88,16 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
   -Timerange 20250101-20260101 `
   -Epochs 100 `
   -Spaces buy,sell
+```
+
+모의투자(dry-run) 설정과 전략 로딩을 사전에 검증하거나 가상 거래 봇 프로세스를 시작합니다.
+
+```powershell
+# 전략 및 dry-run 설정 안전 검증 (기본 모드)
+.\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy
+
+# 실제 모의투자 거래 봇 프로세스 시작
+.\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
