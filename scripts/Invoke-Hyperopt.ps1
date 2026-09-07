@@ -55,6 +55,7 @@ param(
     [string[]]$Spaces = @("buy", "sell"),
 
     [ValidateNotNullOrEmpty()]
+    [ValidatePattern("^[A-Za-z_][A-Za-z0-9_]*$")]
     [string]$HyperoptLoss = "ShortTradeDurHyperOptLoss",
 
     [switch]$Force

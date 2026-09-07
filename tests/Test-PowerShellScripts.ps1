@@ -157,6 +157,20 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "all") {
     throw "Conflicting hyperopt spaces were not rejected: $caughtMessage"
 }
 
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-Hyperopt.ps1") `
+        -Strategy "VibeRsiStrategy" `
+        -Timerange "20250101-20260101" `
+        -HyperoptLoss "Invalid Loss"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "A malformed hyperopt loss class name was not rejected."
+}
+
 $guardFile = [IO.Path]::GetTempFileName()
 try {
     $caughtMessage = $null
