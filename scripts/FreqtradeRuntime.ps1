@@ -83,6 +83,8 @@ function Assert-MarketDataAvailable {
         [string[]]$Pairs,
 
         [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [ValidatePattern("^\d+[mhdwM]$")]
         [string[]]$Timeframes,
 
         [Parameter(Mandatory)]
