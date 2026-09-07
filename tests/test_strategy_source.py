@@ -366,6 +366,7 @@ class StrategySourceTests(unittest.TestCase):
         )
 
         script_source = self.script_source("Invoke-DryRun.ps1")
+        self.assertIn("$baseConfig.dry_run -ne $true", script_source)
         self.assertIn("$dryRunConfig.telegram.enabled -ne $false", script_source)
         self.assertIn('@("key", "secret", "password", "uid")', script_source)
         self.assertIn("foreach ($config in @($baseConfig, $dryRunConfig))", script_source)

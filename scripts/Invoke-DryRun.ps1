@@ -42,6 +42,9 @@ $baseConfigPath = Join-Path $repositoryRoot "config\backtest.example.json"
 $dryRunConfigPath = Join-Path $repositoryRoot "config\dry-run.example.json"
 $baseConfig = Get-Content -LiteralPath $baseConfigPath -Raw | ConvertFrom-Json
 $dryRunConfig = Get-Content -LiteralPath $dryRunConfigPath -Raw | ConvertFrom-Json
+if ($baseConfig.dry_run -ne $true) {
+    throw "기본 설정에서 dry_run=true를 확인할 수 없습니다."
+}
 if ($dryRunConfig.dry_run -ne $true) {
     throw "dry-run 설정에서 dry_run=true를 확인할 수 없습니다."
 }
@@ -49,7 +52,7 @@ $dryRunDatabase = [string]$dryRunConfig.db_url
 if ($dryRunDatabase -notmatch "^sqlite:///user_data/db/[A-Za-z0-9._-]+\.sqlite$") {
     throw "dry-run 데이터베이스는 user_data/db 아래의 SQLite 파일이어야 합니다."
 }
-$credentialFields = @("key", "secret", "password", "uid")
+$credentialFields = @("key", "secret", "password", "uid") + @("api_key", "secret_key")
 foreach ($config in @($baseConfig, $dryRunConfig)) {
     foreach ($field in $credentialFields) {
         $credential = $config.exchange.PSObject.Properties[$field]
