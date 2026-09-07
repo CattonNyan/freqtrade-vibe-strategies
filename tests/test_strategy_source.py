@@ -117,6 +117,37 @@ class StrategySourceTests(unittest.TestCase):
                     self.assertTrue(str(minutes).isdigit(), "ROI table keys must be minute strings")
                     self.assertGreaterEqual(target, 0.0, "ROI targets must be non-negative")
 
+    def test_strategy_hyperopt_parameters_are_valid(self) -> None:
+        valid_spaces = {"buy", "sell", "roi", "stoploss", "trailing"}
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                param_nodes = [
+                    statement
+                    for statement in strategy.body
+                    if isinstance(statement, ast.Assign)
+                    and isinstance(statement.value, ast.Call)
+                    and isinstance(statement.value.func, ast.Name)
+                    and statement.value.func.id in ("IntParameter", "DecimalParameter")
+                ]
+                self.assertGreater(len(param_nodes), 0, f"{class_name} should define hyperopt parameters")
+                for node in param_nodes:
+                    call = node.value  # type: ignore[assignment]
+                    self.assertGreaterEqual(len(call.args), 2, "IntParameter requires low and high")
+                    low = ast.literal_eval(call.args[0])
+                    high = ast.literal_eval(call.args[1])
+                    self.assertLess(low, high, "Parameter low must be less than high")
+
+                    kwargs = {kw.arg: ast.literal_eval(kw.value) for kw in call.keywords}
+                    if "default" in kwargs:
+                        default = kwargs["default"]
+                        self.assertGreaterEqual(default, low, "Default must be >= low")
+                        self.assertLessEqual(default, high, "Default must be <= high")
+                    if "space" in kwargs:
+                        self.assertIn(kwargs["space"], valid_spaces, "Invalid space name")
+                    if "optimize" in kwargs:
+                        self.assertIsInstance(kwargs["optimize"], bool)
+
     def test_custom_stoploss_uses_entry_relative_conversion(self) -> None:
         filename = "MultiTimeframeAtrStrategy.py"
         tree, strategy = self.strategy_class(filename, STRATEGIES[filename])
