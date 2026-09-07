@@ -11,7 +11,7 @@ class VibeRsiStrategy(IStrategy):
     """
     RSI 과매도 회복 및 EMA 추세 추종 5분봉 전략.
 
-    - 진입 조건: RSI(14) > 30 상향 돌파, EMA(20) > EMA(50), Close > EMA(20)
+    - 진입 조건: RSI(14) > 35 상향 돌파, EMA(20) > EMA(50), Close > EMA(50), 완료봉 거래량 돌파
     - 청산 조건: RSI(14) > 70 과매수, EMA(20) < EMA(50) 데드크로스, ROI 테이블
     - 리스크 관리: -5% 고정 손절, Cooldown/StoplossGuard/MaxDrawdown 보호장치
     """

@@ -80,6 +80,9 @@ class StrategySourceTests(unittest.TestCase):
                 if "informative_timeframe" in assignments:
                     self.assertIn(assignments.get("informative_timeframe"), valid_timeframes)
                 self.assertTrue(REQUIRED_METHODS.issubset(methods))
+                docstring = ast.get_docstring(strategy)
+                self.assertIsNotNone(docstring, f"{class_name} is missing a docstring")
+                self.assertGreater(len(docstring.strip()), 20)
 
     def test_order_types_and_time_in_force_declared_by_every_strategy(self) -> None:
         for filename, class_name in STRATEGIES.items():
