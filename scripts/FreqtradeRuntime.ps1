@@ -52,7 +52,19 @@ function Initialize-FreqtradeDirectory {
     )
 
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
-    $directoryPath = Join-Path $repositoryRoot $RelativePath
+    if ([IO.Path]::IsPathRooted($RelativePath)) {
+        throw "생성 경로는 저장소 기준 상대 경로여야 합니다: $RelativePath"
+    }
+    $directoryPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot $RelativePath))
+    $userDataRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "user_data"))
+    $userDataPrefix = $userDataRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
+        [IO.Path]::DirectorySeparatorChar
+    if (-not $directoryPath.StartsWith(
+        $userDataPrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "생성 경로는 user_data 디렉터리 안에 있어야 합니다: $RelativePath"
+    }
     [void](New-Item -ItemType Directory -Path $directoryPath -Force)
 }
 

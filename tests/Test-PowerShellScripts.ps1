@@ -79,6 +79,17 @@ if (-not $caughtMessage) {
     throw "The shared market data preflight accepted a malformed timeframe."
 }
 
+$caughtMessage = $null
+try {
+    Initialize-FreqtradeDirectory -RelativePath "../outside-repository"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "user_data") {
+    throw "A directory outside user_data was accepted: $caughtMessage"
+}
+
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
 $emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
 try {
