@@ -478,6 +478,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn('"--backtest-directory"', source)
         self.assertNotIn('"--export-filename"', source)
         self.assertIn('"--notes", $resultNotes', source)
+        self.assertIn("[*] [$Strategy] 백테스트 시작", source)
+        self.assertIn("[+] [$Strategy] 백테스트 완료", source)
 
     def test_failed_backtest_removes_partial_result_directory(self) -> None:
         source = self.script_source("Invoke-Backtest.ps1")

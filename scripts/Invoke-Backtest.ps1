@@ -92,6 +92,8 @@ $commonArguments = @(
     "--pairs"
 ) + $normalizedPairs
 
+Write-Host "[*] [$Strategy] 백테스트 시작 (기간: $Timerange, 대상: $($normalizedPairs -join ', '))"
+
 try {
     Invoke-FreqtradeCommand `
         -DockerArguments ($commonArguments + @(
@@ -105,6 +107,8 @@ try {
             "--backtest-directory", ".\user_data\backtest_results\$resultDirectoryName"
         )) `
         -FailureMessage "백테스트에 실패했습니다."
+
+    Write-Host "[+] [$Strategy] 백테스트 완료. (결과 위치: user_data/backtest_results/$resultDirectoryName)"
 }
 catch {
     if (Test-Path -LiteralPath $resultPath -PathType Container) {
