@@ -92,15 +92,23 @@ $commonArguments = @(
     "--pairs"
 ) + $normalizedPairs
 
-Invoke-FreqtradeCommand `
-    -DockerArguments ($commonArguments + @(
-        "--config", "/freqtrade/user_data/config/backtest.example.json",
-        "--strategy-path", "/freqtrade/user_data/strategies",
-        "--backtest-directory", "/freqtrade/user_data/backtest_results/$resultDirectoryName"
-    )) `
-    -NativeArguments ($commonArguments + @(
-        "--config", ".\config\backtest.example.json",
-        "--strategy-path", ".\strategies",
-        "--backtest-directory", ".\user_data\backtest_results\$resultDirectoryName"
-    )) `
-    -FailureMessage "백테스트에 실패했습니다."
+try {
+    Invoke-FreqtradeCommand `
+        -DockerArguments ($commonArguments + @(
+            "--config", "/freqtrade/user_data/config/backtest.example.json",
+            "--strategy-path", "/freqtrade/user_data/strategies",
+            "--backtest-directory", "/freqtrade/user_data/backtest_results/$resultDirectoryName"
+        )) `
+        -NativeArguments ($commonArguments + @(
+            "--config", ".\config\backtest.example.json",
+            "--strategy-path", ".\strategies",
+            "--backtest-directory", ".\user_data\backtest_results\$resultDirectoryName"
+        )) `
+        -FailureMessage "백테스트에 실패했습니다."
+}
+catch {
+    if (Test-Path -LiteralPath $resultPath -PathType Container) {
+        Remove-Item -LiteralPath $resultPath -Recurse -Force
+    }
+    throw
+}

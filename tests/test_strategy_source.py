@@ -454,6 +454,17 @@ class StrategySourceTests(unittest.TestCase):
         self.assertNotIn('"--export-filename"', source)
         self.assertIn('"--notes", $resultNotes', source)
 
+    def test_failed_backtest_removes_partial_result_directory(self) -> None:
+        source = self.script_source("Invoke-Backtest.ps1")
+        invocation = source.index("Invoke-FreqtradeCommand")
+        cleanup = source.index(
+            "Remove-Item -LiteralPath $resultPath -Recurse -Force",
+            invocation,
+        )
+        catch_block = source.rfind("catch {", invocation, cleanup)
+        self.assertGreater(catch_block, invocation)
+        self.assertIn("throw\n", source[cleanup:])
+
     def test_timerange_scripts_apply_semantic_date_validation(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("function Assert-ValidTimerange", runtime_source)
@@ -563,7 +574,7 @@ class StrategySourceTests(unittest.TestCase):
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("function Initialize-FreqtradeOutputFile", runtime_source)
         self.assertIn("if (-not $Force)", runtime_source)
-        self.assertIn("Remove-Item -LiteralPath $Path -Force", runtime_source)
+        self.assertIn("Remove-Item -LiteralPath $resolvedPath -Force", runtime_source)
         analysis_source = self.script_source("Invoke-StrategyAnalysis.ps1")
         self.assertIn("[switch]$Force", analysis_source)
         self.assertIn("Initialize-FreqtradeOutputFile", analysis_source)
