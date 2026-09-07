@@ -462,6 +462,24 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn(r"strategies\$Strategy.py", source)
         self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
 
+    def test_dry_run_script_supports_every_strategy(self) -> None:
+        source = self.script_source("Invoke-DryRun.ps1")
+        self.assertEqual(
+            self.script_validate_set("Invoke-DryRun.ps1", "Strategy"),
+            set(STRATEGIES.values()),
+        )
+        self.assertIn(r"strategies\$Strategy.py", source)
+        self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
+
+    def test_hyperopt_script_supports_every_strategy(self) -> None:
+        source = self.script_source("Invoke-Hyperopt.ps1")
+        self.assertEqual(
+            self.script_validate_set("Invoke-Hyperopt.ps1", "Strategy"),
+            set(STRATEGIES.values()),
+        )
+        self.assertIn(r"strategies\$Strategy.py", source)
+        self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
+
     def test_analysis_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-StrategyAnalysis.ps1")
         supported = self.script_validate_set("Invoke-StrategyAnalysis.ps1", "Strategies")

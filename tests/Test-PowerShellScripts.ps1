@@ -226,7 +226,7 @@ if (-not $caughtMessage) {
 
 $guardFile = Join-Path $repositoryRoot "user_data/test-output-guard-$PID.tmp"
 try {
-    Set-Content -LiteralPath $guardFile -Value "existing"
+    [IO.File]::WriteAllText($guardFile, "existing")
     $caughtMessage = $null
     try {
         Initialize-FreqtradeOutputFile -Path $guardFile
@@ -237,6 +237,7 @@ try {
     if (-not $caughtMessage -or $caughtMessage -notmatch "-Force") {
         throw "An existing output file was not protected: $caughtMessage"
     }
+    Start-Sleep -Milliseconds 100
     Initialize-FreqtradeOutputFile -Path $guardFile -Force
     if (Test-Path -LiteralPath $guardFile) {
         throw "-Force did not remove the existing output file."
@@ -304,6 +305,17 @@ if ($slugSingle -ne "BTC-USDT") {
 $slugMultiple = Get-PairSlug -Pairs @("BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT")
 if ($slugMultiple -ne "BTC-USDT_ETH-USDT_and_2_more") {
     throw "Get-PairSlug produced unexpected result for more than 3 pairs: $slugMultiple"
+}
+
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-DryRun.ps1") -Strategy "UnknownStrategy"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "An invalid strategy was accepted by Invoke-DryRun.ps1."
 }
 
 $scriptsWithHelp = @(
