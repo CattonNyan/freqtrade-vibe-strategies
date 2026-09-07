@@ -330,6 +330,10 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn("$schema", content)
                 self.assertTrue(content["$schema"].startswith("https://schema.freqtrade.io/"))
 
+    def test_compose_does_not_force_a_global_container_name(self) -> None:
+        compose_source = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        self.assertNotIn("container_name:", compose_source)
+
     def test_dry_run_example_cannot_place_live_orders(self) -> None:
         config_path = ROOT / "config" / "dry-run.example.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))

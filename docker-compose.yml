@@ -2,7 +2,6 @@ services:
   freqtrade:
     # Freqtrade official image pinned to version 2026.7
     image: freqtradeorg/freqtrade:2026.7
-    container_name: freqtrade-vibe-strategies
     restart: "no"
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
