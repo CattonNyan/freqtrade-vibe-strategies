@@ -95,6 +95,21 @@ if (-not $caughtMessage) {
 
 $caughtMessage = $null
 try {
+    Invoke-FreqtradeCommand `
+        -DockerArguments @("--version") `
+        -NativeArguments @("--version") `
+        -FailureMessage "runtime failed" `
+        -LogPath (Join-Path ([IO.Path]::GetTempPath()) "freqtrade-$PID.log")
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "user_data") {
+    throw "The runtime accepted a log path outside user_data: $caughtMessage"
+}
+
+$caughtMessage = $null
+try {
     Initialize-FreqtradeDirectory -RelativePath "../outside-repository"
 }
 catch {

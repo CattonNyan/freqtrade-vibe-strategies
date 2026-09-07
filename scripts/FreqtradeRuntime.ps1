@@ -198,6 +198,19 @@ function Invoke-FreqtradeCommand {
     }
 
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    if ($LogPath) {
+        $resolvedLogPath = [IO.Path]::GetFullPath($LogPath)
+        $userDataRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "user_data"))
+        $userDataPrefix = $userDataRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
+            [IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedLogPath.StartsWith(
+            $userDataPrefix,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw "로그 파일 경로는 user_data 디렉터리 안에 있어야 합니다: $LogPath"
+        }
+        $LogPath = $resolvedLogPath
+    }
     Push-Location -LiteralPath $repositoryRoot
     try {
         $dockerReady = Test-DockerRuntimeAvailable
