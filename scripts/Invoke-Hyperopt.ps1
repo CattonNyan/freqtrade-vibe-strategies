@@ -98,7 +98,8 @@ else {
     ($normalizedPairs | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
 }
 
-$logName = "hyperopt-$Strategy-$pairSlug-$Timerange.log"
+$spaceSlug = $normalizedSpaces -join "-"
+$logName = "hyperopt-$Strategy-$pairSlug-$Timerange-e$Epochs-$spaceSlug-$HyperoptLoss.log"
 $logPath = Join-Path $repositoryRoot "user_data/hyperopt_results/$logName"
 Initialize-FreqtradeOutputFile -Path $logPath -Force:$Force
 

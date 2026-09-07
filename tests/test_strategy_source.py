@@ -532,6 +532,18 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn('"lookahead-$strategy-$pairSlug-$Timerange.log"', source)
         self.assertEqual(source.count("-LogPath $"), 2)
 
+    def test_hyperopt_log_name_identifies_run_parameters(self) -> None:
+        source = self.script_source("Invoke-Hyperopt.ps1")
+        self.assertIn('$spaceSlug = $normalizedSpaces -join "-"', source)
+        log_name = next(
+            line.strip()
+            for line in source.splitlines()
+            if line.strip().startswith('$logName = "hyperopt-')
+        )
+        for parameter in ("$Strategy", "$pairSlug", "$Timerange", "$Epochs", "$spaceSlug", "$HyperoptLoss"):
+            with self.subTest(parameter=parameter):
+                self.assertIn(parameter, log_name)
+
     def test_scripts_restore_the_callers_working_directory(self) -> None:
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("Push-Location -LiteralPath $repositoryRoot", runtime_source)
