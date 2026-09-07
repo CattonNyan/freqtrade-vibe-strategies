@@ -69,9 +69,11 @@ if ($dryRunConfig.telegram.enabled -ne $false) {
 }
 
 [string[]]$commonArguments = if ($Start) {
+    Write-Host "[*] [$Strategy] 모의투자(Dry-run) 거래 봇을 시작합니다..."
     @("trade", "--strategy", $Strategy)
 }
 else {
+    Write-Host "[*] [$Strategy] 모의투자(Dry-run) 설정 및 전략 로딩 검증을 시작합니다..."
     @("list-strategies")
 }
 [string[]]$dockerStrategyArguments = @("--strategy-path", "/freqtrade/user_data/strategies")
@@ -87,3 +89,7 @@ Invoke-FreqtradeCommand `
         "--config", ".\config\dry-run.example.json"
     ) + $nativeStrategyArguments) `
     -FailureMessage "dry-run 설정 검증 또는 실행에 실패했습니다."
+
+if (-not $Start) {
+    Write-Host "[+] [$Strategy] 모의투자(Dry-run) 설정 및 전략 검증이 완료되었습니다."
+}

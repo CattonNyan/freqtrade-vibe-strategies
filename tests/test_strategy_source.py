@@ -383,6 +383,8 @@ class StrategySourceTests(unittest.TestCase):
             script_source,
         )
         self.assertIn('@("--strategy-path", ".\\strategies")', script_source)
+        self.assertIn("[*] [$Strategy] 모의투자(Dry-run)", script_source)
+        self.assertIn("[+] [$Strategy] 모의투자(Dry-run)", script_source)
 
     def test_backtest_example_remains_safe_for_local_validation(self) -> None:
         config_path = ROOT / "config" / "backtest.example.json"
