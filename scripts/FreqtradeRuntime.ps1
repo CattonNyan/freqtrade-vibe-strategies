@@ -77,17 +77,29 @@ function Initialize-FreqtradeOutputFile {
         [switch]$Force
     )
 
-    $parentDirectory = Split-Path -Parent $Path
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $resolvedPath = [IO.Path]::GetFullPath($Path)
+    $userDataRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "user_data"))
+    $userDataPrefix = $userDataRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
+        [IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedPath.StartsWith(
+        $userDataPrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "결과 파일 경로는 user_data 디렉터리 안에 있어야 합니다: $Path"
+    }
+
+    $parentDirectory = Split-Path -Parent $resolvedPath
     if ($parentDirectory -and -not (Test-Path -LiteralPath $parentDirectory)) {
         [void](New-Item -ItemType Directory -Path $parentDirectory -Force)
     }
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath $resolvedPath -PathType Leaf)) {
         return
     }
     if (-not $Force) {
         throw "결과 파일이 이미 존재합니다. 덮어쓰려면 -Force를 지정하세요: $Path"
     }
-    Remove-Item -LiteralPath $Path -Force
+    Remove-Item -LiteralPath $resolvedPath -Force
 }
 
 function Assert-MarketDataAvailable {

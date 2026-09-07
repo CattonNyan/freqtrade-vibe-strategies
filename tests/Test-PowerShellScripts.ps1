@@ -171,8 +171,9 @@ if (-not $caughtMessage) {
     throw "A malformed hyperopt loss class name was not rejected."
 }
 
-$guardFile = [IO.Path]::GetTempFileName()
+$guardFile = Join-Path $repositoryRoot "user_data/test-output-guard-$PID.tmp"
 try {
+    Set-Content -LiteralPath $guardFile -Value "existing"
     $caughtMessage = $null
     try {
         Initialize-FreqtradeOutputFile -Path $guardFile
@@ -192,6 +193,18 @@ finally {
     if (Test-Path -LiteralPath $guardFile) {
         Remove-Item -LiteralPath $guardFile -Force
     }
+}
+
+$outsideOutput = Join-Path ([IO.Path]::GetTempPath()) "freqtrade-output-$PID.log"
+$caughtMessage = $null
+try {
+    Initialize-FreqtradeOutputFile -Path $outsideOutput -Force
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "user_data") {
+    throw "An output path outside user_data was accepted: $caughtMessage"
 }
 
 $originalLocation = (Get-Location).Path
