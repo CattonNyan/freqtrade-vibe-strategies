@@ -148,6 +148,30 @@ class StrategySourceTests(unittest.TestCase):
                     if "optimize" in kwargs:
                         self.assertIsInstance(kwargs["optimize"], bool)
 
+    def test_trailing_stop_configuration_is_consistent(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+                if "trailing_stop" in assignments:
+                    trailing_stop = assignments["trailing_stop"]
+                    self.assertIsInstance(trailing_stop, bool)
+                    if trailing_stop:
+                        self.assertIn("trailing_stop_positive", assignments)
+                        self.assertIn("trailing_stop_positive_offset", assignments)
+                        pos = assignments["trailing_stop_positive"]
+                        offset = assignments["trailing_stop_positive_offset"]
+                        self.assertIsInstance(pos, (int, float))
+                        self.assertIsInstance(offset, (int, float))
+                        self.assertGreater(pos, 0, "trailing_stop_positive must be positive")
+                        self.assertGreater(
+                            offset,
+                            pos,
+                            "trailing_stop_positive_offset must be strictly greater than trailing_stop_positive",
+                        )
+                        if "trailing_only_offset_is_reached" in assignments:
+                            self.assertIsInstance(assignments["trailing_only_offset_is_reached"], bool)
+
     def test_custom_stoploss_uses_entry_relative_conversion(self) -> None:
         filename = "MultiTimeframeAtrStrategy.py"
         tree, strategy = self.strategy_class(filename, STRATEGIES[filename])
