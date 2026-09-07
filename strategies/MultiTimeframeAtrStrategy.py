@@ -92,8 +92,12 @@ class MultiTimeframeAtrStrategy(IStrategy):
         """Define pairs and timeframes to download and cache."""
         if not getattr(self, "dp", None):
             return []
-        pairs = self.dp.current_whitelist()
-        return [(pair, self.informative_timeframe) for pair in pairs]
+        pairs = dict.fromkeys(self.dp.current_whitelist() or [])
+        return [
+            (pair, self.informative_timeframe)
+            for pair in pairs
+            if pair
+        ]
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # --- Base Timeframe (5m) Indicators ---

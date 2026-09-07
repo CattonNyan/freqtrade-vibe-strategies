@@ -247,6 +247,13 @@ class StrategySourceTests(unittest.TestCase):
             source,
         )
 
+    def test_mtf_informative_pairs_are_deduplicated(self) -> None:
+        source = (ROOT / "strategies" / "MultiTimeframeAtrStrategy.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("dict.fromkeys(self.dp.current_whitelist() or [])", source)
+        self.assertIn("if pair", source)
+
     def test_operating_protections_are_declared_by_every_strategy(self) -> None:
         expected_methods = {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"}
         for filename, class_name in STRATEGIES.items():
