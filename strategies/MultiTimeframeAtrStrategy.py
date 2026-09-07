@@ -108,9 +108,10 @@ class MultiTimeframeAtrStrategy(IStrategy):
 
         # --- Informative Timeframe (1h) Indicators ---
         has_informative = False
-        if getattr(self, "dp", None):
+        pair = metadata.get("pair")
+        if getattr(self, "dp", None) and pair:
             informative = self.dp.get_pair_dataframe(
-                pair=metadata["pair"], timeframe=self.informative_timeframe
+                pair=pair, timeframe=self.informative_timeframe
             )
             if informative is not None and not informative.empty:
                 informative = informative.copy()

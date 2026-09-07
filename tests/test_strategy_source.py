@@ -263,6 +263,14 @@ class StrategySourceTests(unittest.TestCase):
         indicator_position = source.index('informative["ema_50"]', fetch_position)
         self.assertLess(copy_position, indicator_position)
 
+    def test_mtf_missing_pair_metadata_fails_closed(self) -> None:
+        source = (ROOT / "strategies" / "MultiTimeframeAtrStrategy.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('pair = metadata.get("pair")', source)
+        self.assertIn('if getattr(self, "dp", None) and pair:', source)
+        self.assertNotIn('pair=metadata["pair"]', source)
+
     def test_operating_protections_are_declared_by_every_strategy(self) -> None:
         expected_methods = {"CooldownPeriod", "StoplossGuard", "MaxDrawdown"}
         for filename, class_name in STRATEGIES.items():
