@@ -133,6 +133,30 @@ finally {
     }
 }
 
+$nestedLogDirectory = Join-Path $repositoryRoot "user_data/test-log-helper-$PID"
+$nestedLogFile = Join-Path $nestedLogDirectory "nested/command.log"
+try {
+    try {
+        Invoke-FreqtradeCommand `
+            -DockerArguments @("--version") `
+            -NativeArguments @("--version") `
+            -FailureMessage "runtime probe" `
+            -LogPath $nestedLogFile
+    }
+    catch {
+        # Execution failure (e.g. no docker or venv) is acceptable,
+        # but the parent directory must have been created before execution.
+    }
+    if (-not (Test-Path -LiteralPath (Split-Path -Parent $nestedLogFile))) {
+        throw "Invoke-FreqtradeCommand did not create the parent directory for LogPath."
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $nestedLogDirectory) {
+        Remove-Item -LiteralPath $nestedLogDirectory -Recurse -Force
+    }
+}
+
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
 $emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
 try {
@@ -290,4 +314,5 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     }
 }
 
+$global:LASTEXITCODE = 0
 Write-Output "PowerShell behavior tests passed."

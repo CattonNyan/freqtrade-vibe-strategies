@@ -209,6 +209,10 @@ function Invoke-FreqtradeCommand {
         )) {
             throw "로그 파일 경로는 user_data 디렉터리 안에 있어야 합니다: $LogPath"
         }
+        $parentDirectory = Split-Path -Parent $resolvedLogPath
+        if ($parentDirectory -and -not (Test-Path -LiteralPath $parentDirectory)) {
+            [void](New-Item -ItemType Directory -Path $parentDirectory -Force)
+        }
         $LogPath = $resolvedLogPath
     }
     Push-Location -LiteralPath $repositoryRoot
