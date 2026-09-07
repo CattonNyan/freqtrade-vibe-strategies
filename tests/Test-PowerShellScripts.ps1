@@ -90,6 +90,20 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "user_data") {
     throw "A directory outside user_data was accepted: $caughtMessage"
 }
 
+$nestedOutputDirectory = Join-Path $repositoryRoot "user_data/test-output-helper-$PID"
+$nestedOutputFile = Join-Path $nestedOutputDirectory "nested/result.log"
+try {
+    Initialize-FreqtradeOutputFile -Path $nestedOutputFile
+    if (-not (Test-Path -LiteralPath (Split-Path -Parent $nestedOutputFile))) {
+        throw "The output helper did not create the parent directory."
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $nestedOutputDirectory) {
+        Remove-Item -LiteralPath $nestedOutputDirectory -Recurse -Force
+    }
+}
+
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
 $emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
 try {

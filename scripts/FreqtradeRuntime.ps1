@@ -77,6 +77,10 @@ function Initialize-FreqtradeOutputFile {
         [switch]$Force
     )
 
+    $parentDirectory = Split-Path -Parent $Path
+    if ($parentDirectory -and -not (Test-Path -LiteralPath $parentDirectory)) {
+        [void](New-Item -ItemType Directory -Path $parentDirectory -Force)
+    }
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return
     }
