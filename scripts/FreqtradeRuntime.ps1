@@ -78,6 +78,8 @@ function Assert-MarketDataAvailable {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [ValidatePattern("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")]
         [string[]]$Pairs,
 
         [Parameter(Mandatory)]

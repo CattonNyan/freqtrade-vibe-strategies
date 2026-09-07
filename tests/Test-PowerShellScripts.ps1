@@ -51,6 +51,20 @@ if (-not $caughtMessage) {
     throw "A malformed timeframe was not rejected."
 }
 
+$caughtMessage = $null
+try {
+    Assert-MarketDataAvailable `
+        -Pairs "BTC-USDT" `
+        -Timeframes "5m" `
+        -Exchange "binance"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "The shared market data preflight accepted a malformed pair."
+}
+
 $emptyDataDirectory = Join-Path $repositoryRoot "user_data/data/binance"
 $emptyDataFile = Join-Path $emptyDataDirectory "CODEXEMPTY_USDT-5m.feather"
 try {
