@@ -177,9 +177,11 @@ function Invoke-FreqtradeCommand {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         [string[]]$DockerArguments,
 
         [Parameter(Mandatory)]
+        [ValidateNotNull()]
         [string[]]$NativeArguments,
 
         [Parameter(Mandatory)]
@@ -187,6 +189,13 @@ function Invoke-FreqtradeCommand {
 
         [string]$LogPath
     )
+
+    if ($DockerArguments.Count -eq 0 -or $NativeArguments.Count -eq 0) {
+        throw "Freqtrade 실행 인수는 비어 있을 수 없습니다."
+    }
+    if ([string]::IsNullOrWhiteSpace($FailureMessage)) {
+        throw "실패 메시지는 비어 있을 수 없습니다."
+    }
 
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
     Push-Location -LiteralPath $repositoryRoot

@@ -81,6 +81,20 @@ if (-not $caughtMessage) {
 
 $caughtMessage = $null
 try {
+    Invoke-FreqtradeCommand `
+        -DockerArguments @() `
+        -NativeArguments @("--version") `
+        -FailureMessage "runtime failed"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "The runtime accepted an empty argument list."
+}
+
+$caughtMessage = $null
+try {
     Initialize-FreqtradeDirectory -RelativePath "../outside-repository"
 }
 catch {
