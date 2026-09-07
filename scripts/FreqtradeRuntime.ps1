@@ -44,6 +44,24 @@ function Assert-ValidTimerange {
     }
 }
 
+function Get-PairSlug {
+    <#
+    .SYNOPSIS
+        거래 페어 목록을 안전한 파일명/디렉터리명 문자열(Slug)로 변환합니다.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Pairs
+    )
+
+    $normalized = @($Pairs | Sort-Object -Unique)
+    if ($normalized.Count -gt 3) {
+        return "{0}_{1}_and_{2}_more" -f ($normalized[0] -replace '[/:]', '-'), ($normalized[1] -replace '[/:]', '-'), ($normalized.Count - 2)
+    }
+    return ($normalized | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
+}
+
 function Initialize-FreqtradeDirectory {
     [CmdletBinding()]
     param(

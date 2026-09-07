@@ -91,12 +91,7 @@ Assert-MarketDataAvailable `
     -Timeframes $requiredTimeframes `
     -Exchange $exchangeName
 
-$pairSlug = if ($normalizedPairs.Count -gt 3) {
-    "{0}_{1}_and_{2}_more" -f ($normalizedPairs[0] -replace '[/:]', '-'), ($normalizedPairs[1] -replace '[/:]', '-'), ($normalizedPairs.Count - 2)
-}
-else {
-    ($normalizedPairs | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
-}
+$pairSlug = Get-PairSlug -Pairs $normalizedPairs
 
 $spaceSlug = $normalizedSpaces -join "-"
 $logName = "hyperopt-$Strategy-$pairSlug-$Timerange-e$Epochs-$spaceSlug-$HyperoptLoss.log"

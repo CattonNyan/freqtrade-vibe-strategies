@@ -297,6 +297,15 @@ if ((Get-Location).Path -ne $originalLocation) {
     throw "The caller working directory was not restored."
 }
 
+$slugSingle = Get-PairSlug -Pairs @("BTC/USDT")
+if ($slugSingle -ne "BTC-USDT") {
+    throw "Get-PairSlug produced unexpected result for single pair: $slugSingle"
+}
+$slugMultiple = Get-PairSlug -Pairs @("BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT")
+if ($slugMultiple -ne "BTC-USDT_ETH-USDT_and_2_more") {
+    throw "Get-PairSlug produced unexpected result for more than 3 pairs: $slugMultiple"
+}
+
 $scriptsWithHelp = @(
     "scripts/Get-MarketData.ps1",
     "scripts/Invoke-Backtest.ps1",

@@ -475,8 +475,11 @@ class StrategySourceTests(unittest.TestCase):
 
     def test_backtest_accepts_and_names_requested_pairs(self) -> None:
         source = self.script_source("Invoke-Backtest.ps1")
+        runtime_source = self.script_source("FreqtradeRuntime.ps1")
+        self.assertIn("function Get-PairSlug", runtime_source)
         self.assertIn("$Pairs | Sort-Object -Unique", source)
         self.assertIn("$pairSlug", source)
+        self.assertIn("Get-PairSlug -Pairs $normalizedPairs", source)
         self.assertIn('"--pairs"', source)
         self.assertIn('"--backtest-directory"', source)
         self.assertNotIn('"--export-filename"', source)
