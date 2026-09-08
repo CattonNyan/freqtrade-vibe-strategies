@@ -53,6 +53,7 @@ class KoreanStarterStrategy(IStrategy):
         "force_exit": "market",
         "stoploss": "market",
         "stoploss_on_exchange": False,
+        "stoploss_on_exchange_interval": 60,
     }
 
     order_time_in_force = {
