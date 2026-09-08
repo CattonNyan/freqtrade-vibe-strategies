@@ -10,6 +10,7 @@
 - `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
 세 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
+세 전략 모두 Freqtrade `IStrategy` 규격(버전 3)에 맞추어 `order_types` 내 거래소 스탑로스 주기(`stoploss_on_exchange_interval`), 명시적 청산 제어(`use_exit_signal`, `exit_profit_only`, `ignore_roi_if_entry_signal`), 3대 보호장치(`protections`), `__future__` 어노테이션 호환성을 공통으로 준수합니다.
 `MultiTimeframeAtrStrategy` 이름은 기존 설정 호환성을 위해 유지하지만, 현재 손절 로직은 ATR이 아닌 수익률 임계값을 사용합니다.
 
 ## 사용법
