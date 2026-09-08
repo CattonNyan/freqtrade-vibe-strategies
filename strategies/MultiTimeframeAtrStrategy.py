@@ -18,6 +18,14 @@ from technical import qtpylib
 
 class MultiTimeframeAtrStrategy(IStrategy):
     """
+    다중 타임프레임 추세 추종 및 동적 커스텀 스탑로스 5분봉 전략.
+
+    - 상위 추세 (1시간봉): EMA(50) > EMA(200) 및 RSI(14) > 45 정배열 매크로 강세장
+    - 진입 조건 (5분봉): Close > EMA(20), EMA(20) > EMA(50), RSI 상향돌파, 완료봉 거래량 돌파
+    - 청산 조건: RSI > 70 과매수, EMA(20/50) 데드크로스, ROI 테이블
+    - 리스크 관리: -8% 기본 손절, 3대 보호장치, 수익률 연동 동적 커스텀 스탑로스
+      (수익률 >= 3% 시 1.5% 확보 후 추가 이익 50% 트레일링, 수익률 >= 1.5% 시 본전+0.3% 수수료 방어)
+
     Multi-timeframe strategy combining:
     - 1h informative timeframe for macro trend direction (EMA 50 / EMA 200, RSI > 45)
     - 5m base timeframe for entry timing and momentum (EMA 20/50, RSI pullback, Volume)
