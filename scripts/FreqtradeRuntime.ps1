@@ -149,7 +149,7 @@ function Assert-MarketDataAvailable {
     $supportedExtensions = @(".feather", ".json", ".gz", ".h5", ".parquet")
     $missingData = @()
     foreach ($pair in ($Pairs | Sort-Object -Unique)) {
-        $pairSlug = $pair -replace '[/:]', '_'
+        $pairSlug = $pair -replace '[/ :.@$+]', '_'
         foreach ($timeframe in ($Timeframes | Sort-Object -Unique)) {
             $pattern = "$pairSlug-$timeframe.*"
             $dataFile = Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter $pattern |
