@@ -1,5 +1,7 @@
 """Multi-timeframe trend-following strategy with dynamic trailing stoploss."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from pandas import DataFrame
 import talib.abstract as ta

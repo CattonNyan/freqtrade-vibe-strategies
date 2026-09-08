@@ -1,5 +1,7 @@
 """Simple RSI and EMA trend-following strategy for Freqtrade."""
 
+from __future__ import annotations
+
 from pandas import DataFrame
 import talib.abstract as ta
 
