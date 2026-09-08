@@ -92,12 +92,27 @@ class StrategySourceTests(unittest.TestCase):
 
                 order_types = assignments.get("order_types")
                 self.assertIsInstance(order_types, dict)
-                self.assertTrue({"entry", "exit", "stoploss"}.issubset(order_types.keys()))
+                self.assertTrue(
+                    {"entry", "exit", "stoploss", "stoploss_on_exchange", "stoploss_on_exchange_interval"}.issubset(
+                        order_types.keys()
+                    )
+                )
+                self.assertEqual(order_types.get("stoploss_on_exchange_interval"), 60)
 
                 tif = assignments.get("order_time_in_force")
                 self.assertIsInstance(tif, dict)
                 self.assertEqual(tif.get("entry"), "gtc")
                 self.assertEqual(tif.get("exit"), "gtc")
+
+    def test_exit_signal_controls_declared_by_every_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+
+                self.assertIs(assignments.get("use_exit_signal"), True)
+                self.assertIs(assignments.get("exit_profit_only"), False)
+                self.assertIs(assignments.get("ignore_roi_if_entry_signal"), False)
 
     def test_risk_parameters_are_strictly_bounded(self) -> None:
         for filename, class_name in STRATEGIES.items():
