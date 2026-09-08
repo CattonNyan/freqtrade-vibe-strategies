@@ -47,6 +47,10 @@ class MultiTimeframeAtrStrategy(IStrategy):
     stoploss = -0.08
     use_custom_stoploss = True
 
+    use_exit_signal = True
+    exit_profit_only = False
+    ignore_roi_if_entry_signal = False
+
     # Indicators & strategy hyperparameters
     buy_rsi = IntParameter(40, 60, default=48, space="buy", optimize=True)
     sell_rsi = IntParameter(65, 85, default=70, space="sell", optimize=True)
