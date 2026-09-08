@@ -44,7 +44,11 @@ try {
     }
 
     $parseErrors = @()
-    Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "scripts") -Filter *.ps1 |
+    $targetDirectories = @(
+        (Join-Path $repositoryRoot "scripts"),
+        (Join-Path $repositoryRoot "tests")
+    )
+    Get-ChildItem -LiteralPath $targetDirectories -Filter *.ps1 |
         ForEach-Object {
             $tokens = $null
             $errors = $null
