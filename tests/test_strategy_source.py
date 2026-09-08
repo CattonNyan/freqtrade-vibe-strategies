@@ -769,12 +769,79 @@ class StrategySourceTests(unittest.TestCase):
 
     def test_dynamic_runtime_import_and_indicators_if_available(self) -> None:
         try:
-            import pandas as pd
+            import importlib.util
+            import sys
             import numpy as np
+            import pandas as pd
             import talib.abstract as ta
             from freqtrade.strategy import IStrategy
         except ImportError:
             self.skipTest("Freqtrade runtime dependencies not installed in local environment")
+
+        strategies_dir = str(ROOT / "strategies")
+        if strategies_dir not in sys.path:
+            sys.path.insert(0, strategies_dir)
+
+        dates = pd.date_range(start="2025-01-01", periods=1000, freq="5min")
+        np.random.seed(42)
+        base_price = 50000 + np.cumsum(np.random.randn(1000) * 50)
+        dummy_df = pd.DataFrame(
+            {
+                "date": dates,
+                "open": base_price + np.random.randn(1000) * 10,
+                "high": base_price + np.abs(np.random.randn(1000) * 20),
+                "low": base_price - np.abs(np.random.randn(1000) * 20),
+                "close": base_price,
+                "volume": np.random.uniform(10, 100, size=1000),
+            }
+        )
+        metadata = {"pair": "BTC/USDT"}
+
+        dates_1h = pd.date_range(start="2025-01-01", periods=500, freq="1h")
+        base_price_1h = 50000 + np.cumsum(np.random.randn(500) * 100)
+        dummy_1h_df = pd.DataFrame(
+            {
+                "date": dates_1h,
+                "open": base_price_1h + np.random.randn(500) * 20,
+                "high": base_price_1h + np.abs(np.random.randn(500) * 40),
+                "low": base_price_1h - np.abs(np.random.randn(500) * 40),
+                "close": base_price_1h,
+                "volume": np.random.uniform(50, 500, size=500),
+            }
+        )
+
+        class MockDataProvider:
+            def current_whitelist(self) -> list[str]:
+                return ["BTC/USDT"]
+
+            def get_pair_dataframe(self, pair: str, timeframe: str) -> pd.DataFrame:
+                return dummy_1h_df.copy()
+
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                spec = importlib.util.spec_from_file_location(
+                    class_name, ROOT / "strategies" / filename
+                )
+                self.assertIsNotNone(spec)
+                module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+                spec.loader.exec_module(module)  # type: ignore[union-attr]
+                cls = getattr(module, class_name)
+                strategy_instance = cls(config={"dry_run": True, "stake_currency": "USDT"})
+                if class_name == "MultiTimeframeAtrStrategy":
+                    strategy_instance.dp = MockDataProvider()
+
+                df = dummy_df.copy()
+                df = strategy_instance.populate_indicators(df, metadata)
+                self.assertIsInstance(df, pd.DataFrame)
+                self.assertEqual(len(df), 1000)
+
+                df = strategy_instance.populate_entry_trend(df, metadata)
+                self.assertIn("enter_long", df.columns)
+                self.assertIn("enter_tag", df.columns)
+
+                df = strategy_instance.populate_exit_trend(df, metadata)
+                self.assertIn("exit_long", df.columns)
+                self.assertIn("exit_tag", df.columns)
 
 
 if __name__ == "__main__":
