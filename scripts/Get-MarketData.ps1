@@ -15,6 +15,9 @@
 .PARAMETER Timeframes
     다운로드할 캔들 타임프레임 목록 (기본값: @("5m", "15m", "1h")).
 
+.PARAMETER Erase
+    기존에 다운로드된 데이터를 모두 삭제하고 새로 내려받는 스위치.
+
 .EXAMPLE
     .\scripts\Get-MarketData.ps1 -Days 180
 
@@ -23,6 +26,9 @@
 
 .EXAMPLE
     .\scripts\Get-MarketData.ps1 -Days 365 -Pairs @("BTC/USDT") -Timeframes @("5m", "15m")
+
+.EXAMPLE
+    .\scripts\Get-MarketData.ps1 -Days 365 -Erase
 #>
 [CmdletBinding()]
 param(
@@ -35,7 +41,9 @@ param(
 
     [ValidateNotNullOrEmpty()]
     [ValidatePattern("^\d+[mhdwM]$")]
-    [string[]]$Timeframes = @("5m", "15m", "1h")
+    [string[]]$Timeframes = @("5m", "15m", "1h"),
+
+    [switch]$Erase
 )
 
 Set-StrictMode -Version Latest
@@ -53,6 +61,9 @@ $commonArguments = @(
 ) + $normalizedTimeframes + @(
     "--pairs"
 ) + $normalizedPairs
+if ($Erase) {
+    $commonArguments += "--erase"
+}
 
 Write-Host "[*] 시장 데이터 다운로드 시작 (기간: ${Days}일, 대상: $($normalizedPairs -join ', '))"
 
