@@ -91,6 +91,9 @@ class VibeRsiStrategy(IStrategy):
             },
         ]
 
+    def version(self) -> str | None:
+        return "1.0.0"
+
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe["rsi"] = ta.RSI(dataframe, timeperiod=14)
         dataframe["ema_20"] = ta.EMA(dataframe, timeperiod=20)

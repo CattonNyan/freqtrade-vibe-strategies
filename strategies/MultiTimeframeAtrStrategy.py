@@ -118,6 +118,9 @@ class MultiTimeframeAtrStrategy(IStrategy):
             },
         ]
 
+    def version(self) -> str | None:
+        return "1.0.0"
+
     def informative_pairs(self) -> list[tuple[str, str]]:
         """Define pairs and timeframes to download and cache."""
         if not getattr(self, "dp", None):
