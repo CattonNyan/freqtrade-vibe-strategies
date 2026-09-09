@@ -32,6 +32,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "FreqtradeRuntime.ps1")
 Initialize-FreqtradeDirectory -RelativePath "user_data/db"
+Initialize-FreqtradeDirectory -RelativePath "user_data/logs"
 
 $strategyPath = Join-Path $repositoryRoot "strategies\$Strategy.py"
 if (-not (Test-Path -LiteralPath $strategyPath -PathType Leaf)) {
