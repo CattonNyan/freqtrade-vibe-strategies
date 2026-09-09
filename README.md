@@ -10,7 +10,7 @@
 - `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
 세 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
-세 전략 모두 Freqtrade `IStrategy` 규격(버전 3)에 맞추어 `order_types` 내 거래소 스탑로스 주기(`stoploss_on_exchange_interval`), 명시적 청산 제어(`use_exit_signal`, `exit_profit_only`, `ignore_roi_if_entry_signal`), 3대 보호장치(`protections`), `__future__` 어노테이션 호환성을 공통으로 준수합니다.
+세 전략 모두 Freqtrade `IStrategy` 규격(버전 3)에 맞추어 `order_types` 내 거래소 스탑로스 주기(`stoploss_on_exchange_interval`), 명시적 청산 제어(`use_exit_signal`, `exit_profit_only`, `ignore_roi_if_entry_signal`), 3대 보호장치(`protections`), FreqUI 및 `plot-dataframe` 차트 렌더링용 `plot_config`, `version()` 메서드, `__future__` 어노테이션 호환성을 공통으로 준수합니다.
 `MultiTimeframeAtrStrategy` 이름은 기존 설정 호환성을 위해 유지하지만, 현재 손절 로직은 ATR이 아닌 수익률 임계값을 사용합니다.
 
 ## 사용법
@@ -70,6 +70,8 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
 .\scripts\Get-MarketData.ps1 -Days 365
 # 특정 타임프레임 및 페어 지정 다운로드
 .\scripts\Get-MarketData.ps1 -Days 365 -Pairs BTC/USDT,ETH/USDT,SOL/USDT -Timeframes 5m,15m,1h
+# 기존 데이터를 초기화하고 새로 다운로드
+.\scripts\Get-MarketData.ps1 -Days 365 -Erase
 ```
 
 명시적인 기간으로 전략을 백테스트합니다.
