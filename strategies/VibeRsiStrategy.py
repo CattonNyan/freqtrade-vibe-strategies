@@ -57,6 +57,18 @@ class VibeRsiStrategy(IStrategy):
         "exit": "gtc",
     }
 
+    plot_config = {
+        "main_plot": {
+            "ema_20": {"color": "blue"},
+            "ema_50": {"color": "orange"},
+        },
+        "subplots": {
+            "RSI": {
+                "rsi": {"color": "purple"},
+            },
+        },
+    }
+
     @property
     def protections(self) -> list[dict]:
         return [

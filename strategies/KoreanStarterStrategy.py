@@ -61,6 +61,22 @@ class KoreanStarterStrategy(IStrategy):
         "exit": "gtc",
     }
 
+    plot_config = {
+        "main_plot": {
+            "ema_20": {"color": "blue"},
+            "ema_50": {"color": "orange"},
+            "ema_200": {"color": "red"},
+        },
+        "subplots": {
+            "RSI": {
+                "rsi": {"color": "purple"},
+            },
+            "ADX": {
+                "adx": {"color": "green"},
+            },
+        },
+    }
+
     @property
     def protections(self) -> list[dict]:
         return [

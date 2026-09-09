@@ -81,6 +81,21 @@ class MultiTimeframeAtrStrategy(IStrategy):
         "exit": "gtc",
     }
 
+    plot_config = {
+        "main_plot": {
+            "ema_20": {"color": "blue"},
+            "ema_50": {"color": "orange"},
+            "ema_50_1h": {"color": "cyan"},
+            "ema_200_1h": {"color": "magenta"},
+        },
+        "subplots": {
+            "RSI": {
+                "rsi": {"color": "purple"},
+                "rsi_1h": {"color": "yellow"},
+            },
+        },
+    }
+
     @property
     def protections(self) -> list[dict]:
         return [
