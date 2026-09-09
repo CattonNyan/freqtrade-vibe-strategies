@@ -77,10 +77,8 @@ function Initialize-FreqtradeDirectory {
     $userDataRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "user_data"))
     $userDataPrefix = $userDataRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) +
         [IO.Path]::DirectorySeparatorChar
-    if (-not $directoryPath.StartsWith(
-        $userDataPrefix,
-        [StringComparison]::OrdinalIgnoreCase
-    )) {
+    if (-not ($directoryPath.Equals($userDataRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        $directoryPath.StartsWith($userDataPrefix, [StringComparison]::OrdinalIgnoreCase))) {
         throw "생성 경로는 user_data 디렉터리 안에 있어야 합니다: $RelativePath"
     }
     [void](New-Item -ItemType Directory -Path $directoryPath -Force)
