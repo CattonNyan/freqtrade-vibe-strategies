@@ -114,6 +114,41 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIs(assignments.get("exit_profit_only"), False)
                 self.assertIs(assignments.get("ignore_roi_if_entry_signal"), False)
 
+    def test_plot_config_declared_by_every_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+
+                plot_config = assignments.get("plot_config")
+                self.assertIsInstance(plot_config, dict)
+                self.assertIn("main_plot", plot_config)
+                self.assertIn("subplots", plot_config)
+                self.assertIsInstance(plot_config["main_plot"], dict)
+                self.assertIsInstance(plot_config["subplots"], dict)
+
+    def test_version_method_declared_by_every_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                version_method = next(
+                    (
+                        node
+                        for node in strategy.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "version"
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(version_method, f"{class_name} is missing version method")
+                return_stmt = next(
+                    (node for node in version_method.body if isinstance(node, ast.Return)),  # type: ignore[union-attr]
+                    None,
+                )
+                self.assertIsNotNone(return_stmt)
+                self.assertIsInstance(return_stmt.value, ast.Constant)  # type: ignore[union-attr]
+                self.assertIsInstance(return_stmt.value.value, str)  # type: ignore[union-attr]
+
+
     def test_risk_parameters_are_strictly_bounded(self) -> None:
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):
@@ -419,6 +454,7 @@ class StrategySourceTests(unittest.TestCase):
             "./user_data/backtest_results:/freqtrade/user_data/backtest_results",
             "./user_data/hyperopt_results:/freqtrade/user_data/hyperopt_results",
             "./user_data/db:/freqtrade/user_data/db",
+            "./user_data/logs:/freqtrade/user_data/logs",
         ):
             with self.subTest(mount=expected_mount):
                 self.assertIn(expected_mount, compose_source)

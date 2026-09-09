@@ -149,6 +149,9 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "user_data") {
     throw "A directory outside user_data was accepted: $caughtMessage"
 }
 
+# The root user_data directory itself should be accepted without throwing
+Initialize-FreqtradeDirectory -RelativePath "user_data"
+
 $nestedOutputDirectory = Join-Path $repositoryRoot "user_data/test-output-helper-$PID"
 $nestedOutputFile = Join-Path $nestedOutputDirectory "nested/result.log"
 try {
@@ -376,6 +379,9 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     }
     if ($scriptRelative -eq "scripts/Get-MarketData.ps1" -and $content -notmatch "\.PARAMETER Timeframes") {
         throw "Script Get-MarketData.ps1 is missing a .PARAMETER Timeframes help block."
+    }
+    if ($scriptRelative -eq "scripts/Get-MarketData.ps1" -and $content -notmatch "\.PARAMETER Erase") {
+        throw "Script Get-MarketData.ps1 is missing a .PARAMETER Erase help block."
     }
 }
 
