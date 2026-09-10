@@ -57,6 +57,9 @@ class MultiTimeframeAtrStrategy(IStrategy):
     stoploss = -0.08
     use_custom_stoploss = True
 
+    can_short: bool = False
+    position_adjustment_enable: bool = False
+
     use_exit_signal = True
     exit_profit_only = False
     exit_profit_offset: float = 0.0

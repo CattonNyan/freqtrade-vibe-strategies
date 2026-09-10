@@ -34,6 +34,9 @@ class VibeRsiStrategy(IStrategy):
     stoploss = -0.05
     trailing_stop = False
 
+    can_short: bool = False
+    position_adjustment_enable: bool = False
+
     use_exit_signal = True
     exit_profit_only = False
     exit_profit_offset: float = 0.0

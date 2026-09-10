@@ -37,6 +37,9 @@ class KoreanStarterStrategy(IStrategy):
     trailing_stop_positive_offset = 0.025
     trailing_only_offset_is_reached = True
 
+    can_short: bool = False
+    position_adjustment_enable: bool = False
+
     use_exit_signal = True
     exit_profit_only = False
     exit_profit_offset: float = 0.0
