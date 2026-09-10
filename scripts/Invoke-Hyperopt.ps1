@@ -28,6 +28,9 @@
 .PARAMETER Jobs
     하이퍼옵트 병렬 워커(CPU 코어) 수 (기본값: -1, -1은 전체 코어 사용).
 
+.PARAMETER RandomState
+    하이퍼옵트 난수 시드 (결과 재현성 보장용). 지정 시 --random-state로 전달됩니다.
+
 .PARAMETER Force
     동일한 이름의 이전 하이퍼옵트 로그 파일 덮어쓰기 허용 스위치.
 
@@ -63,6 +66,8 @@ param(
 
     [ValidateRange(-1, 128)]
     [int]$Jobs = -1,
+
+    [System.Nullable[int]]$RandomState = $null,
 
     [switch]$Force
 )
@@ -105,13 +110,17 @@ $logPath = Join-Path $repositoryRoot "user_data/hyperopt_results/$logName"
 Initialize-FreqtradeOutputFile -Path $logPath -Force:$Force
 
 $jobArgs = @("-j", [string]$Jobs)
+$randomStateArgs = @()
+if ($PSBoundParameters.ContainsKey("RandomState") -and $null -ne $RandomState) {
+    $randomStateArgs = @("--random-state", [string]$RandomState)
+}
 $commonArguments = @(
     "hyperopt",
     "--strategy", $Strategy,
     "--timerange", $Timerange,
     "--epochs", $Epochs,
     "--hyperopt-loss", $HyperoptLoss
-) + $jobArgs + @(
+) + $jobArgs + $randomStateArgs + @(
     "--spaces"
 ) + $normalizedSpaces + @(
     "--pairs"
