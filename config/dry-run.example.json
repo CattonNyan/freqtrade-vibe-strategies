@@ -11,5 +11,8 @@
   },
   "telegram": {
     "enabled": false
+  },
+  "internals": {
+    "process_throttle_secs": 5
   }
 }
