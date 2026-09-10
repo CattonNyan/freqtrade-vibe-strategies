@@ -573,6 +573,14 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn(r"strategies\$Strategy.py", source)
         self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
 
+    def test_hyperopt_script_supports_jobs_and_random_state(self) -> None:
+        source = self.script_source("Invoke-Hyperopt.ps1")
+        self.assertIn("[ValidateRange(-1, 128)]", source)
+        self.assertIn("[int]$Jobs = -1", source)
+        self.assertIn("[System.Nullable[int]]$RandomState = $null", source)
+        self.assertIn('"-j", [string]$Jobs', source)
+        self.assertIn('"--random-state", [string]$RandomState', source)
+
     def test_analysis_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-StrategyAnalysis.ps1")
         supported = self.script_validate_set("Invoke-StrategyAnalysis.ps1", "Strategies")

@@ -389,6 +389,12 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     if ($scriptRelative -eq "scripts/Invoke-Backtest.ps1" -and $content -notmatch "\.PARAMETER Fee") {
         throw "Script Invoke-Backtest.ps1 is missing a .PARAMETER Fee help block."
     }
+    if ($scriptRelative -eq "scripts/Invoke-Hyperopt.ps1" -and $content -notmatch "\.PARAMETER Jobs") {
+        throw "Script Invoke-Hyperopt.ps1 is missing a .PARAMETER Jobs help block."
+    }
+    if ($scriptRelative -eq "scripts/Invoke-Hyperopt.ps1" -and $content -notmatch "\.PARAMETER RandomState") {
+        throw "Script Invoke-Hyperopt.ps1 is missing a .PARAMETER RandomState help block."
+    }
 }
 
 $global:LASTEXITCODE = 0
