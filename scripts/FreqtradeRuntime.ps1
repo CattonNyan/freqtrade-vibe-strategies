@@ -57,9 +57,9 @@ function Get-PairSlug {
 
     $normalized = @($Pairs | Sort-Object -Unique)
     if ($normalized.Count -gt 3) {
-        return "{0}_{1}_and_{2}_more" -f ($normalized[0] -replace '[/:]', '-'), ($normalized[1] -replace '[/:]', '-'), ($normalized.Count - 2)
+        return "{0}_{1}_and_{2}_more" -f ($normalized[0] -replace '[/ :.@$+]', '-'), ($normalized[1] -replace '[/ :.@$+]', '-'), ($normalized.Count - 2)
     }
-    return ($normalized | ForEach-Object { $_ -replace '[/:]', '-' }) -join "_"
+    return ($normalized | ForEach-Object { $_ -replace '[/ :.@$+]', '-' }) -join "_"
 }
 
 function Initialize-FreqtradeDirectory {
