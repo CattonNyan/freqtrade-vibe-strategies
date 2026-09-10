@@ -22,6 +22,9 @@
 .PARAMETER Breakdown
     백테스트 결과 분할 분석 단위 (day, week, month 중 선택). 지정 시 일/주/월별 상세 분석 테이블을 출력합니다.
 
+.PARAMETER Fee
+    백테스트에 적용할 커스텀 거래 수수료율 (0.0 ~ 0.1, 예: 0.001은 0.1%). 지정 시 설정 파일의 수수료를 덮어씁니다.
+
 .EXAMPLE
     .\scripts\Invoke-Backtest.ps1 -Strategy KoreanStarterStrategy -Timerange 20250101-20260101
 
@@ -45,7 +48,10 @@ param(
     [switch]$Force,
 
     [ValidateSet("day", "week", "month")]
-    [string]$Breakdown
+    [string]$Breakdown,
+
+    [ValidateRange(0.0, 0.1)]
+    [double]$Fee = 0.0
 )
 
 Set-StrictMode -Version Latest
@@ -87,6 +93,10 @@ $breakdownArgs = @()
 if ($Breakdown) {
     $breakdownArgs = @("--breakdown", $Breakdown)
 }
+$feeArgs = @()
+if ($Fee -gt 0.0) {
+    $feeArgs = @("--fee", [string]$Fee)
+}
 $commonArguments = @(
     "backtesting",
     "--strategy", $Strategy,
@@ -94,7 +104,7 @@ $commonArguments = @(
     "--cache", "none",
     "--export", "trades",
     "--notes", $resultNotes
-) + $breakdownArgs + @(
+) + $breakdownArgs + $feeArgs + @(
     "--pairs"
 ) + $normalizedPairs
 
