@@ -37,6 +37,15 @@ def class_assignments(node: ast.ClassDef) -> dict[str, object]:
                     values[target.id] = ast.literal_eval(statement.value)
                 except (TypeError, ValueError):
                     pass
+        elif (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.value is not None
+        ):
+            try:
+                values[statement.target.id] = ast.literal_eval(statement.value)
+            except (TypeError, ValueError):
+                pass
     return values
 
 
@@ -93,11 +102,17 @@ class StrategySourceTests(unittest.TestCase):
                 order_types = assignments.get("order_types")
                 self.assertIsInstance(order_types, dict)
                 self.assertTrue(
-                    {"entry", "exit", "stoploss", "stoploss_on_exchange", "stoploss_on_exchange_interval"}.issubset(
-                        order_types.keys()
-                    )
+                    {
+                        "entry",
+                        "exit",
+                        "stoploss",
+                        "stoploss_on_exchange",
+                        "stoploss_on_exchange_interval",
+                        "stoploss_on_exchange_limit_ratio",
+                    }.issubset(order_types.keys())
                 )
                 self.assertEqual(order_types.get("stoploss_on_exchange_interval"), 60)
+                self.assertEqual(order_types.get("stoploss_on_exchange_limit_ratio"), 0.99)
 
                 tif = assignments.get("order_time_in_force")
                 self.assertIsInstance(tif, dict)
@@ -112,6 +127,7 @@ class StrategySourceTests(unittest.TestCase):
 
                 self.assertIs(assignments.get("use_exit_signal"), True)
                 self.assertIs(assignments.get("exit_profit_only"), False)
+                self.assertEqual(assignments.get("exit_profit_offset"), 0.0)
                 self.assertIs(assignments.get("ignore_roi_if_entry_signal"), False)
 
     def test_plot_config_declared_by_every_strategy(self) -> None:
