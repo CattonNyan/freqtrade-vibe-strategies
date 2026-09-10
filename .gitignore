@@ -20,8 +20,13 @@ config/live-*.json
 *.swp
 *.swo
 
-# Testing / Cache
+# Testing / Cache / Linters
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+*.bak
 
