@@ -130,6 +130,15 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertEqual(assignments.get("exit_profit_offset"), 0.0)
                 self.assertIs(assignments.get("ignore_roi_if_entry_signal"), False)
 
+    def test_spot_trade_controls_declared_by_every_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+
+                self.assertIs(assignments.get("can_short"), False)
+                self.assertIs(assignments.get("position_adjustment_enable"), False)
+
     def test_plot_config_declared_by_every_strategy(self) -> None:
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):
