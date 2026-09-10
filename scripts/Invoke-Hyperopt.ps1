@@ -25,6 +25,9 @@
 .PARAMETER HyperoptLoss
     하이퍼옵트 손실 평가 함수 클래스명 (기본값: "ShortTradeDurHyperOptLoss").
 
+.PARAMETER Jobs
+    하이퍼옵트 병렬 워커(CPU 코어) 수 (기본값: -1, -1은 전체 코어 사용).
+
 .PARAMETER Force
     동일한 이름의 이전 하이퍼옵트 로그 파일 덮어쓰기 허용 스위치.
 
@@ -57,6 +60,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [ValidatePattern("^[A-Za-z_][A-Za-z0-9_]*$")]
     [string]$HyperoptLoss = "ShortTradeDurHyperOptLoss",
+
+    [ValidateRange(-1, 128)]
+    [int]$Jobs = -1,
 
     [switch]$Force
 )
@@ -98,12 +104,14 @@ $logName = "hyperopt-$Strategy-$pairSlug-$Timerange-e$Epochs-$spaceSlug-$Hyperop
 $logPath = Join-Path $repositoryRoot "user_data/hyperopt_results/$logName"
 Initialize-FreqtradeOutputFile -Path $logPath -Force:$Force
 
+$jobArgs = @("-j", [string]$Jobs)
 $commonArguments = @(
     "hyperopt",
     "--strategy", $Strategy,
     "--timerange", $Timerange,
     "--epochs", $Epochs,
-    "--hyperopt-loss", $HyperoptLoss,
+    "--hyperopt-loss", $HyperoptLoss
+) + $jobArgs + @(
     "--spaces"
 ) + $normalizedSpaces + @(
     "--pairs"
