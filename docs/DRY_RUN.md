@@ -44,10 +44,16 @@
 모든 전략은 안정적인 체결과 슬리피지 통제를 위해 공통된 주문 방식을 명시적으로 선언합니다:
 - 진입(entry) / 일반 청산(exit): `limit` (지정가 주문)
 - 긴급/강제 탈출(emergency_exit, force_exit): `market` (시장가 즉시 체결)
-- 손절(stoploss): `market` (로컬 감시 시장가 손절, stoploss_on_exchange=False)
+- 손절(stoploss): `market` (로컬 감시 시장가 손절, stoploss_on_exchange=False, limit_ratio=0.99)
 - 유효 시간(order_time_in_force): `gtc` (Good 'Til Cancelled)
 
-## 5. 실거래 전 금지 사항
+## 5. Docker 볼륨 및 FreqUI 모니터링
+
+- **로그 영속화**: `docker-compose.yml`을 통해 `./user_data/logs`가 컨테이너 내부(`/freqtrade/user_data/logs`)로 양방향 마운트되므로 컨테이너를 재시작해도 과거 봇 운영 로그가 안전하게 보존됩니다.
+- **FreqUI 차트 지표 연동**: 모든 전략에 `plot_config`가 내장되어 있어 FreqUI 웹 인터페이스에서 별도 설정 없이도 메인 플롯(이동평균선 등)과 보조지표(RSI, ADX, ATR 서브플롯)를 시각화하여 실시간 분석할 수 있습니다.
+- **프로세스 스로틀**: `config/dry-run.example.json`에 `internals.process_throttle_secs: 5`가 기본 설정되어 있어 봇의 불필요한 루프 회전과 CPU 과점유를 방지합니다.
+
+## 6. 실거래 전 금지 사항
 
 - 검증 결과가 음수인 현재 상태에서 `dry_run`을 끄지 않습니다.
 - API 키, 비공개 실거래 config, Telegram 토큰을 저장소에 커밋하지 않습니다.
