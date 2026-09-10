@@ -39,6 +39,7 @@ class KoreanStarterStrategy(IStrategy):
 
     use_exit_signal = True
     exit_profit_only = False
+    exit_profit_offset: float = 0.0
     ignore_roi_if_entry_signal = False
 
     buy_rsi = IntParameter(35, 55, default=45, space="buy", optimize=True)

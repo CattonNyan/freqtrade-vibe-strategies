@@ -36,6 +36,7 @@ class VibeRsiStrategy(IStrategy):
 
     use_exit_signal = True
     exit_profit_only = False
+    exit_profit_offset: float = 0.0
     ignore_roi_if_entry_signal = False
 
     buy_rsi = IntParameter(20, 50, default=35, space="buy", optimize=True)
