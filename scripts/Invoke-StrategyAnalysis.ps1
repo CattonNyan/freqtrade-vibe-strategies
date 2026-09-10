@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Freqtrade 전략의 재귀 지표 안정성(recursive-analysis) 및 미래 참조 편향(lookahead-analysis)을 심층 검증합니다.
 
@@ -159,3 +159,6 @@ foreach ($strategy in $normalizedStrategies) {
         -FailureMessage "$strategy lookahead-analysis에 실패했습니다." `
         -LogPath $lookaheadLogPath
 }
+
+Write-Host "[+] 모든 전략의 recursive 및 lookahead 분석이 완료되었습니다."
+Write-Host "[*] 결과 파일 위치: user_data/backtest_results/ (세부 통과 기준은 docs/VALIDATION.md 참조)"
