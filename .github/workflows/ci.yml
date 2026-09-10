@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run Strategy & Script Checks
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Python Strategy Unit Tests
+        run: |
+          python -B -m unittest discover -s tests -v
+
+      - name: Run PowerShell Tests
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File tests/Test-PowerShellScripts.ps1
+
+      - name: Run Full Repository Checks
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/Invoke-Checks.ps1
