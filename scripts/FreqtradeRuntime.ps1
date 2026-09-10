@@ -273,6 +273,13 @@ function Invoke-FreqtradeCommand {
     }
 
     if ($exitCode -ne 0) {
+        if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) {
+            $recentLines = Get-Content -LiteralPath $LogPath -Tail 15 -ErrorAction SilentlyContinue
+            if ($recentLines) {
+                Write-Warning ("최근 로그 요약 ({0}):" -f $LogPath)
+                $recentLines | ForEach-Object { Write-Warning "  $_" }
+            }
+        }
         throw "$FailureMessage (종료 코드: $exitCode)"
     }
 }
