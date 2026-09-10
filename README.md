@@ -10,7 +10,7 @@
 - `MultiTimeframeAtrStrategy`: 5분봉 진입 + 1시간봉 상위 추세(EMA 50/200) 및 동적 Break-even 커스텀 스탑로스를 적용한 다중 타임프레임 전략
 
 세 전략 모두 학습·백테스트·모의투자용 출발점이며 수익성을 보장하지 않습니다.
-세 전략 모두 Freqtrade `IStrategy` 규격(버전 3)에 맞추어 `order_types` 내 거래소 스탑로스 주기(`stoploss_on_exchange_interval`), 명시적 청산 제어(`use_exit_signal`, `exit_profit_only`, `ignore_roi_if_entry_signal`), 3대 보호장치(`protections`), FreqUI 및 `plot-dataframe` 차트 렌더링용 `plot_config`, `version()` 메서드, `__future__` 어노테이션 호환성을 공통으로 준수합니다.
+세 전략 모두 Freqtrade `IStrategy` 규격(버전 3)에 맞추어 `order_types` 내 거래소 스탑로스 주기 및 리밋 비율(`stoploss_on_exchange_interval`, `stoploss_on_exchange_limit_ratio`), 명시적 청산 제어(`use_exit_signal`, `exit_profit_only`, `exit_profit_offset`, `ignore_roi_if_entry_signal`), 3대 보호장치(`protections`), FreqUI 및 `plot-dataframe` 차트 렌더링용 `plot_config`, `version()` 메서드, `__future__` 어노테이션 호환성을 공통으로 준수합니다.
 `MultiTimeframeAtrStrategy` 이름은 기존 설정 호환성을 위해 유지하지만, 현재 손절 로직은 ATR이 아닌 수익률 임계값을 사용합니다.
 
 ## 사용법
@@ -34,7 +34,7 @@ docker compose run --rm freqtrade backtesting `
 
 ## 재현 가능한 백테스트
 
-검증 환경은 Freqtrade `2026.7` Docker 이미지에 고정되어 있습니다. Docker Compose 구성은 시장 데이터(`user_data/data`), 백테스트 결과(`user_data/backtest_results`), 하이퍼옵트 결과(`user_data/hyperopt_results`), 모의투자 데이터베이스(`user_data/db`)를 호스트와 양방향 영속 마운트합니다. 먼저 Docker Desktop을 설치한 뒤 예제 설정의 거래소와 페어를 검토하세요. 예제 설정은 현물·dry-run 전용이며 실제 API 키를 요구하지 않습니다.
+검증 환경은 Freqtrade `2026.7` Docker 이미지에 고정되어 있습니다. Docker Compose 구성은 시장 데이터(`user_data/data`), 백테스트 결과(`user_data/backtest_results`), 하이퍼옵트 결과(`user_data/hyperopt_results`), 모의투자 데이터베이스(`user_data/db`), 실행 로그(`user_data/logs`)를 호스트와 양방향 영속 마운트합니다. 먼저 Docker Desktop을 설치한 뒤 예제 설정의 거래소와 페어를 검토하세요. 예제 설정은 현물·dry-run 전용이며 실제 API 키를 요구하지 않습니다.
 
 Docker를 사용할 수 없으면 저장소 내부 가상환경을 사용할 수 있습니다.
 
@@ -74,16 +74,23 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
 .\scripts\Get-MarketData.ps1 -Days 365 -Erase
 ```
 
-명시적인 기간으로 전략을 백테스트합니다.
+명시적인 기간으로 전략을 백테스트합니다. 기간별 상세 분석(-Breakdown)과 커스텀 수수료율(-Fee)을 지원합니다.
 
 ```powershell
 .\scripts\Invoke-Backtest.ps1 `
   -Strategy KoreanStarterStrategy `
   -Timerange 20250101-20260101 `
   -Pairs BTC/USDT,ETH/USDT
+
+# 월별 집계표 출력(-Breakdown month) 및 0.1% 수수료(-Fee 0.001) 반영 백테스트
+.\scripts\Invoke-Backtest.ps1 `
+  -Strategy KoreanStarterStrategy `
+  -Timerange 20250101-20260101 `
+  -Breakdown month `
+  -Fee 0.001
 ```
 
-하이퍼옵트로 전략 파라미터를 최적화합니다.
+하이퍼옵트로 전략 파라미터를 최적화합니다. 병렬 CPU 코어 수(-Jobs)와 재현성 난수 시드(-RandomState)를 제어할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-Hyperopt.ps1 `
@@ -91,6 +98,15 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
   -Timerange 20250101-20260101 `
   -Epochs 100 `
   -Spaces buy,sell
+
+# 전체 CPU 코어 병렬 탐색(-Jobs -1) 및 재현성 고정(-RandomState 42)
+.\scripts\Invoke-Hyperopt.ps1 `
+  -Strategy VibeRsiStrategy `
+  -Timerange 20250101-20260101 `
+  -Epochs 200 `
+  -Spaces buy,sell `
+  -Jobs -1 `
+  -RandomState 42
 ```
 
 모의투자(dry-run) 설정과 전략 로딩을 사전에 검증하거나 가상 거래 봇 프로세스를 시작합니다.
