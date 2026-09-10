@@ -142,6 +142,21 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn("subplots", plot_config)
                 self.assertIsInstance(plot_config["main_plot"], dict)
                 self.assertIsInstance(plot_config["subplots"], dict)
+                self.assertGreater(len(plot_config["main_plot"]), 0)
+                self.assertGreater(len(plot_config["subplots"]), 0)
+                for indicator_name, style in plot_config["main_plot"].items():
+                    self.assertIsInstance(indicator_name, str)
+                    self.assertIsInstance(style, dict)
+                    self.assertIn("color", style)
+                self.assertIn("RSI", plot_config["subplots"])
+                for panel_name, indicators in plot_config["subplots"].items():
+                    self.assertIsInstance(panel_name, str)
+                    self.assertIsInstance(indicators, dict)
+                    self.assertGreater(len(indicators), 0)
+                    for ind_name, style in indicators.items():
+                        self.assertIsInstance(ind_name, str)
+                        self.assertIsInstance(style, dict)
+                        self.assertIn("color", style)
 
     def test_version_method_declared_by_every_strategy(self) -> None:
         for filename, class_name in STRATEGIES.items():
