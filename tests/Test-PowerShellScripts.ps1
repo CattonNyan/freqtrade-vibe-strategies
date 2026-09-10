@@ -395,6 +395,9 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     if ($scriptRelative -eq "scripts/Invoke-Hyperopt.ps1" -and $content -notmatch "\.PARAMETER RandomState") {
         throw "Script Invoke-Hyperopt.ps1 is missing a .PARAMETER RandomState help block."
     }
+    if ($scriptRelative -eq "scripts/Invoke-StrategyAnalysis.ps1" -and $content -notmatch "\.PARAMETER StartupCandles") {
+        throw "Script Invoke-StrategyAnalysis.ps1 is missing a .PARAMETER StartupCandles help block."
+    }
 }
 
 $global:LASTEXITCODE = 0
