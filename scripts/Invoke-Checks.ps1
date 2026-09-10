@@ -38,6 +38,9 @@ if (-not $pythonExecutable) {
 
 Push-Location -LiteralPath $repositoryRoot
 try {
+    $pythonVersion = (& $pythonExecutable --version 2>&1)
+    Write-Host "[*] 검사 환경: $pythonExecutable ($pythonVersion)"
+
     & $pythonExecutable -B -m unittest discover -s tests -v
     if ($LASTEXITCODE -ne 0) {
         throw "Python 전략 소스 검사에 실패했습니다. (종료 코드: $LASTEXITCODE)"
