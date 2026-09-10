@@ -13,7 +13,8 @@
       "number_assets": 20,
       "sort_key": "quoteVolume",
       "min_value": 0,
-      "refresh_period": 1800
+      "refresh_period": 1800,
+      "lookback_days": 1
     },
     {
       "method": "AgeFilter",
