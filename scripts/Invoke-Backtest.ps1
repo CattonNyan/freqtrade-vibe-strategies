@@ -19,6 +19,9 @@
 .PARAMETER Force
     동일한 전략·페어·기간의 이전 백테스트 결과 디렉터리를 교체하는 스위치.
 
+.PARAMETER Breakdown
+    백테스트 결과 분할 분석 단위 (day, week, month 중 선택). 지정 시 일/주/월별 상세 분석 테이블을 출력합니다.
+
 .EXAMPLE
     .\scripts\Invoke-Backtest.ps1 -Strategy KoreanStarterStrategy -Timerange 20250101-20260101
 
@@ -39,7 +42,10 @@ param(
     [ValidatePattern("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")]
     [string[]]$Pairs = @("BTC/USDT", "ETH/USDT"),
 
-    [switch]$Force
+    [switch]$Force,
+
+    [ValidateSet("day", "week", "month")]
+    [string]$Breakdown
 )
 
 Set-StrictMode -Version Latest
@@ -77,13 +83,18 @@ if (Test-Path -LiteralPath $resultPath) {
 }
 [void](New-Item -ItemType Directory -Path $resultPath)
 $resultNotes = "strategy=$Strategy; pairs=$($normalizedPairs -join ','); timerange=$Timerange"
+$breakdownArgs = @()
+if ($Breakdown) {
+    $breakdownArgs = @("--breakdown", $Breakdown)
+}
 $commonArguments = @(
     "backtesting",
     "--strategy", $Strategy,
     "--timerange", $Timerange,
     "--cache", "none",
     "--export", "trades",
-    "--notes", $resultNotes,
+    "--notes", $resultNotes
+) + $breakdownArgs + @(
     "--pairs"
 ) + $normalizedPairs
 
