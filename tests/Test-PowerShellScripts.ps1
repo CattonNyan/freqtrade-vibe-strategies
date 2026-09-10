@@ -383,6 +383,12 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     if ($scriptRelative -eq "scripts/Get-MarketData.ps1" -and $content -notmatch "\.PARAMETER Erase") {
         throw "Script Get-MarketData.ps1 is missing a .PARAMETER Erase help block."
     }
+    if ($scriptRelative -eq "scripts/Invoke-Backtest.ps1" -and $content -notmatch "\.PARAMETER Breakdown") {
+        throw "Script Invoke-Backtest.ps1 is missing a .PARAMETER Breakdown help block."
+    }
+    if ($scriptRelative -eq "scripts/Invoke-Backtest.ps1" -and $content -notmatch "\.PARAMETER Fee") {
+        throw "Script Invoke-Backtest.ps1 is missing a .PARAMETER Fee help block."
+    }
 }
 
 $global:LASTEXITCODE = 0

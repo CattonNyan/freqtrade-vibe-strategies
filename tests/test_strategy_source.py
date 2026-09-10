@@ -544,6 +544,17 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn(r"strategies\$Strategy.py", source)
         self.assertIn("Test-Path -LiteralPath $strategyPath -PathType Leaf", source)
 
+    def test_backtest_script_supports_breakdown_and_fee(self) -> None:
+        source = self.script_source("Invoke-Backtest.ps1")
+        self.assertEqual(
+            self.script_validate_set("Invoke-Backtest.ps1", "Breakdown"),
+            {"day", "week", "month"},
+        )
+        self.assertIn("[ValidateRange(0.0, 0.1)]", source)
+        self.assertIn("[double]$Fee = 0.0", source)
+        self.assertIn('"--breakdown", $Breakdown', source)
+        self.assertIn('"--fee", [string]$Fee', source)
+
     def test_dry_run_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-DryRun.ps1")
         self.assertEqual(
