@@ -984,6 +984,23 @@ class StrategySourceTests(unittest.TestCase):
                 strategy_instance = cls(config={"dry_run": True, "stake_currency": "USDT"})
                 if class_name == "MultiTimeframeAtrStrategy":
                     strategy_instance.dp = MockDataProvider()
+                    self.assertEqual(strategy_instance.informative_pairs(), [("BTC/USDT", "1h")])
+
+                    class MockTrade:
+                        is_short = False
+                        leverage = 1.0
+
+                    trade = MockTrade()
+                    now = pd.Timestamp.now().to_pydatetime()
+                    self.assertIsNone(
+                        strategy_instance.custom_stoploss("BTC/USDT", trade, now, 50000, 0.01, False)
+                    )
+                    be_stop = strategy_instance.custom_stoploss("BTC/USDT", trade, now, 50000, 0.02, False)
+                    self.assertIsNotNone(be_stop)
+                    self.assertGreater(be_stop, 0)
+                    trail_stop = strategy_instance.custom_stoploss("BTC/USDT", trade, now, 50000, 0.05, False)
+                    self.assertIsNotNone(trail_stop)
+                    self.assertGreater(trail_stop, be_stop)
 
                 df = dummy_df.copy()
                 df = strategy_instance.populate_indicators(df, metadata)
