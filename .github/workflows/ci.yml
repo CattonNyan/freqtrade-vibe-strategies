@@ -5,11 +5,20 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: Run Strategy & Script Checks
     runs-on: windows-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
