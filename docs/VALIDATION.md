@@ -6,8 +6,12 @@
 
 - Python AST 기반 소스 계약 검사: 통과 (INTERFACE_VERSION=3, can_short: bool=False, position_adjustment_enable=False 등)
 - 전략 클래스 속성 중복 선언 방지 검사: 통과
+- `minimal_roi` 기준선("0") 선언 및 시간 경과별 목표 단조 감쇄(Monotonic Decay) 검사: 통과
+- 진입 및 청산 신호 태그(`enter_tag`, `exit_tag`) 기본 빈 문자열 초기화 검사: 통과
 - 명시적인 음수 `shift` 및 `iloc` 참조 검사: 통과
 - 전략별 `order_types` 및 소문자 `order_time_in_force: gtc` 선언 검사: 통과
+- 다중 타임프레임(MTF) `informative_pairs` 및 동적 커스텀 스탑로스 런타임 검사: 통과
+- 전체 실행 스크립트 StrictMode 최신 버전 및 ErrorActionPreference Stop 가드 검사: 통과
 - 예제 JSON 설정(`config/*.json`)의 `dry_run: true` 및 외부 알림 비활성화 검사: 통과
 - PowerShell 검증 스크립트의 `Get-Help` 표준 주석 및 전체 매개변수(`.PARAMETER`) 유효성 검사: 통과
 - 마크다운 문서 상대 링크 유효성 검사: 통과
