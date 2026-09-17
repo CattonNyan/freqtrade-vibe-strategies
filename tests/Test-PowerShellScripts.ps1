@@ -1,3 +1,14 @@
+<#
+.SYNOPSIS
+    Freqtrade Vibe Strategies의 PowerShell 스크립트 동작 및 안전 가드를 검증합니다.
+
+.DESCRIPTION
+    타임프레임 및 기간 유효성 검사, 시장 데이터 사전 점검, 경로 격리(user_data 내부 제한),
+    호출자 작업 디렉터리 복원, 파라미터 주석 도움말 전체 존재 여부를 종합 검증합니다.
+
+.EXAMPLE
+    .\tests\Test-PowerShellScripts.ps1
+#>
 [CmdletBinding()]
 param()
 
@@ -369,7 +380,8 @@ $scriptsWithHelp = @(
     "scripts/Invoke-DryRun.ps1",
     "scripts/Invoke-Hyperopt.ps1",
     "scripts/Invoke-StrategyAnalysis.ps1",
-    "scripts/FreqtradeRuntime.ps1"
+    "scripts/FreqtradeRuntime.ps1",
+    "tests/Test-PowerShellScripts.ps1"
 )
 foreach ($scriptRelative in $scriptsWithHelp) {
     $scriptFullPath = Join-Path $repositoryRoot $scriptRelative
