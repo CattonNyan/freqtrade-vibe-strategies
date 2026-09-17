@@ -21,7 +21,6 @@ class VibeRsiStrategy(IStrategy):
     INTERFACE_VERSION = 3
 
     timeframe = "5m"
-    can_short = False
     process_only_new_candles = True
     startup_candle_count = 199
 

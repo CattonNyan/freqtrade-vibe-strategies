@@ -139,6 +139,27 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIs(assignments.get("can_short"), False)
                 self.assertIs(assignments.get("position_adjustment_enable"), False)
 
+    def test_no_duplicate_class_attributes_in_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                seen_names: set[str] = set()
+                for statement in strategy.body:
+                    targets: list[str] = []
+                    if isinstance(statement, ast.Assign):
+                        for target in statement.targets:
+                            if isinstance(target, ast.Name):
+                                targets.append(target.id)
+                    elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+                        targets.append(statement.target.id)
+                    for name in targets:
+                        self.assertNotIn(
+                            name,
+                            seen_names,
+                            f"Duplicate class attribute '{name}' found in {class_name} ({filename})",
+                        )
+                        seen_names.add(name)
+
     def test_plot_config_declared_by_every_strategy(self) -> None:
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):

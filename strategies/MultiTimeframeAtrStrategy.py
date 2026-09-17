@@ -41,7 +41,6 @@ class MultiTimeframeAtrStrategy(IStrategy):
     timeframe = "5m"
     informative_timeframe = "1h"
 
-    can_short = False
     process_only_new_candles = True
     startup_candle_count = 799
 
