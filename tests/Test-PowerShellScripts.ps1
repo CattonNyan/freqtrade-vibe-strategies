@@ -72,6 +72,17 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "YYYYMMDD-YYYYMMDD") {
 
 $caughtMessage = $null
 try {
+    Assert-ValidTimerange -Timerange "20250230-20250301"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage -or $caughtMessage -notmatch "20250230-20250301") {
+    throw "A calendar-invalid date in timerange was not rejected: $caughtMessage"
+}
+
+$caughtMessage = $null
+try {
     & (Join-Path $repositoryRoot "scripts/Get-MarketData.ps1") -Pairs "BTC-USDT"
 }
 catch {
@@ -356,6 +367,14 @@ if ((Get-Location).Path -ne $originalLocation) {
 $slugSingle = Get-PairSlug -Pairs @("BTC/USDT")
 if ($slugSingle -ne "BTC-USDT") {
     throw "Get-PairSlug produced unexpected result for single pair: $slugSingle"
+}
+$slugTwo = Get-PairSlug -Pairs @("BTC/USDT", "ETH/USDT")
+if ($slugTwo -ne "BTC-USDT_ETH-USDT") {
+    throw "Get-PairSlug produced unexpected result for two pairs: $slugTwo"
+}
+$slugThree = Get-PairSlug -Pairs @("BTC/USDT", "ETH/USDT", "SOL/USDT")
+if ($slugThree -ne "BTC-USDT_ETH-USDT_SOL-USDT") {
+    throw "Get-PairSlug produced unexpected result for three pairs: $slugThree"
 }
 $slugMultiple = Get-PairSlug -Pairs @("BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT")
 if ($slugMultiple -ne "BTC-USDT_ETH-USDT_and_2_more") {
