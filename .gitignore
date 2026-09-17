@@ -30,3 +30,8 @@ htmlcov/
 coverage.xml
 *.bak
 
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
