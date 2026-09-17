@@ -224,9 +224,20 @@ class StrategySourceTests(unittest.TestCase):
                 roi = assignments.get("minimal_roi")
                 self.assertIsInstance(roi, dict)
                 self.assertTrue(len(roi) > 0, "minimal_roi table must not be empty")
+                self.assertIn("0", roi, f"{class_name} minimal_roi must define the initial '0' minute threshold")
                 for minutes, target in roi.items():
                     self.assertTrue(str(minutes).isdigit(), "ROI table keys must be minute strings")
+                    self.assertIsInstance(target, (int, float), "ROI target must be numeric")
                     self.assertGreaterEqual(target, 0.0, "ROI targets must be non-negative")
+                    self.assertLessEqual(target, 1.0, "ROI targets cannot exceed 100%")
+
+                sorted_minutes = sorted(int(m) for m in roi.keys())
+                for prev_m, curr_m in zip(sorted_minutes[:-1], sorted_minutes[1:]):
+                    self.assertGreaterEqual(
+                        roi[str(prev_m)],  # type: ignore[operator]
+                        roi[str(curr_m)],  # type: ignore[operator]
+                        f"{class_name} ROI targets must decay monotonically over time ({prev_m}m vs {curr_m}m)",
+                    )
 
     def test_strategy_hyperopt_parameters_are_valid(self) -> None:
         valid_spaces = {"buy", "sell", "roi", "stoploss", "trailing"}
