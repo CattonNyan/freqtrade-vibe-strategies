@@ -62,6 +62,7 @@ Get-Help .\scripts\Invoke-Checks.ps1 -Detailed
 Get-Help .\scripts\Invoke-DryRun.ps1 -Detailed
 Get-Help .\scripts\Invoke-Hyperopt.ps1 -Detailed
 Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
+Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 ```
 
 시장 데이터를 내려받습니다. 타임프레임을 지정하지 않으면 전략 기본 타임프레임(5m, 15m, 1h)이 모두 다운로드됩니다.
