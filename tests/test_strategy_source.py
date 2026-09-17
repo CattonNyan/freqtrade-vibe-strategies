@@ -520,6 +520,30 @@ class StrategySourceTests(unittest.TestCase):
             with self.subTest(mount=expected_mount):
                 self.assertIn(expected_mount, compose_source)
 
+    def test_runtime_requirements_match_docker_image_version(self) -> None:
+        requirements_path = ROOT / "requirements-runtime.txt"
+        compose_path = ROOT / "docker-compose.yml"
+
+        req_match = re.search(
+            r"freqtrade(?:\[[^\]]+\])?==([0-9.]+)",
+            requirements_path.read_text(encoding="utf-8"),
+        )
+        self.assertIsNotNone(req_match, "Freqtrade version pin not found in requirements-runtime.txt")
+        req_version = req_match.group(1)
+
+        compose_match = re.search(
+            r"freqtradeorg/freqtrade:([0-9.]+)",
+            compose_path.read_text(encoding="utf-8"),
+        )
+        self.assertIsNotNone(compose_match, "Freqtrade image tag not found in docker-compose.yml")
+        compose_version = compose_match.group(1)
+
+        self.assertEqual(
+            req_version,
+            compose_version,
+            f"Version mismatch: requirements-runtime.txt pins {req_version}, but docker-compose.yml uses {compose_version}",
+        )
+
     def test_dry_run_example_cannot_place_live_orders(self) -> None:
         config_path = ROOT / "config" / "dry-run.example.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
