@@ -890,9 +890,11 @@ class StrategySourceTests(unittest.TestCase):
         for filename, class_name in STRATEGIES.items():
             with self.subTest(strategy=class_name):
                 _, strategy = self.strategy_class(filename, class_name)
-                for method_name, col in (
-                    ("populate_entry_trend", "enter_long"),
-                    ("populate_exit_trend", "exit_long"),
+                for method_name, col, default_val in (
+                    ("populate_entry_trend", "enter_long", 0),
+                    ("populate_entry_trend", "enter_tag", ""),
+                    ("populate_exit_trend", "exit_long", 0),
+                    ("populate_exit_trend", "exit_tag", ""),
                 ):
                     method = next(
                         (
@@ -903,7 +905,7 @@ class StrategySourceTests(unittest.TestCase):
                         None,
                     )
                     self.assertIsNotNone(method, f"{method_name} is missing in {class_name}")
-                    assigns_zero = any(
+                    assigns_default = any(
                         isinstance(node, ast.Assign)
                         and any(
                             isinstance(target, ast.Subscript)
@@ -912,12 +914,12 @@ class StrategySourceTests(unittest.TestCase):
                             for target in node.targets
                         )
                         and isinstance(node.value, ast.Constant)
-                        and node.value.value == 0
+                        and node.value.value == default_val
                         for node in method.body  # type: ignore[union-attr]
                     )
                     self.assertTrue(
-                        assigns_zero,
-                        f"{col} default initialization to 0 is missing in {class_name}.{method_name}",
+                        assigns_default,
+                        f"{col} default initialization to {default_val!r} is missing in {class_name}.{method_name}",
                     )
 
     def test_dynamic_runtime_import_and_indicators_if_available(self) -> None:
