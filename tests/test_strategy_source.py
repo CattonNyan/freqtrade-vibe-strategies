@@ -830,12 +830,14 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("Select-Object -First 1", source)
 
     def test_entry_scripts_enable_strict_mode(self) -> None:
-        for path in (ROOT / "scripts").glob("*.ps1"):
-            if path.name == "FreqtradeRuntime.ps1":
-                continue
+        target_scripts = [
+            p for p in (ROOT / "scripts").glob("*.ps1") if p.name != "FreqtradeRuntime.ps1"
+        ] + [ROOT / "tests" / "Test-PowerShellScripts.ps1"]
+        for path in target_scripts:
             with self.subTest(script=path.name):
                 source = path.read_text(encoding="utf-8-sig")
                 self.assertIn("Set-StrictMode -Version Latest", source)
+                self.assertIn('$ErrorActionPreference = "Stop"', source)
 
     def test_scripts_initialize_their_output_directories(self) -> None:
         expected_directories = {
