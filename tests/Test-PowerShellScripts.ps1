@@ -377,26 +377,19 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     if ($content -notmatch "\.SYNOPSIS") {
         throw "Script $scriptRelative is missing a .SYNOPSIS comment-based help block."
     }
-    if ($scriptRelative -eq "scripts/Get-MarketData.ps1" -and $content -notmatch "\.PARAMETER Timeframes") {
-        throw "Script Get-MarketData.ps1 is missing a .PARAMETER Timeframes help block."
+    $expectedParameters = switch ($scriptRelative) {
+        "scripts/Get-MarketData.ps1" { @("Days", "Pairs", "Timeframes", "Erase") }
+        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee") }
+        "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
+        "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }
+        "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force") }
+        default { @() }
     }
-    if ($scriptRelative -eq "scripts/Get-MarketData.ps1" -and $content -notmatch "\.PARAMETER Erase") {
-        throw "Script Get-MarketData.ps1 is missing a .PARAMETER Erase help block."
-    }
-    if ($scriptRelative -eq "scripts/Invoke-Backtest.ps1" -and $content -notmatch "\.PARAMETER Breakdown") {
-        throw "Script Invoke-Backtest.ps1 is missing a .PARAMETER Breakdown help block."
-    }
-    if ($scriptRelative -eq "scripts/Invoke-Backtest.ps1" -and $content -notmatch "\.PARAMETER Fee") {
-        throw "Script Invoke-Backtest.ps1 is missing a .PARAMETER Fee help block."
-    }
-    if ($scriptRelative -eq "scripts/Invoke-Hyperopt.ps1" -and $content -notmatch "\.PARAMETER Jobs") {
-        throw "Script Invoke-Hyperopt.ps1 is missing a .PARAMETER Jobs help block."
-    }
-    if ($scriptRelative -eq "scripts/Invoke-Hyperopt.ps1" -and $content -notmatch "\.PARAMETER RandomState") {
-        throw "Script Invoke-Hyperopt.ps1 is missing a .PARAMETER RandomState help block."
-    }
-    if ($scriptRelative -eq "scripts/Invoke-StrategyAnalysis.ps1" -and $content -notmatch "\.PARAMETER StartupCandles") {
-        throw "Script Invoke-StrategyAnalysis.ps1 is missing a .PARAMETER StartupCandles help block."
+    foreach ($paramName in $expectedParameters) {
+        $pattern = "\.PARAMETER\s+" + [regex]::Escape($paramName) + "\b"
+        if ($content -notmatch $pattern) {
+            throw "Script $scriptRelative is missing a .PARAMETER $paramName help block."
+        }
     }
 }
 
