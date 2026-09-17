@@ -959,6 +959,25 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn("exit_long", df.columns)
                 self.assertIn("exit_tag", df.columns)
 
+    def test_markdown_documentation_relative_links_are_valid(self) -> None:
+        for md_file in ROOT.rglob("*.md"):
+            if any(part in md_file.parts for part in (".venv", ".git", "user_data")):
+                continue
+            content = md_file.read_text(encoding="utf-8")
+            links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
+            for text, target in links:
+                target = target.strip()
+                if target.startswith(("http://", "https://", "#", "mailto:")):
+                    continue
+                clean_target = target.split("#")[0]
+                if not clean_target:
+                    continue
+                resolved = (md_file.parent / clean_target).resolve()
+                self.assertTrue(
+                    resolved.exists(),
+                    f"Broken link in {md_file.relative_to(ROOT)}: [{text}]({target}) -> {resolved}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
