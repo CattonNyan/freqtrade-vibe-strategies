@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Freqtrade Vibe Strategies의 PowerShell 스크립트 동작 및 안전 가드를 검증합니다.
 
@@ -266,6 +266,37 @@ if (-not $caughtMessage -or $caughtMessage -notmatch "MinimumTradeAmount") {
     throw "Invalid sample bounds were not rejected: $caughtMessage"
 }
 
+# Verify analyze_backtest_results.py generates quant report
+$testJsonFile = Join-Path $repositoryRoot "user_data/test-backtest-$PID.json"
+$testReportFile = Join-Path $repositoryRoot "user_data/test-quant-report-$PID.md"
+try {
+    $mockData = @{
+        strategy = @{
+            KoreanStarterStrategy = @{
+                trades = @(
+                    @{ profit_ratio = 0.05; duration = 30 },
+                    @{ profit_ratio = -0.02; duration = 40 }
+                )
+            }
+        }
+    } | ConvertTo-Json -Depth 5
+    [IO.File]::WriteAllText($testJsonFile, $mockData)
+    $analyzerPath = Join-Path $repositoryRoot "scripts/analyze_backtest_results.py"
+    $pythonCmd = if (Test-Path "$repositoryRoot/.venv/Scripts/python.exe") { "$repositoryRoot/.venv/Scripts/python.exe" } else { "python" }
+    & $pythonCmd $analyzerPath $testJsonFile -o $testReportFile
+    if (-not (Test-Path $testReportFile)) {
+        throw "analyze_backtest_results.py failed to produce report output file."
+    }
+    $reportContent = [IO.File]::ReadAllText($testReportFile)
+    if ($reportContent -notmatch "Ulcer Index") {
+        throw "Generated quant report is missing Ulcer Index metrics."
+    }
+}
+finally {
+    Remove-TestItemSafely -Path $testJsonFile
+    Remove-TestItemSafely -Path $testReportFile
+}
+
 $caughtMessage = $null
 try {
     & (Join-Path $repositoryRoot "scripts/Invoke-Hyperopt.ps1") `
@@ -413,7 +444,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
         "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }
-        "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force") }
+        "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
         default { @() }
     }
     foreach ($paramName in $expectedParameters) {
