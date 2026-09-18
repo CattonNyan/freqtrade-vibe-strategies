@@ -29,6 +29,9 @@
 .PARAMETER Force
     동일한 이름의 이전 분석 로그 및 CSV 결과 파일 덮어쓰기 허용 스위치.
 
+.PARAMETER AdvancedQuantMetrics
+    Freqtrade 백테스트 JSON 결과가 있는 경우 궤양지수(Ulcer Index), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성합니다.
+
 .EXAMPLE
     .\scripts\Invoke-StrategyAnalysis.ps1 -Timerange 20250101-20260101
 
@@ -61,7 +64,9 @@ param(
     [ValidateRange(2, 4999)]
     [int[]]$StartupCandles = @(49, 99, 199, 399, 799, 1599),
 
-    [switch]$Force
+    [switch]$Force,
+
+    [switch]$AdvancedQuantMetrics
 )
 
 Set-StrictMode -Version Latest
@@ -158,6 +163,21 @@ foreach ($strategy in $normalizedStrategies) {
         )) `
         -FailureMessage "$strategy lookahead-analysis에 실패했습니다." `
         -LogPath $lookaheadLogPath
+}
+
+if ($AdvancedQuantMetrics) {
+    Write-Host "[*] 퀀트 심층 하방 리스크 분석(Ulcer Index & Expectancy) 리포트 생성 중..."
+    $analyzerScript = Join-Path $PSScriptRoot "analyze_backtest_results.py"
+    $resultsDir = Join-Path $repositoryRoot "user_data/backtest_results"
+    $latestJson = Get-ChildItem -Path $resultsDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($null -ne $latestJson) {
+        $reportPath = Join-Path $resultsDir "quant-analysis-$Timerange.md"
+        $pythonExe = if (Test-Path "$repositoryRoot/.venv/Scripts/python.exe") { "$repositoryRoot/.venv/Scripts/python.exe" } else { "python" }
+        & $pythonExe $analyzerScript $latestJson.FullName -o $reportPath
+        Write-Host "[+] 퀀트 심층 리포트 저장 완료: $reportPath"
+    } else {
+        Write-Host "[!] 백테스트 JSON 결과 파일이 없어 퀀트 분석 생략 (먼저 Invoke-Backtest.ps1 실행 권장)"
+    }
 }
 
 Write-Host "[+] 모든 전략의 recursive 및 lookahead 분석이 완료되었습니다."
