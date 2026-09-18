@@ -109,6 +109,7 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 | **거래 기대값 (Expectancy)** | $(P_{win} \times \bar{R}_{win}) - (P_{loss} \times |\bar{R}_{loss}|)$ | > 0.0% (양수의 통계적 엣지 필수) |
 | **손익비 (Profit Factor)** | $\frac{\sum \text{Gains}}{\sum \text{Losses}}$ | > 1.5 이상 권장 |
 | **청산 사유별 분석 (Exit Breakdown)** | 청산 태그(`exit_tag`/`exit_reason`)별 승률, P.F., 평균 보유시간 | 손절 태그 누적 손실 과다 시 진입 조건 재검토 |
+| **페어별 성과 비교 (Pair Breakdown)** | 거래 페어(`pair`)별 거래수, 승률, 누적 손익, 손익비 | 전략에 부적합하거나 손실이 편중된 자산 식별 및 화이트리스트 조정 |
 
 또한 정적 검사 시 `-DetailedReport` 스위치를 사용하여 전략별 핵심 파라미터 매트릭스를 즉시 확인할 수 있습니다:
 
