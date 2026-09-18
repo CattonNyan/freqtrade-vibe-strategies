@@ -1078,6 +1078,38 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("KoreanStarterStrategy", md)
         self.assertIn("Ulcer Index", md)
 
+    def test_stoploss_and_trailing_stop_integrity(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                _, strategy = self.strategy_class(filename, class_name)
+                assignments = class_assignments(strategy)
+
+                stoploss = assignments.get("stoploss")
+                self.assertIsInstance(stoploss, float)
+                self.assertLess(stoploss, 0.0)
+                self.assertGreaterEqual(stoploss, -0.20)
+
+                trailing = assignments.get("trailing_stop")
+                if trailing is True:
+                    pos = assignments.get("trailing_stop_positive")
+                    offset = assignments.get("trailing_stop_positive_offset")
+                    self.assertIsInstance(pos, float)
+                    self.assertIsInstance(offset, float)
+                    self.assertGreater(pos, 0.0)
+                    self.assertGreaterEqual(offset, pos)
+                    self.assertIs(assignments.get("trailing_only_offset_is_reached"), True)
+                elif assignments.get("use_custom_stoploss") is True:
+                    methods = {node.name for node in strategy.body if isinstance(node, ast.FunctionDef)}
+                    self.assertIn("custom_stoploss", methods)
+
+    def test_entry_and_exit_tags_populated_by_every_strategy(self) -> None:
+        for filename, class_name in STRATEGIES.items():
+            with self.subTest(strategy=class_name):
+                path = ROOT / "strategies" / filename
+                content = path.read_text(encoding="utf-8")
+                self.assertIn('dataframe["enter_tag"]', content)
+                self.assertIn('dataframe["exit_tag"]', content)
+
 
 if __name__ == "__main__":
     unittest.main()
