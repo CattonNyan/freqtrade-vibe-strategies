@@ -137,10 +137,13 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 
 같은 전략·페어·기간의 결과 디렉터리가 있으면 스크립트가 중단됩니다. 기존 결과 묶음을 의도적으로 교체할 때만 `-Force`를 추가하세요.
 
-전략 소스의 기본 계약과 명시적인 미래 봉 참조를 의존성 없이 검사할 수 있습니다.
+전략 소스의 기본 계약과 명시적인 미래 봉 참조를 의존성 없이 검사할 수 있습니다. `-DetailedReport` 스위치를 지정하면 각 전략 클래스의 주요 설정(타임프레임, 시작 캔들, 손절 비율, 트레일링 스탑) 요약표를 함께 출력합니다.
 
 ```powershell
 .\scripts\Invoke-Checks.ps1
+
+# 전략 설정 매트릭스 요약표 함께 출력
+.\scripts\Invoke-Checks.ps1 -DetailedReport
 ```
 
 개별 검사를 직접 실행하려면 다음 명령을 사용합니다.

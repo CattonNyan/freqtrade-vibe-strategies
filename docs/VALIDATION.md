@@ -108,6 +108,13 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 | **고통 지수 (Pain Index)** | $\frac{1}{N} \sum |DD_t|$ | 포트폴리오의 평균적인 낙폭 수준 |
 | **거래 기대값 (Expectancy)** | $(P_{win} \times \bar{R}_{win}) - (P_{loss} \times |\bar{R}_{loss}|)$ | > 0.0% (양수의 통계적 엣지 필수) |
 | **손익비 (Profit Factor)** | $\frac{\sum \text{Gains}}{\sum \text{Losses}}$ | > 1.5 이상 권장 |
+| **청산 사유별 분석 (Exit Breakdown)** | 청산 태그(`exit_tag`/`exit_reason`)별 승률, P.F., 평균 보유시간 | 손절 태그 누적 손실 과다 시 진입 조건 재검토 |
+
+또한 정적 검사 시 `-DetailedReport` 스위치를 사용하여 전략별 핵심 파라미터 매트릭스를 즉시 확인할 수 있습니다:
+
+```powershell
+.\scripts\Invoke-Checks.ps1 -DetailedReport
+```
 
 거래량 기준 변경 전 비교 기준은 커밋 `0f18e4f`이고, 직전 20개 완료 봉을 사용하는 변경은 `2192db6`입니다. 동일 설정·데이터·기간에서 두 커밋을 비교해야 합니다.
 
