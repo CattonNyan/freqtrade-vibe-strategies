@@ -120,6 +120,17 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
+전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
+
+```powershell
+.\scripts\Invoke-StrategyAnalysis.ps1 `
+  -Timerange 20250101-20260101 `
+  -AdvancedQuantMetrics
+
+# 독립 퀀트 리스크 분석기 실행
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json
+```
+
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
 공통 백테스트 설정은 타임프레임을 덮어쓰지 않으며, 각 전략의 `timeframe` 값이 그대로 적용됩니다.
 상위 20개 유동성 페어를 동적으로 순위 매겨 운용하려면 `config/pairlist-volume.example.json`을 함께 적용할 수 있습니다.

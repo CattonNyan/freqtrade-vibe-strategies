@@ -87,6 +87,28 @@ lookahead 분석은 지정가 전략을 시장가로 강제하는 Freqtrade의 �
 - 평균 및 최대 보유시간
 - `stop_loss`, `rsi_overbought`, `ema_bearish_cross`, ROI 청산별 성과
 
+### 3.1 퀀트 하방 리스크 및 궤양지수(Ulcer Index) 심층 분석
+
+백테스트 결과 파일(`user_data/backtest_results/*.json`)에 대해 단순 MDD 외에 장기 하락장의 고통과 체류 기간을 가중 처벌하는 기관 수준의 하방 리스크 지표를 산출할 수 있습니다:
+
+```powershell
+# 전략 분석과 동시에 퀀트 리포트 자동 생성
+.\scripts\Invoke-StrategyAnalysis.ps1 -Timerange 20250101-20260101 -AdvancedQuantMetrics
+
+# 또는 백테스트 JSON 결과 파일을 직접 독립 분석
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json -o .\user_data\backtest_results\quant-report.md
+```
+
+#### 산출 지표 및 검증 기준
+
+| 지표 | 산출 방식 | 검증 기준 |
+| :--- | :--- | :--- |
+| **궤양지수 (Ulcer Index, UI)** | $\sqrt{\frac{1}{N} \sum DD_t^2}$ | 낮을수록 우수 (단순 변동성과 달리 하방 위험만 처벌) |
+| **마틴 비율 (Martin Ratio / UPI)** | $\frac{\text{총 수익률}}{\text{Ulcer Index}}$ | > 2.0 이상 권장 (샤프 지수 대비 장기 손실 체류 위험 반영) |
+| **고통 지수 (Pain Index)** | $\frac{1}{N} \sum |DD_t|$ | 포트폴리오의 평균적인 낙폭 수준 |
+| **거래 기대값 (Expectancy)** | $(P_{win} \times \bar{R}_{win}) - (P_{loss} \times |\bar{R}_{loss}|)$ | > 0.0% (양수의 통계적 엣지 필수) |
+| **손익비 (Profit Factor)** | $\frac{\sum \text{Gains}}{\sum \text{Losses}}$ | > 1.5 이상 권장 |
+
 거래량 기준 변경 전 비교 기준은 커밋 `0f18e4f`이고, 직전 20개 완료 봉을 사용하는 변경은 `2192db6`입니다. 동일 설정·데이터·기간에서 두 커밋을 비교해야 합니다.
 
 ## 4. 보류된 전략 변경
