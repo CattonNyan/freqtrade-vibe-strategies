@@ -1036,6 +1036,7 @@ class StrategySourceTests(unittest.TestCase):
 
     def test_backtest_quant_analyzer(self) -> None:
         from scripts.analyze_backtest_results import (
+            calculate_exit_reason_breakdown,
             calculate_trade_expectancy,
             calculate_ulcer_and_drawdown_metrics,
             generate_markdown_report,
@@ -1054,9 +1055,9 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("pain_index", metrics)
 
         trades = [
-            {"profit_ratio": 0.05, "duration": 30},
-            {"profit_ratio": -0.02, "duration": 45},
-            {"profit_ratio": 0.03, "duration": 20},
+            {"profit_ratio": 0.05, "duration": 30, "exit_tag": "rsi_overbought"},
+            {"profit_ratio": -0.02, "duration": 45, "exit_tag": "stop_loss"},
+            {"profit_ratio": 0.03, "duration": 20, "exit_reason": "roi"},
         ]
         t_res = calculate_trade_expectancy(trades)
         self.assertEqual(t_res["total_trades"], 3)
@@ -1064,6 +1065,18 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(t_res["losses"], 1)
         self.assertGreater(t_res["profit_factor"], 1.0)
         self.assertGreater(t_res["expectancy_pct"], 0.0)
+
+        ex_res = calculate_exit_reason_breakdown(trades)
+        self.assertIn("rsi_overbought", ex_res)
+        self.assertIn("stop_loss", ex_res)
+        self.assertIn("roi", ex_res)
+        self.assertEqual(ex_res["rsi_overbought"]["trades"], 1)
+        self.assertEqual(ex_res["rsi_overbought"]["wins"], 1)
+        self.assertAlmostEqual(ex_res["rsi_overbought"]["win_rate_pct"], 100.0)
+        self.assertEqual(ex_res["stop_loss"]["losses"], 1)
+
+        empty_exits = calculate_exit_reason_breakdown([])
+        self.assertEqual(empty_exits, {})
 
         mock_json = {
             "strategy": {
@@ -1074,9 +1087,12 @@ class StrategySourceTests(unittest.TestCase):
         }
         parsed = parse_freqtrade_backtest_json(mock_json)
         self.assertIn("KoreanStarterStrategy", parsed)
+        self.assertIn("exit_reasons", parsed["KoreanStarterStrategy"])
         md = generate_markdown_report(parsed)
         self.assertIn("KoreanStarterStrategy", md)
         self.assertIn("Ulcer Index", md)
+        self.assertIn("rsi_overbought", md)
+        self.assertIn("stop_loss", md)
 
     def test_stoploss_and_trailing_stop_integrity(self) -> None:
         for filename, class_name in STRATEGIES.items():
