@@ -1034,6 +1034,50 @@ class StrategySourceTests(unittest.TestCase):
                     f"Broken link in {md_file.relative_to(ROOT)}: [{text}]({target}) -> {resolved}",
                 )
 
+    def test_backtest_quant_analyzer(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_trade_expectancy,
+            calculate_ulcer_and_drawdown_metrics,
+            generate_markdown_report,
+            parse_freqtrade_backtest_json,
+        )
+
+        empty_res = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty_res["ulcer_index"], 0.0)
+        self.assertEqual(empty_res["max_drawdown_pct"], 0.0)
+
+        known_profits = [0.10, -0.05, 0.05, -0.10]
+        metrics = calculate_ulcer_and_drawdown_metrics(known_profits)
+        self.assertGreater(metrics["ulcer_index"], 0.0)
+        self.assertGreater(metrics["max_drawdown_pct"], 0.0)
+        self.assertIn("martin_ratio", metrics)
+        self.assertIn("pain_index", metrics)
+
+        trades = [
+            {"profit_ratio": 0.05, "duration": 30},
+            {"profit_ratio": -0.02, "duration": 45},
+            {"profit_ratio": 0.03, "duration": 20},
+        ]
+        t_res = calculate_trade_expectancy(trades)
+        self.assertEqual(t_res["total_trades"], 3)
+        self.assertEqual(t_res["wins"], 2)
+        self.assertEqual(t_res["losses"], 1)
+        self.assertGreater(t_res["profit_factor"], 1.0)
+        self.assertGreater(t_res["expectancy_pct"], 0.0)
+
+        mock_json = {
+            "strategy": {
+                "KoreanStarterStrategy": {
+                    "trades": trades,
+                }
+            }
+        }
+        parsed = parse_freqtrade_backtest_json(mock_json)
+        self.assertIn("KoreanStarterStrategy", parsed)
+        md = generate_markdown_report(parsed)
+        self.assertIn("KoreanStarterStrategy", md)
+        self.assertIn("Ulcer Index", md)
+
 
 if __name__ == "__main__":
     unittest.main()
