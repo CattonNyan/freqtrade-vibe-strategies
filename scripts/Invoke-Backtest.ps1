@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     지정된 Freqtrade 전략과 기간에 대해 안전하고 재현 가능한 백테스트를 실행합니다.
 
@@ -24,6 +24,9 @@
 
 .PARAMETER Fee
     백테스트에 적용할 커스텀 거래 수수료율 (0.0 ~ 0.1, 예: 0.001은 0.1%). 지정 시 설정 파일의 수수료를 덮어씁니다.
+
+.PARAMETER QuantReport
+    백테스트 완료 후 궤양지수(Ulcer Index), 손익비, 페어별 성과가 포함된 심층 퀀트 분석 마크다운 리포트를 자동 생성합니다.
 
 .EXAMPLE
     .\scripts\Invoke-Backtest.ps1 -Strategy KoreanStarterStrategy -Timerange 20250101-20260101
@@ -51,7 +54,9 @@ param(
     [string]$Breakdown,
 
     [ValidateRange(0.0, 0.1)]
-    [double]$Fee = 0.0
+    [double]$Fee = 0.0,
+
+    [switch]$QuantReport
 )
 
 Set-StrictMode -Version Latest
@@ -125,6 +130,19 @@ try {
         -FailureMessage "백테스트에 실패했습니다."
 
     Write-Host "[+] [$Strategy] 백테스트 완료. (결과 위치: user_data/backtest_results/$resultDirectoryName)"
+    if ($QuantReport) {
+        Write-Host "[*] [$Strategy] 퀀트 심층 리스크 및 페어별 성과 분석 리포트 생성 중..."
+        $analyzerScript = Join-Path $PSScriptRoot "analyze_backtest_results.py"
+        $backtestJson = Get-ChildItem -Path $resultPath -Filter "*.json" -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($null -ne $backtestJson) {
+            $reportPath = Join-Path $resultPath "quant-report.md"
+            $pythonExe = if (Test-Path "$repositoryRoot/.venv/Scripts/python.exe") { "$repositoryRoot/.venv/Scripts/python.exe" } else { "python" }
+            & $pythonExe $analyzerScript $backtestJson.FullName -o $reportPath
+            Write-Host "[+] [$Strategy] 퀀트 리포트 저장 완료: $reportPath"
+        } else {
+            Write-Host "[!] 백테스트 결과 디렉터리에 JSON 파일이 없어 퀀트 분석을 건너뜁니다."
+        }
+    }
 }
 catch {
     if (Test-Path -LiteralPath $resultPath -PathType Container) {

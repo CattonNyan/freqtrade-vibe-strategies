@@ -441,7 +441,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     }
     $expectedParameters = switch ($scriptRelative) {
         "scripts/Get-MarketData.ps1" { @("Days", "Pairs", "Timeframes", "Erase") }
-        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee") }
+        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }
         "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
