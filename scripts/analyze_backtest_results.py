@@ -198,6 +198,55 @@ def calculate_exit_reason_breakdown(trades: list[dict[str, Any]]) -> dict[str, d
     return breakdown
 
 
+def calculate_pair_performance_breakdown(trades: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Group trade performance metrics by trading pair."""
+    if not trades:
+        return {}
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for t in trades:
+        pair = t.get("pair") or "Unknown"
+        groups.setdefault(str(pair), []).append(t)
+
+    breakdown = {}
+    for pair, t_list in sorted(groups.items()):
+        wins = []
+        losses = []
+        durations = []
+        profits = []
+        for t in t_list:
+            p = float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = float(t.get("trade_duration", t.get("duration", 0.0)))
+            profits.append(p)
+            durations.append(dur)
+            if p > 1e-6:
+                wins.append(p * 100.0)
+            elif p < -1e-6:
+                losses.append(abs(p * 100.0))
+
+        count = len(t_list)
+        win_count = len(wins)
+        loss_count = len(losses)
+        win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
+        total_profit_pct = sum(profits) * 100.0
+        avg_profit_pct = (total_profit_pct / count) if count > 0 else 0.0
+        avg_dur = (sum(durations) / count) if count > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+
+        breakdown[pair] = {
+            "trades": count,
+            "wins": win_count,
+            "losses": loss_count,
+            "win_rate_pct": round(win_rate, 2),
+            "total_profit_pct": round(total_profit_pct, 2),
+            "avg_profit_pct": round(avg_profit_pct, 2),
+            "avg_duration_min": round(avg_dur, 1),
+            "profit_factor": round(pf, 2),
+        }
+
+    return breakdown
+
+
 def parse_freqtrade_backtest_json(json_data: dict[str, Any]) -> dict[str, Any]:
     """Parse strategy results dictionary from Freqtrade backtest JSON."""
     strategy_results = {}
@@ -213,12 +262,14 @@ def parse_freqtrade_backtest_json(json_data: dict[str, Any]) -> dict[str, Any]:
         dd_metrics = calculate_ulcer_and_drawdown_metrics(profit_ratios)
         trade_metrics = calculate_trade_expectancy(trades)
         exit_breakdown = calculate_exit_reason_breakdown(trades)
+        pair_breakdown = calculate_pair_performance_breakdown(trades)
 
         combined = {
             "strategy": strat_name,
             **trade_metrics,
             **dd_metrics,
             "exit_reasons": exit_breakdown,
+            "pair_performance": pair_breakdown,
         }
         strategy_results[strat_name] = combined
 
@@ -257,12 +308,28 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{s['profit_factor']:.2f} | {s['avg_duration_min']:.1f}분 |"
                 )
 
+    # Detailed pair performance tables
+    for name, data in analysis_results.items():
+        pairs = data.get("pair_performance", {})
+        if pairs:
+            lines.append("")
+            lines.append(f"### 🪙 전략 `{name}` 거래 페어별 성과 비교")
+            lines.append("| 거래 페어 | 거래수 | 승률 | 총 수익률 | 평균 수익률 | 손익비(P.F.) | 평균 보유시간 |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for pair, s in pairs.items():
+                lines.append(
+                    f"| `{pair}` | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                    f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
+                    f"{s['profit_factor']:.2f} | {s['avg_duration_min']:.1f}분 |"
+                )
+
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
     lines.append("- **궤양지수 (Ulcer Index, Peter Martin 1987)**: 고점 대비 하락폭(Drawdown)의 제곱평균제곱근(RMS). 단순 변동성과 달리 상승 변동성은 처벌하지 않고 깊고 긴 하락장만을 집중 가중 처벌합니다.")
     lines.append("- **마틴 비율 (Martin Ratio / UPI)**: 총 수익률을 궤양지수로 나눈 값으로, 샤프 지수보다 추세추종 전략의 실질 하방 위험 대비 성과를 정확하게 평가합니다.")
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
+    lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
     return "\n".join(lines)
 
 

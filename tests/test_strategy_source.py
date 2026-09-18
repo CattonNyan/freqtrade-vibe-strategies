@@ -1037,6 +1037,7 @@ class StrategySourceTests(unittest.TestCase):
     def test_backtest_quant_analyzer(self) -> None:
         from scripts.analyze_backtest_results import (
             calculate_exit_reason_breakdown,
+            calculate_pair_performance_breakdown,
             calculate_trade_expectancy,
             calculate_ulcer_and_drawdown_metrics,
             generate_markdown_report,
@@ -1055,9 +1056,9 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("pain_index", metrics)
 
         trades = [
-            {"profit_ratio": 0.05, "duration": 30, "exit_tag": "rsi_overbought"},
-            {"profit_ratio": -0.02, "duration": 45, "exit_tag": "stop_loss"},
-            {"profit_ratio": 0.03, "duration": 20, "exit_reason": "roi"},
+            {"pair": "BTC/USDT", "profit_ratio": 0.05, "duration": 30, "exit_tag": "rsi_overbought"},
+            {"pair": "ETH/USDT", "profit_ratio": -0.02, "duration": 45, "exit_tag": "stop_loss"},
+            {"pair": "BTC/USDT", "profit_ratio": 0.03, "duration": 20, "exit_reason": "roi"},
         ]
         t_res = calculate_trade_expectancy(trades)
         self.assertEqual(t_res["total_trades"], 3)
@@ -1078,6 +1079,19 @@ class StrategySourceTests(unittest.TestCase):
         empty_exits = calculate_exit_reason_breakdown([])
         self.assertEqual(empty_exits, {})
 
+        pair_res = calculate_pair_performance_breakdown(trades)
+        self.assertIn("BTC/USDT", pair_res)
+        self.assertIn("ETH/USDT", pair_res)
+        self.assertEqual(pair_res["BTC/USDT"]["trades"], 2)
+        self.assertEqual(pair_res["BTC/USDT"]["wins"], 2)
+        self.assertEqual(pair_res["BTC/USDT"]["losses"], 0)
+        self.assertAlmostEqual(pair_res["BTC/USDT"]["win_rate_pct"], 100.0)
+        self.assertEqual(pair_res["ETH/USDT"]["trades"], 1)
+        self.assertEqual(pair_res["ETH/USDT"]["losses"], 1)
+
+        empty_pairs = calculate_pair_performance_breakdown([])
+        self.assertEqual(empty_pairs, {})
+
         mock_json = {
             "strategy": {
                 "KoreanStarterStrategy": {
@@ -1088,11 +1102,14 @@ class StrategySourceTests(unittest.TestCase):
         parsed = parse_freqtrade_backtest_json(mock_json)
         self.assertIn("KoreanStarterStrategy", parsed)
         self.assertIn("exit_reasons", parsed["KoreanStarterStrategy"])
+        self.assertIn("pair_performance", parsed["KoreanStarterStrategy"])
         md = generate_markdown_report(parsed)
         self.assertIn("KoreanStarterStrategy", md)
         self.assertIn("Ulcer Index", md)
         self.assertIn("rsi_overbought", md)
         self.assertIn("stop_loss", md)
+        self.assertIn("BTC/USDT", md)
+        self.assertIn("ETH/USDT", md)
 
     def test_stoploss_and_trailing_stop_integrity(self) -> None:
         for filename, class_name in STRATEGIES.items():
