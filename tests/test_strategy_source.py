@@ -1126,6 +1126,18 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn('dataframe["enter_tag"]', content)
                 self.assertIn('dataframe["exit_tag"]', content)
 
+    def test_summarize_strategy_configs(self) -> None:
+        from scripts.summarize_strategy_configs import format_config_table, get_strategy_configs
+        configs = get_strategy_configs()
+        self.assertEqual(len(configs), 3)
+        strat_classes = {c["class"] for c in configs}
+        self.assertEqual(strat_classes, {"VibeRsiStrategy", "KoreanStarterStrategy", "MultiTimeframeAtrStrategy"})
+        table_output = format_config_table(configs)
+        self.assertIn("Strategy Class", table_output)
+        self.assertIn("VibeRsiStrategy", table_output)
+        self.assertIn("KoreanStarterStrategy", table_output)
+        self.assertIn("MultiTimeframeAtrStrategy", table_output)
+
 
 if __name__ == "__main__":
     unittest.main()

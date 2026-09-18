@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     저장소의 빠른 정적 검사와 PowerShell 동작 테스트를 한 번에 실행합니다.
 
@@ -6,11 +6,19 @@
     전략 소스 unittest, 전체 PowerShell 스크립트 구문 검사, 공통 런타임 동작 테스트를
     순서대로 실행하며 하나라도 실패하면 0이 아닌 종료 상태로 중단합니다.
 
+.PARAMETER DetailedReport
+    전략 클래스들의 주요 설정 파라미터(타임프레임, 시작 캔들, 손절 비율, 트레일링 스탑) 요약표를 출력합니다.
+
 .EXAMPLE
     .\scripts\Invoke-Checks.ps1
+
+.EXAMPLE
+    .\scripts\Invoke-Checks.ps1 -DetailedReport
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$DetailedReport
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -70,6 +78,11 @@ try {
     & (Join-Path $repositoryRoot "tests/Test-PowerShellScripts.ps1")
     if ($LASTEXITCODE -ne 0) {
         throw "PowerShell 동작 테스트에 실패했습니다. (종료 코드: $LASTEXITCODE)"
+    }
+
+    if ($DetailedReport) {
+        Write-Host "`n[*] 전략 설정 요약 리포트 (Strategy Configuration Summary):" -ForegroundColor Cyan
+        & $pythonExecutable (Join-Path $repositoryRoot "scripts/summarize_strategy_configs.py")
     }
 }
 finally {

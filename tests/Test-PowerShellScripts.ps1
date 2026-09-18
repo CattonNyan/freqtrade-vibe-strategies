@@ -445,6 +445,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }
         "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
+        "scripts/Invoke-Checks.ps1" { @("DetailedReport") }
         default { @() }
     }
     foreach ($paramName in $expectedParameters) {
