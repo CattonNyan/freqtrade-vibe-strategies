@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Freqtrade Vibe Strategies의 PowerShell 스크립트 동작 및 안전 가드를 검증합니다.
 
@@ -68,6 +68,24 @@ catch {
 }
 if (-not $caughtMessage -or $caughtMessage -notmatch "YYYYMMDD-YYYYMMDD") {
     throw "A malformed timerange did not produce the expected format error: $caughtMessage"
+}
+
+if ((Convert-TimeframeToMinutes -Timeframe "5m") -ne 5) {
+    throw "Convert-TimeframeToMinutes failed for 5m."
+}
+if ((Convert-TimeframeToMinutes -Timeframe "1h") -ne 60) {
+    throw "Convert-TimeframeToMinutes failed for 1h."
+}
+Assert-InformativeTimeframeCompatible -BaseTimeframe "5m" -InformativeTimeframe "1h"
+$caughtInfoMessage = $null
+try {
+    Assert-InformativeTimeframeCompatible -BaseTimeframe "1h" -InformativeTimeframe "5m"
+}
+catch {
+    $caughtInfoMessage = $_.Exception.Message
+}
+if (-not $caughtInfoMessage -or $caughtInfoMessage -notmatch "Informative timeframe") {
+    throw "Assert-InformativeTimeframeCompatible did not reject an incompatible timeframe."
 }
 
 $caughtMessage = $null

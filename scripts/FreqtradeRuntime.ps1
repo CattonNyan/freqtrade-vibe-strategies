@@ -44,6 +44,54 @@ function Assert-ValidTimerange {
     }
 }
 
+function Convert-TimeframeToMinutes {
+    <#
+    .SYNOPSIS
+        Freqtrade 타임프레임 문자열을 분(Minutes) 단위 정수로 변환합니다.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidatePattern("^\d+[mhdwM]$")]
+        [string]$Timeframe
+    )
+
+    if ($Timeframe -match "^(?<val>\d+)(?<unit>[mhdwM])$") {
+        $val = [int]$Matches["val"]
+        $unit = $Matches["unit"]
+        switch ($unit) {
+            "m" { return $val }
+            "h" { return $val * 60 }
+            "d" { return $val * 1440 }
+            "w" { return $val * 10080 }
+            "M" { return $val * 43200 }
+        }
+    }
+    throw "지원하지 않는 타임프레임 형식입니다: $Timeframe"
+}
+
+function Assert-InformativeTimeframeCompatible {
+    <#
+    .SYNOPSIS
+        상위 인포머티브 타임프레임이 기본 전략 타임프레임보다 크거나 같은지 검증합니다.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$BaseTimeframe,
+
+        [Parameter(Mandatory)]
+        [string]$InformativeTimeframe
+    )
+
+    $baseMin = Convert-TimeframeToMinutes -Timeframe $BaseTimeframe
+    $infoMin = Convert-TimeframeToMinutes -Timeframe $InformativeTimeframe
+
+    if ($infoMin -lt $baseMin) {
+        throw "Informative timeframe ($InformativeTimeframe) cannot be shorter than base timeframe ($BaseTimeframe)."
+    }
+}
+
 function Get-PairSlug {
     <#
     .SYNOPSIS
