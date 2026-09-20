@@ -1132,6 +1132,8 @@ class StrategySourceTests(unittest.TestCase):
         md = generate_markdown_report(parsed)
         self.assertIn("KoreanStarterStrategy", md)
         self.assertIn("Ulcer Index", md)
+        self.assertIn("최대 연승/연패", md)
+        self.assertIn("1승/1패", md)
         self.assertIn("rsi_overbought", md)
         self.assertIn("stop_loss", md)
         self.assertIn("BTC/USDT", md)
