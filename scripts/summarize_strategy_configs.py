@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
+import json
 from pathlib import Path
 
 
@@ -68,9 +70,23 @@ def format_config_table(configs: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def export_strategy_configs_json(configs: list[dict[str, object]], indent: int = 2) -> str:
+    """Serialize strategy configuration list into formatted JSON string."""
+    return json.dumps(configs, indent=indent, ensure_ascii=False)
+
+
 def main():
-    configs = get_strategy_configs()
-    print(format_config_table(configs))
+    parser = argparse.ArgumentParser(description="Summarize strategy configurations.")
+    parser.add_argument("--dir", type=str, default=None, help="Custom strategies directory path")
+    parser.add_argument("--json", action="store_true", help="Output configurations as JSON")
+    args = parser.parse_args()
+
+    strategies_dir = Path(args.dir) if args.dir else None
+    configs = get_strategy_configs(strategies_dir)
+    if args.json:
+        print(export_strategy_configs_json(configs))
+    else:
+        print(format_config_table(configs))
 
 
 if __name__ == "__main__":

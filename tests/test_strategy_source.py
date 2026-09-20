@@ -1157,7 +1157,7 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn('dataframe["exit_tag"]', content)
 
     def test_summarize_strategy_configs(self) -> None:
-        from scripts.summarize_strategy_configs import format_config_table, get_strategy_configs
+        from scripts.summarize_strategy_configs import export_strategy_configs_json, format_config_table, get_strategy_configs
         configs = get_strategy_configs()
         self.assertEqual(len(configs), 3)
         strat_classes = {c["class"] for c in configs}
@@ -1167,6 +1167,11 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("VibeRsiStrategy", table_output)
         self.assertIn("KoreanStarterStrategy", table_output)
         self.assertIn("MultiTimeframeAtrStrategy", table_output)
+
+        json_output = export_strategy_configs_json(configs)
+        self.assertIn('"class": "VibeRsiStrategy"', json_output)
+        parsed_json = json.loads(json_output)
+        self.assertEqual(len(parsed_json), 3)
 
 
 if __name__ == "__main__":
