@@ -1064,8 +1064,21 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(t_res["total_trades"], 3)
         self.assertEqual(t_res["wins"], 2)
         self.assertEqual(t_res["losses"], 1)
+        self.assertEqual(t_res["max_consecutive_wins"], 1)
+        self.assertEqual(t_res["max_consecutive_losses"], 1)
         self.assertGreater(t_res["profit_factor"], 1.0)
         self.assertGreater(t_res["expectancy_pct"], 0.0)
+
+        streak_trades = [
+            {"profit_ratio": 0.01},
+            {"profit_ratio": 0.02},
+            {"profit_ratio": 0.03},
+            {"profit_ratio": -0.01},
+            {"profit_ratio": -0.02},
+        ]
+        s_res = calculate_trade_expectancy(streak_trades)
+        self.assertEqual(s_res["max_consecutive_wins"], 3)
+        self.assertEqual(s_res["max_consecutive_losses"], 2)
 
         ex_res = calculate_exit_reason_breakdown(trades)
         self.assertIn("rsi_overbought", ex_res)

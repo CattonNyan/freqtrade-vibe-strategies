@@ -92,12 +92,18 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "avg_loss_pct": 0.0,
             "win_loss_ratio": 0.0,
             "avg_duration_min": 0.0,
+            "max_consecutive_wins": 0,
+            "max_consecutive_losses": 0,
         }
 
     wins = []
     losses = []
     draws = 0
     durations = []
+    curr_win_streak = 0
+    curr_loss_streak = 0
+    max_win_streak = 0
+    max_loss_streak = 0
 
     for t in trades:
         # Freqtrade trade profit percentage is typically in 'profit_ratio' (0.05 = 5%)
@@ -107,10 +113,20 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
 
         if profit > 1e-6:
             wins.append(profit * 100.0)
+            curr_win_streak += 1
+            curr_loss_streak = 0
+            if curr_win_streak > max_win_streak:
+                max_win_streak = curr_win_streak
         elif profit < -1e-6:
             losses.append(abs(profit * 100.0))
+            curr_loss_streak += 1
+            curr_win_streak = 0
+            if curr_loss_streak > max_loss_streak:
+                max_loss_streak = curr_loss_streak
         else:
             draws += 1
+            curr_win_streak = 0
+            curr_loss_streak = 0
 
     total_trades = len(trades)
     win_count = len(wins)
@@ -144,6 +160,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_loss_pct": round(avg_loss, 2),
         "win_loss_ratio": round(win_loss_ratio, 2),
         "avg_duration_min": round(avg_duration, 1),
+        "max_consecutive_wins": max_win_streak,
+        "max_consecutive_losses": max_loss_streak,
     }
 
 
@@ -281,13 +299,16 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 손익비(P.F.) | 기대값(Trade Exp.) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 마틴 비율(UPI) | 칼마 비율 |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 마틴 비율(UPI) | 칼마 비율 |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
+        max_cw = data.get("max_consecutive_wins", 0)
+        max_cl = data.get("max_consecutive_losses", 0)
+        streak_str = f"{max_cw}승/{max_cl}패"
         lines.append(
-            f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | "
+            f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
             f"{data['profit_factor']:.2f} | {data['expectancy_pct']:+.3f}% | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
             f"{data['martin_ratio']:.2f} | {data['calmar_ratio']:.2f} |"
