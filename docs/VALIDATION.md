@@ -110,11 +110,18 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 | **손익비 (Profit Factor)** | $\frac{\sum \text{Gains}}{\sum \text{Losses}}$ | > 1.5 이상 권장 |
 | **청산 사유별 분석 (Exit Breakdown)** | 청산 태그(`exit_tag`/`exit_reason`)별 승률, P.F., 평균 보유시간 | 손절 태그 누적 손실 과다 시 진입 조건 재검토 |
 | **페어별 성과 비교 (Pair Breakdown)** | 거래 페어(`pair`)별 거래수, 승률, 누적 손익, 손익비 | 전략에 부적합하거나 손실이 편중된 자산 식별 및 화이트리스트 조정 |
+| **최대 연승/연패 (Streak Metrics)** | $\max(\text{Consecutive Wins}), \max(\text{Consecutive Losses})$ | 연패 구간 자금 관리 및 최대 연속 손실 감내 수준 평가 |
 
 또한 정적 검사 시 `-DetailedReport` 스위치를 사용하여 전략별 핵심 파라미터 매트릭스를 즉시 확인할 수 있습니다:
 
 ```powershell
 .\scripts\Invoke-Checks.ps1 -DetailedReport
+```
+
+전략 설정 요약 스크립트는 자동화 파이프라인 연동을 위한 JSON 출력도 지원합니다:
+
+```powershell
+python .\scripts\summarize_strategy_configs.py --json
 ```
 
 거래량 기준 변경 전 비교 기준은 커밋 `0f18e4f`이고, 직전 20개 완료 봉을 사용하는 변경은 `2192db6`입니다. 동일 설정·데이터·기간에서 두 커밋을 비교해야 합니다.
