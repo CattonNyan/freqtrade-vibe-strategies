@@ -1080,6 +1080,16 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(s_res["max_consecutive_wins"], 3)
         self.assertEqual(s_res["max_consecutive_losses"], 2)
 
+        edge_trades = [
+            {"pair": "BTC/USDT", "profit_ratio": float("nan"), "duration": 10},
+            {"pair": "BTC/USDT", "profit_ratio": 0.0, "duration": 15},
+        ]
+        edge_res = calculate_trade_expectancy(edge_trades)
+        self.assertEqual(edge_res["total_trades"], 2)
+        self.assertEqual(edge_res["draws"], 2)
+        self.assertEqual(edge_res["wins"], 0)
+        self.assertEqual(edge_res["losses"], 0)
+
         ex_res = calculate_exit_reason_breakdown(trades)
         self.assertIn("rsi_overbought", ex_res)
         self.assertIn("stop_loss", ex_res)

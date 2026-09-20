@@ -17,12 +17,22 @@ from pathlib import Path
 from typing import Any
 
 
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely convert value to float, replacing NaN, Inf, or invalid types with default."""
+    try:
+        f = float(val)
+        return default if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return default
+
+
 def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str, float]:
     """Calculate cumulative equity curve, max drawdown, Ulcer Index, and Pain Index from trade profit percentages.
 
     trade_profits: list of profit fractions (e.g. 0.03 for +3%, -0.015 for -1.5%).
     """
-    if not trade_profits:
+    clean_profits = [_safe_float(p) for p in trade_profits] if trade_profits else []
+    if not clean_profits:
         return {
             "total_return_pct": 0.0,
             "max_drawdown_pct": 0.0,
@@ -35,7 +45,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
 
     # Reconstruct equity curve (starting at 1.0)
     equity = [1.0]
-    for p in trade_profits:
+    for p in clean_profits:
         equity.append(equity[-1] * (1.0 + p))
 
     # Calculate drawdowns
@@ -107,8 +117,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
 
     for t in trades:
         # Freqtrade trade profit percentage is typically in 'profit_ratio' (0.05 = 5%)
-        profit = float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-        duration_min = float(t.get("trade_duration", t.get("duration", 0.0)))
+        profit = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        duration_min = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
         durations.append(duration_min)
 
         if profit > 1e-6:
@@ -184,8 +194,8 @@ def calculate_exit_reason_breakdown(trades: list[dict[str, Any]]) -> dict[str, d
         durations = []
         profits = []
         for t in t_list:
-            p = float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = float(t.get("trade_duration", t.get("duration", 0.0)))
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -233,8 +243,8 @@ def calculate_pair_performance_breakdown(trades: list[dict[str, Any]]) -> dict[s
         durations = []
         profits = []
         for t in t_list:
-            p = float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = float(t.get("trade_duration", t.get("duration", 0.0)))
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
