@@ -1115,6 +1115,9 @@ class StrategySourceTests(unittest.TestCase):
         empty_pairs = calculate_pair_performance_breakdown([])
         self.assertEqual(empty_pairs, {})
 
+        sorted_pairs = calculate_pair_performance_breakdown(trades, sort_by="trades")
+        self.assertEqual(list(sorted_pairs.keys())[0], "BTC/USDT")
+
         mock_json = {
             "strategy": {
                 "KoreanStarterStrategy": {

@@ -175,7 +175,10 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def calculate_exit_reason_breakdown(trades: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def calculate_exit_reason_breakdown(
+    trades: list[dict[str, Any]],
+    sort_by: str | None = None,
+) -> dict[str, dict[str, Any]]:
     """Group trade performance metrics by exit reason and custom exit tag."""
     if not trades:
         return {}
@@ -223,10 +226,16 @@ def calculate_exit_reason_breakdown(trades: list[dict[str, Any]]) -> dict[str, d
             "profit_factor": round(pf, 2),
         }
 
+    if sort_by and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(sort_by, 0), reverse=True))
+
     return breakdown
 
 
-def calculate_pair_performance_breakdown(trades: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def calculate_pair_performance_breakdown(
+    trades: list[dict[str, Any]],
+    sort_by: str | None = None,
+) -> dict[str, dict[str, Any]]:
     """Group trade performance metrics by trading pair."""
     if not trades:
         return {}
@@ -271,6 +280,9 @@ def calculate_pair_performance_breakdown(trades: list[dict[str, Any]]) -> dict[s
             "avg_duration_min": round(avg_dur, 1),
             "profit_factor": round(pf, 2),
         }
+
+    if sort_by and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(sort_by, 0), reverse=True))
 
     return breakdown
 
