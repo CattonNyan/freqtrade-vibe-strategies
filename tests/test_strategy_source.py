@@ -1066,6 +1066,9 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(t_res["losses"], 1)
         self.assertEqual(t_res["max_consecutive_wins"], 1)
         self.assertEqual(t_res["max_consecutive_losses"], 1)
+        self.assertAlmostEqual(t_res["avg_win_duration_min"], 25.0)
+        self.assertAlmostEqual(t_res["avg_loss_duration_min"], 45.0)
+        self.assertAlmostEqual(t_res["win_loss_duration_ratio"], 0.56)
         self.assertGreater(t_res["profit_factor"], 1.0)
         self.assertGreater(t_res["expectancy_pct"], 0.0)
 

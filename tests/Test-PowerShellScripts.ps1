@@ -88,6 +88,19 @@ if (-not $caughtInfoMessage -or $caughtInfoMessage -notmatch "Informative timefr
     throw "Assert-InformativeTimeframeCompatible did not reject an incompatible timeframe."
 }
 
+if ((Format-TimeframeFromMinutes -Minutes 5) -ne "5m") {
+    throw "Format-TimeframeFromMinutes failed for 5m."
+}
+if ((Format-TimeframeFromMinutes -Minutes 60) -ne "1h") {
+    throw "Format-TimeframeFromMinutes failed for 1h."
+}
+if ((Format-TimeframeFromMinutes -Minutes 1440) -ne "1d") {
+    throw "Format-TimeframeFromMinutes failed for 1d."
+}
+if ((Format-TimeframeFromMinutes -Minutes 240) -ne "4h") {
+    throw "Format-TimeframeFromMinutes failed for 4h."
+}
+
 $caughtMessage = $null
 try {
     Assert-ValidTimerange -Timerange "20250230-20250301"
