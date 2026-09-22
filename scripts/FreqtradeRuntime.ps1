@@ -44,6 +44,27 @@ function Assert-ValidTimerange {
     }
 }
 
+function Get-TimerangeDays {
+    <#
+    .SYNOPSIS
+        YYYYMMDD-YYYYMMDD 형식의 기간 문자열에서 총 일(Days) 수를 계산합니다.
+    .PARAMETER Timerange
+        검증할 기간 문자열 (예: 20250101-20260101).
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Timerange
+    )
+
+    Assert-ValidTimerange -Timerange $Timerange
+    $parts = $Timerange -split "-", 2
+    $startDate = [datetime]::ParseExact($parts[0], "yyyyMMdd", [Globalization.CultureInfo]::InvariantCulture)
+    $endDate = [datetime]::ParseExact($parts[1], "yyyyMMdd", [Globalization.CultureInfo]::InvariantCulture)
+    return [int]($endDate - $startDate).TotalDays
+}
+
 function Convert-TimeframeToMinutes {
     <#
     .SYNOPSIS
