@@ -169,7 +169,7 @@ if ($AdvancedQuantMetrics) {
     Write-Host "[*] 퀀트 심층 하방 리스크 분석(Ulcer Index & Expectancy) 리포트 생성 중..."
     $analyzerScript = Join-Path $PSScriptRoot "analyze_backtest_results.py"
     $resultsDir = Join-Path $repositoryRoot "user_data/backtest_results"
-    $latestJson = Get-ChildItem -Path $resultsDir -Filter "*.json" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $latestJson = Get-ChildItem -Path $resultsDir -Filter "*.json" -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($null -ne $latestJson) {
         $reportPath = Join-Path $resultsDir "quant-analysis-$Timerange.md"
         $pythonExe = if (Test-Path "$repositoryRoot/.venv/Scripts/python.exe") { "$repositoryRoot/.venv/Scripts/python.exe" } else { "python" }
