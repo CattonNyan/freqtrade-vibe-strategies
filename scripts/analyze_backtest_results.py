@@ -102,12 +102,17 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "avg_loss_pct": 0.0,
             "win_loss_ratio": 0.0,
             "avg_duration_min": 0.0,
+            "avg_win_duration_min": 0.0,
+            "avg_loss_duration_min": 0.0,
+            "win_loss_duration_ratio": 0.0,
             "max_consecutive_wins": 0,
             "max_consecutive_losses": 0,
         }
 
     wins = []
     losses = []
+    win_durations = []
+    loss_durations = []
     draws = 0
     durations = []
     curr_win_streak = 0
@@ -123,12 +128,14 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
 
         if profit > 1e-6:
             wins.append(profit * 100.0)
+            win_durations.append(duration_min)
             curr_win_streak += 1
             curr_loss_streak = 0
             if curr_win_streak > max_win_streak:
                 max_win_streak = curr_win_streak
         elif profit < -1e-6:
             losses.append(abs(profit * 100.0))
+            loss_durations.append(duration_min)
             curr_loss_streak += 1
             curr_win_streak = 0
             if curr_loss_streak > max_loss_streak:
@@ -157,6 +164,9 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     expectancy = (p_win * avg_win) - (p_loss * avg_loss)
 
     avg_duration = sum(durations) / len(durations) if durations else 0.0
+    avg_win_dur = (sum(win_durations) / len(win_durations)) if win_durations else 0.0
+    avg_loss_dur = (sum(loss_durations) / len(loss_durations)) if loss_durations else 0.0
+    win_loss_dur_ratio = (avg_win_dur / avg_loss_dur) if avg_loss_dur > 0 else (999.0 if avg_win_dur > 0 else 0.0)
 
     return {
         "total_trades": total_trades,
@@ -170,6 +180,9 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_loss_pct": round(avg_loss, 2),
         "win_loss_ratio": round(win_loss_ratio, 2),
         "avg_duration_min": round(avg_duration, 1),
+        "avg_win_duration_min": round(avg_win_dur, 1),
+        "avg_loss_duration_min": round(avg_loss_dur, 1),
+        "win_loss_duration_ratio": round(win_loss_dur_ratio, 2),
         "max_consecutive_wins": max_win_streak,
         "max_consecutive_losses": max_loss_streak,
     }
@@ -373,6 +386,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
     lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
+    lines.append("- **보유시간 비대칭도 (Win/Loss Duration Ratio)**: 수익 거래 평균 보유시간 / 손실 거래 평균 보유시간. 1.0 이상이면 손실을 빠르게 끊고 이익을 길게 가져가는(Let winners run, cut losers) 바람직한 추세추종 특성을 나타냅니다.")
     return "\n".join(lines)
 
 
