@@ -1055,11 +1055,15 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("martin_ratio", metrics)
         self.assertIn("pain_index", metrics)
         self.assertIn("recovery_factor", metrics)
+        self.assertIn("sortino_ratio", metrics)
+        self.assertIn("downside_deviation_pct", metrics)
+        self.assertGreater(metrics["downside_deviation_pct"], 0.0)
         self.assertIn("max_drawdown_duration_trades", metrics)
         self.assertIsInstance(metrics["max_drawdown_duration_trades"], int)
 
         empty_metrics = calculate_ulcer_and_drawdown_metrics([])
         self.assertEqual(empty_metrics["recovery_factor"], 0.0)
+        self.assertEqual(empty_metrics["sortino_ratio"], 0.0)
         self.assertEqual(empty_metrics["max_drawdown_duration_trades"], 0)
 
         trades = [
@@ -1078,6 +1082,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertAlmostEqual(t_res["win_loss_duration_ratio"], 0.56)
         self.assertGreater(t_res["profit_factor"], 1.0)
         self.assertGreater(t_res["expectancy_pct"], 0.0)
+        self.assertAlmostEqual(t_res["full_kelly_pct"], 50.0)
+        self.assertAlmostEqual(t_res["half_kelly_pct"], 25.0)
 
         streak_trades = [
             {"profit_ratio": 0.01},
@@ -1099,6 +1105,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(edge_res["draws"], 2)
         self.assertEqual(edge_res["wins"], 0)
         self.assertEqual(edge_res["losses"], 0)
+        self.assertEqual(edge_res["full_kelly_pct"], 0.0)
 
         ex_res = calculate_exit_reason_breakdown(trades)
         self.assertIn("rsi_overbought", ex_res)
@@ -1125,8 +1132,15 @@ class StrategySourceTests(unittest.TestCase):
         empty_pairs = calculate_pair_performance_breakdown([])
         self.assertEqual(empty_pairs, {})
 
+        # Test min_trades filter
+        filtered_pairs = calculate_pair_performance_breakdown(trades, min_trades=2)
+        self.assertIn("BTC/USDT", filtered_pairs)
+        self.assertNotIn("ETH/USDT", filtered_pairs)
+
         sorted_pairs = calculate_pair_performance_breakdown(trades, sort_by="trades")
         self.assertEqual(list(sorted_pairs.keys())[0], "BTC/USDT")
+        sorted_pairs_profit = calculate_pair_performance_breakdown(trades, sort_by="profit")
+        self.assertEqual(list(sorted_pairs_profit.keys())[0], "BTC/USDT")
 
         mock_json = {
             "strategy": {
@@ -1135,13 +1149,17 @@ class StrategySourceTests(unittest.TestCase):
                 }
             }
         }
-        parsed = parse_freqtrade_backtest_json(mock_json)
+        parsed = parse_freqtrade_backtest_json(mock_json, sort_by="profit", min_trades=1)
         self.assertIn("KoreanStarterStrategy", parsed)
         self.assertIn("exit_reasons", parsed["KoreanStarterStrategy"])
         self.assertIn("pair_performance", parsed["KoreanStarterStrategy"])
+        self.assertIn("full_kelly_pct", parsed["KoreanStarterStrategy"])
+        self.assertIn("sortino_ratio", parsed["KoreanStarterStrategy"])
         md = generate_markdown_report(parsed)
         self.assertIn("KoreanStarterStrategy", md)
         self.assertIn("Ulcer Index", md)
+        self.assertIn("소르티노 비율", md)
+        self.assertIn("켈리 비율", md)
         self.assertIn("최대 연승/연패", md)
         self.assertIn("1승/1패", md)
         self.assertIn("rsi_overbought", md)

@@ -42,6 +42,8 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "pain_ratio": 0.0,
             "calmar_ratio": 0.0,
             "recovery_factor": 0.0,
+            "downside_deviation_pct": 0.0,
+            "sortino_ratio": 0.0,
             "max_drawdown_duration_trades": 0,
         }
 
