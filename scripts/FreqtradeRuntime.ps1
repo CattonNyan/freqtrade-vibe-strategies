@@ -137,6 +137,30 @@ function Get-PairSlug {
     return ($normalized | ForEach-Object { $_ -replace '[/ :.@$+]', '-' }) -join "_"
 }
 
+function Test-FreqtradePair {
+    <#
+    .SYNOPSIS
+        문자열이 유효한 Freqtrade 거래 페어 형식인지 확인합니다.
+    .DESCRIPTION
+        표준 현물 페어(BASE/QUOTE, 예: BTC/USDT) 및 선물/마진 페어(BASE/QUOTE:SETTLE, 예: BTC/USDT:USDT)
+        형식을 정규식으로 검증하여 True 또는 False를 반환합니다.
+    .PARAMETER Pair
+        검사할 페어 문자열.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Pair
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Pair)) {
+        return $false
+    }
+    return [bool]($Pair -match "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")
+}
+
 function Initialize-FreqtradeDirectory {
     [CmdletBinding()]
     param(
