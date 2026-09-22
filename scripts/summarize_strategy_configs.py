@@ -99,6 +99,59 @@ def format_config_markdown(configs: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
+def sort_strategy_configs(
+    configs: list[dict[str, object]],
+    sort_by: str = "class",
+    reverse: bool = False,
+) -> list[dict[str, object]]:
+    """Sort strategy configuration list by specified field."""
+    def _timeframe_to_minutes(tf: object) -> int:
+        s = str(tf).strip().lower()
+        if s.endswith("m"):
+            try:
+                return int(s[:-1])
+            except ValueError:
+                pass
+        elif s.endswith("h"):
+            try:
+                return int(s[:-1]) * 60
+            except ValueError:
+                pass
+        elif s.endswith("d"):
+            try:
+                return int(s[:-1]) * 1440
+            except ValueError:
+                pass
+        return 999999
+
+    def _sort_key(c: dict[str, object]):
+        if sort_by == "timeframe":
+            return _timeframe_to_minutes(c.get("timeframe", ""))
+        elif sort_by == "startup":
+            val = c.get("startup_candle_count", 0)
+            return int(val) if isinstance(val, (int, float)) else 0
+        elif sort_by == "stoploss":
+            val = c.get("stoploss", 0.0)
+            return float(val) if isinstance(val, (int, float)) else 0.0
+        return str(c.get("class", "")).lower()
+
+    return sorted(configs, key=_sort_key, reverse=reverse)
+
+
+def filter_strategy_configs(
+    configs: list[dict[str, object]],
+    has_trailing: bool | None = None,
+    custom_stoploss_only: bool = False,
+) -> list[dict[str, object]]:
+    """Filter strategy configuration list based on criteria."""
+    filtered = list(configs)
+    if has_trailing is not None:
+        filtered = [c for c in filtered if bool(c.get("trailing_stop")) == has_trailing]
+    if custom_stoploss_only:
+        filtered = [c for c in filtered if bool(c.get("use_custom_stoploss"))]
+    return filtered
+
+
 def export_strategy_configs_json(configs: list[dict[str, object]], indent: int = 2) -> str:
     """Serialize strategy configuration list into formatted JSON string."""
     return json.dumps(configs, indent=indent, ensure_ascii=False)
@@ -109,11 +162,29 @@ def main():
     parser.add_argument("--dir", type=str, default=None, help="Custom strategies directory path")
     parser.add_argument("--json", action="store_true", help="Output configurations as JSON")
     parser.add_argument("--markdown", "-m", action="store_true", help="Output configurations as Markdown table")
+    parser.add_argument(
+        "--sort-by",
+        choices=["class", "timeframe", "startup", "stoploss"],
+        default="class",
+        help="Field to sort strategies by (class, timeframe, startup, stoploss)",
+    )
+    parser.add_argument("--reverse", action="store_true", help="Sort in descending order")
+    parser.add_argument("--has-trailing", action="store_true", help="Show only strategies with trailing stop enabled")
+    parser.add_argument(
+        "--custom-stoploss-only", action="store_true", help="Show only strategies that define custom stoploss"
+    )
     parser.add_argument("--output", "-o", type=str, default=None, help="Path to write output report to")
     args = parser.parse_args()
 
     strategies_dir = Path(args.dir) if args.dir else None
     configs = get_strategy_configs(strategies_dir)
+
+    if args.has_trailing:
+        configs = filter_strategy_configs(configs, has_trailing=True)
+    if args.custom_stoploss_only:
+        configs = filter_strategy_configs(configs, custom_stoploss_only=True)
+
+    configs = sort_strategy_configs(configs, sort_by=args.sort_by, reverse=args.reverse)
 
     if args.json:
         output_text = export_strategy_configs_json(configs)
