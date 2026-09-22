@@ -237,19 +237,21 @@ class MultiTimeframeAtrStrategy(IStrategy):
         2. When profit >= 1.5%, move stoploss to break-even (+0.3% to cover fees).
         3. Below 1.5%, standard base stoploss applies.
         """
+        is_short = getattr(trade, "is_short", False)
+        leverage = getattr(trade, "leverage", 1.0)
         if current_profit >= 0.03:
             secured_profit = 0.015 + (current_profit - 0.03) * 0.5
             return stoploss_from_open(
                 secured_profit,
                 current_profit,
-                is_short=trade.is_short,
-                leverage=trade.leverage,
+                is_short=is_short,
+                leverage=leverage,
             )
         if current_profit >= 0.015:
             return stoploss_from_open(
                 0.003,
                 current_profit,
-                is_short=trade.is_short,
-                leverage=trade.leverage,
+                is_short=is_short,
+                leverage=leverage,
             )
         return None
