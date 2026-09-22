@@ -1054,6 +1054,13 @@ class StrategySourceTests(unittest.TestCase):
         self.assertGreater(metrics["max_drawdown_pct"], 0.0)
         self.assertIn("martin_ratio", metrics)
         self.assertIn("pain_index", metrics)
+        self.assertIn("recovery_factor", metrics)
+        self.assertIn("max_drawdown_duration_trades", metrics)
+        self.assertIsInstance(metrics["max_drawdown_duration_trades"], int)
+
+        empty_metrics = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty_metrics["recovery_factor"], 0.0)
+        self.assertEqual(empty_metrics["max_drawdown_duration_trades"], 0)
 
         trades = [
             {"pair": "BTC/USDT", "profit_ratio": 0.05, "duration": 30, "exit_tag": "rsi_overbought"},
@@ -1141,6 +1148,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("stop_loss", md)
         self.assertIn("BTC/USDT", md)
         self.assertIn("ETH/USDT", md)
+        self.assertIn("회복 계수", md)
+        self.assertIn("최대 침체", md)
 
     def test_stoploss_and_trailing_stop_integrity(self) -> None:
         for filename, class_name in STRATEGIES.items():

@@ -472,7 +472,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     }
     $expectedParameters = switch ($scriptRelative) {
         "scripts/Get-MarketData.ps1" { @("Days", "Pairs", "Timeframes", "Erase") }
-        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport") }
+        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }
         "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
@@ -485,6 +485,25 @@ foreach ($scriptRelative in $scriptsWithHelp) {
             throw "Script $scriptRelative is missing a .PARAMETER $paramName help block."
         }
     }
+}
+
+if (-not (Test-FreqtradePair -Pair "BTC/USDT")) {
+    throw "Test-FreqtradePair rejected valid spot pair BTC/USDT."
+}
+if (-not (Test-FreqtradePair -Pair "BTC/USDT:USDT")) {
+    throw "Test-FreqtradePair rejected valid futures pair BTC/USDT:USDT."
+}
+if (-not (Test-FreqtradePair -Pair "ETH/BTC")) {
+    throw "Test-FreqtradePair rejected valid crypto pair ETH/BTC."
+}
+if (Test-FreqtradePair -Pair "BTCUSDT") {
+    throw "Test-FreqtradePair accepted pair without slash: BTCUSDT."
+}
+if (Test-FreqtradePair -Pair "") {
+    throw "Test-FreqtradePair accepted empty string."
+}
+if (Test-FreqtradePair -Pair "   ") {
+    throw "Test-FreqtradePair accepted whitespace string."
 }
 
 $global:LASTEXITCODE = 0
