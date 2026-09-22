@@ -247,6 +247,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
 def calculate_exit_reason_breakdown(
     trades: list[dict[str, Any]],
     sort_by: str | None = None,
+    min_trades: int = 1,
 ) -> dict[str, dict[str, Any]]:
     """Group trade performance metrics by exit reason and custom exit tag."""
     if not trades:
@@ -261,6 +262,10 @@ def calculate_exit_reason_breakdown(
 
     breakdown = {}
     for tag, t_list in sorted(groups.items()):
+        count = len(t_list)
+        if count < min_trades:
+            continue
+
         wins = []
         losses = []
         durations = []
@@ -275,7 +280,6 @@ def calculate_exit_reason_breakdown(
             elif p < -1e-6:
                 losses.append(abs(p * 100.0))
 
-        count = len(t_list)
         win_count = len(wins)
         loss_count = len(losses)
         win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
@@ -295,8 +299,18 @@ def calculate_exit_reason_breakdown(
             "profit_factor": round(pf, 2),
         }
 
-    if sort_by and breakdown:
-        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(sort_by, 0), reverse=True))
+    sort_map = {
+        "trades": "trades",
+        "profit": "total_profit_pct",
+        "total_profit_pct": "total_profit_pct",
+        "win_rate": "win_rate_pct",
+        "win_rate_pct": "win_rate_pct",
+        "pf": "profit_factor",
+        "profit_factor": "profit_factor",
+    }
+    actual_sort = sort_map.get(sort_by, sort_by) if sort_by else None
+    if actual_sort and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(actual_sort, 0), reverse=True))
 
     return breakdown
 
@@ -304,6 +318,7 @@ def calculate_exit_reason_breakdown(
 def calculate_pair_performance_breakdown(
     trades: list[dict[str, Any]],
     sort_by: str | None = None,
+    min_trades: int = 1,
 ) -> dict[str, dict[str, Any]]:
     """Group trade performance metrics by trading pair."""
     if not trades:
@@ -316,6 +331,10 @@ def calculate_pair_performance_breakdown(
 
     breakdown = {}
     for pair, t_list in sorted(groups.items()):
+        count = len(t_list)
+        if count < min_trades:
+            continue
+
         wins = []
         losses = []
         durations = []
@@ -330,7 +349,6 @@ def calculate_pair_performance_breakdown(
             elif p < -1e-6:
                 losses.append(abs(p * 100.0))
 
-        count = len(t_list)
         win_count = len(wins)
         loss_count = len(losses)
         win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
@@ -350,13 +368,27 @@ def calculate_pair_performance_breakdown(
             "profit_factor": round(pf, 2),
         }
 
-    if sort_by and breakdown:
-        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(sort_by, 0), reverse=True))
+    sort_map = {
+        "trades": "trades",
+        "profit": "total_profit_pct",
+        "total_profit_pct": "total_profit_pct",
+        "win_rate": "win_rate_pct",
+        "win_rate_pct": "win_rate_pct",
+        "pf": "profit_factor",
+        "profit_factor": "profit_factor",
+    }
+    actual_sort = sort_map.get(sort_by, sort_by) if sort_by else None
+    if actual_sort and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(actual_sort, 0), reverse=True))
 
     return breakdown
 
 
-def parse_freqtrade_backtest_json(json_data: dict[str, Any]) -> dict[str, Any]:
+def parse_freqtrade_backtest_json(
+    json_data: dict[str, Any],
+    sort_by: str | None = None,
+    min_trades: int = 1,
+) -> dict[str, Any]:
     """Parse strategy results dictionary from Freqtrade backtest JSON."""
     strategy_results = {}
     strategy_dict = json_data.get("strategy", {})
@@ -370,8 +402,8 @@ def parse_freqtrade_backtest_json(json_data: dict[str, Any]) -> dict[str, Any]:
 
         dd_metrics = calculate_ulcer_and_drawdown_metrics(profit_ratios)
         trade_metrics = calculate_trade_expectancy(trades)
-        exit_breakdown = calculate_exit_reason_breakdown(trades)
-        pair_breakdown = calculate_pair_performance_breakdown(trades)
+        exit_breakdown = calculate_exit_reason_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
+        pair_breakdown = calculate_pair_performance_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
 
         combined = {
             "strategy": strat_name,
@@ -460,6 +492,19 @@ def main():
     parser.add_argument("file", type=str, help="Path to backtest-result.json file")
     parser.add_argument("--output", "-o", type=str, default=None, help="Optional output Markdown path")
     parser.add_argument("--json", "-j", type=str, default=None, help="Optional output JSON path for programmatic consumption")
+    parser.add_argument(
+        "--sort-by",
+        type=str,
+        default=None,
+        choices=["trades", "profit", "win_rate", "pf"],
+        help="Field to sort exit and pair breakdown tables by (trades, profit, win_rate, pf)",
+    )
+    parser.add_argument(
+        "--min-trades",
+        type=int,
+        default=1,
+        help="Minimum trade count threshold for exit reason and pair tables (default: 1)",
+    )
     args = parser.parse_args()
 
     file_path = Path(args.file)
@@ -469,7 +514,7 @@ def main():
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    results = parse_freqtrade_backtest_json(data)
+    results = parse_freqtrade_backtest_json(data, sort_by=args.sort_by, min_trades=args.min_trades)
     md_content = generate_markdown_report(results)
 
     if args.json:
