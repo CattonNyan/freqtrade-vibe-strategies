@@ -134,11 +134,17 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 .\scripts\Invoke-Checks.ps1 -DetailedReport
 ```
 
-전략 설정 요약 스크립트는 자동화 파이프라인 연동을 위한 JSON 출력도 지원합니다:
+전략 설정 요약 스크립트는 자동화 파이프라인 연동을 위한 JSON 출력 및 문서화용 Markdown 표 내보내기를 지원합니다:
 
 ```powershell
-python .\scripts\summarize_strategy_configs.py --json
+# 전략 설정 JSON 내보내기
+python .\scripts\summarize_strategy_configs.py --json -o .\reports\strategy_configs.json
+
+# 전략 설정 Markdown 표 내보내기
+python .\scripts\summarize_strategy_configs.py --markdown -o .\docs\strategy_summary.md
 ```
+
+또한 `Invoke-StrategyAnalysis.ps1 -AdvancedQuantMetrics` 실행 시 `Invoke-Backtest.ps1`이 생성한 하위 폴더(`user_data/backtest_results/*`) 내의 최신 백테스트 JSON 파일을 재귀적으로 자동 탐색하여 퀀트 심층 리포트를 생성합니다.
 
 거래량 기준 변경 전 비교 기준은 커밋 `0f18e4f`이고, 직전 20개 완료 봉을 사용하는 변경은 `2192db6`입니다. 동일 설정·데이터·기간에서 두 커밋을 비교해야 합니다.
 
