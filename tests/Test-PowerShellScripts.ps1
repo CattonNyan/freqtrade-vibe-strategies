@@ -367,6 +367,20 @@ if (-not $caughtMessage) {
     throw "A malformed hyperopt loss class name was not rejected."
 }
 
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-Hyperopt.ps1") `
+        -Strategy "VibeRsiStrategy" `
+        -Timerange "20250101-20260101" `
+        -MinTrades -1
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "A negative MinTrades value was not rejected."
+}
+
 $guardFile = Join-Path $repositoryRoot "user_data/test-output-guard-$PID.tmp"
 try {
     [IO.File]::WriteAllText($guardFile, "existing")
@@ -485,7 +499,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
         "scripts/Get-MarketData.ps1" { @("Days", "Timerange", "Pairs", "Timeframes", "Erase") }
         "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
-        "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }
+        "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "MinTrades", "Force") }
         "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
         "scripts/Invoke-Checks.ps1" { @("DetailedReport") }
         default { @() }

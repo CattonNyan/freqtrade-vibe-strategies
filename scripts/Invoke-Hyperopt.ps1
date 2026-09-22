@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Freqtrade 전략의 하이퍼옵트(Hyperopt) 파라미터 최적화를 자동화합니다.
 
@@ -30,6 +30,9 @@
 
 .PARAMETER RandomState
     하이퍼옵트 난수 시드 (결과 재현성 보장용). 지정 시 --random-state로 전달됩니다.
+
+.PARAMETER MinTrades
+    과적합 방지를 위한 최소 거래 횟수 필터 (지정 시 --min-trades로 전달, 기본값: 0, 0은 미적용).
 
 .PARAMETER Force
     동일한 이름의 이전 하이퍼옵트 로그 파일 덮어쓰기 허용 스위치.
@@ -68,6 +71,9 @@ param(
     [int]$Jobs = -1,
 
     [System.Nullable[int]]$RandomState = $null,
+
+    [ValidateRange(0, 10000)]
+    [int]$MinTrades = 0,
 
     [switch]$Force
 )
@@ -114,13 +120,17 @@ $randomStateArgs = @()
 if ($PSBoundParameters.ContainsKey("RandomState") -and $null -ne $RandomState) {
     $randomStateArgs = @("--random-state", [string]$RandomState)
 }
+$minTradesArgs = @()
+if ($PSBoundParameters.ContainsKey("MinTrades") -and $MinTrades -gt 0) {
+    $minTradesArgs = @("--min-trades", [string]$MinTrades)
+}
 $commonArguments = @(
     "hyperopt",
     "--strategy", $Strategy,
     "--timerange", $Timerange,
     "--epochs", $Epochs,
     "--hyperopt-loss", $HyperoptLoss
-) + $jobArgs + $randomStateArgs + @(
+) + $jobArgs + $randomStateArgs + $minTradesArgs + @(
     "--spaces"
 ) + $normalizedSpaces + @(
     "--pairs"
