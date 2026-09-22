@@ -741,7 +741,7 @@ class StrategySourceTests(unittest.TestCase):
         runtime_source = self.script_source("FreqtradeRuntime.ps1")
         self.assertIn("function Assert-ValidTimerange", runtime_source)
         self.assertIn('$Timerange -notmatch "^\\d{8}-\\d{8}$"', runtime_source)
-        self.assertEqual(runtime_source.count("[datetime]::ParseExact("), 2)
+        self.assertGreaterEqual(runtime_source.count("[datetime]::ParseExact("), 2)
         self.assertIn("if ($startDate -ge $endDate)", runtime_source)
 
         for filename in (
@@ -1184,7 +1184,12 @@ class StrategySourceTests(unittest.TestCase):
                 self.assertIn('dataframe["exit_tag"]', content)
 
     def test_summarize_strategy_configs(self) -> None:
-        from scripts.summarize_strategy_configs import export_strategy_configs_json, format_config_table, get_strategy_configs
+        from scripts.summarize_strategy_configs import (
+            export_strategy_configs_json,
+            format_config_markdown,
+            format_config_table,
+            get_strategy_configs,
+        )
         configs = get_strategy_configs()
         self.assertEqual(len(configs), 3)
         strat_classes = {c["class"] for c in configs}
@@ -1194,6 +1199,15 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("VibeRsiStrategy", table_output)
         self.assertIn("KoreanStarterStrategy", table_output)
         self.assertIn("MultiTimeframeAtrStrategy", table_output)
+
+        md_output = format_config_markdown(configs)
+        self.assertIn("| Strategy Class |", md_output)
+        self.assertIn("| **VibeRsiStrategy** |", md_output)
+        self.assertIn("Custom Stoploss", md_output)
+
+        config_map = {c["class"]: c for c in configs}
+        self.assertTrue(config_map["MultiTimeframeAtrStrategy"]["use_custom_stoploss"])
+        self.assertFalse(config_map["KoreanStarterStrategy"]["use_custom_stoploss"])
 
         json_output = export_strategy_configs_json(configs)
         self.assertIn('"class": "VibeRsiStrategy"', json_output)

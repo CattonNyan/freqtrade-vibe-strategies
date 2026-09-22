@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Freqtrade Vibe Strategies의 PowerShell 스크립트 동작 및 안전 가드를 검증합니다.
 
@@ -504,6 +504,25 @@ if (Test-FreqtradePair -Pair "") {
 }
 if (Test-FreqtradePair -Pair "   ") {
     throw "Test-FreqtradePair accepted whitespace string."
+}
+
+$daysStd = Get-TimerangeDays -Timerange "20250101-20260101"
+if ($daysStd -ne 365) {
+    throw "Get-TimerangeDays returned unexpected days for 2025: $daysStd (expected 365)"
+}
+$daysLeap = Get-TimerangeDays -Timerange "20240101-20250101"
+if ($daysLeap -ne 366) {
+    throw "Get-TimerangeDays returned unexpected days for 2024 leap year: $daysLeap (expected 366)"
+}
+$caughtMessage = $null
+try {
+    Get-TimerangeDays -Timerange "20260101-20250101"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "Get-TimerangeDays did not reject reversed timerange."
 }
 
 $global:LASTEXITCODE = 0
