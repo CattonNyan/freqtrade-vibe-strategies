@@ -394,6 +394,7 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze Freqtrade backtest results for Ulcer Index and Expectancy")
     parser.add_argument("file", type=str, help="Path to backtest-result.json file")
     parser.add_argument("--output", "-o", type=str, default=None, help="Optional output Markdown path")
+    parser.add_argument("--json", "-j", type=str, default=None, help="Optional output JSON path for programmatic consumption")
     args = parser.parse_args()
 
     file_path = Path(args.file)
@@ -406,13 +407,20 @@ def main():
     results = parse_freqtrade_backtest_json(data)
     md_content = generate_markdown_report(results)
 
+    if args.json:
+        json_path = Path(args.json)
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"[+] Quant analysis JSON exported to: {json_path}")
+
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(md_content)
         print(f"[+] Quant analysis report exported to: {out_path}")
-    else:
+    elif not args.json:
         print(md_content)
 
 
