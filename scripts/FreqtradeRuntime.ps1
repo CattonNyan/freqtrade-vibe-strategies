@@ -70,6 +70,33 @@ function Convert-TimeframeToMinutes {
     throw "지원하지 않는 타임프레임 형식입니다: $Timeframe"
 }
 
+function Format-TimeframeFromMinutes {
+    <#
+    .SYNOPSIS
+        분(Minutes) 단위 정수를 Freqtrade 타임프레임 표준 문자열로 변환합니다.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateRange(1, [int]::MaxValue)]
+        [int]$Minutes
+    )
+
+    if ($Minutes -ge 43200 -and ($Minutes % 43200) -eq 0) {
+        return "$([int]($Minutes / 43200))M"
+    }
+    if ($Minutes -ge 10080 -and ($Minutes % 10080) -eq 0) {
+        return "$([int]($Minutes / 10080))w"
+    }
+    if ($Minutes -ge 1440 -and ($Minutes % 1440) -eq 0) {
+        return "$([int]($Minutes / 1440))d"
+    }
+    if ($Minutes -ge 60 -and ($Minutes % 60) -eq 0) {
+        return "$([int]($Minutes / 60))h"
+    }
+    return "${Minutes}m"
+}
+
 function Assert-InformativeTimeframeCompatible {
     <#
     .SYNOPSIS
