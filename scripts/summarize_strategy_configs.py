@@ -13,11 +13,20 @@ def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, o
     if strategies_dir is None:
         strategies_dir = Path(__file__).resolve().parents[1] / "strategies"
 
-    strategy_files = [
-        "VibeRsiStrategy.py",
-        "KoreanStarterStrategy.py",
-        "MultiTimeframeAtrStrategy.py",
-    ]
+    if strategies_dir.exists():
+        strategy_files = sorted([
+            p.name for p in strategies_dir.glob("*.py")
+            if p.name != "__init__.py" and not p.name.startswith(".")
+        ])
+    else:
+        strategy_files = []
+
+    if not strategy_files:
+        strategy_files = [
+            "VibeRsiStrategy.py",
+            "KoreanStarterStrategy.py",
+            "MultiTimeframeAtrStrategy.py",
+        ]
 
     configs = []
     for filename in strategy_files:
