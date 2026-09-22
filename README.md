@@ -65,10 +65,12 @@ Get-Help .\scripts\Invoke-StrategyAnalysis.ps1 -Detailed
 Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 ```
 
-시장 데이터를 내려받습니다. 타임프레임을 지정하지 않으면 전략 기본 타임프레임(5m, 15m, 1h)이 모두 다운로드됩니다.
+시장 데이터를 내려받습니다. 타임프레임을 지정하지 않으면 전략 기본 타임프레임(5m, 15m, 1h)이 모두 다운로드됩니다. 기간은 `-Days`(기본 365일) 또는 `-Timerange`(예: `20250101-20260101`)로 지정할 수 있습니다.
 
 ```powershell
 .\scripts\Get-MarketData.ps1 -Days 365
+# 특정 기간(Timerange) 지정 정밀 다운로드
+.\scripts\Get-MarketData.ps1 -Timerange 20250101-20260101
 # 특정 타임프레임 및 페어 지정 다운로드
 .\scripts\Get-MarketData.ps1 -Days 365 -Pairs BTC/USDT,ETH/USDT,SOL/USDT -Timeframes 5m,15m,1h
 # 기존 데이터를 초기화하고 새로 다운로드
@@ -120,15 +122,15 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
-전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
+전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-StrategyAnalysis.ps1 `
   -Timerange 20250101-20260101 `
   -AdvancedQuantMetrics
 
-# 독립 퀀트 리스크 분석기 실행
-python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json
+# 독립 퀀트 리스크 분석기 실행 (페어/청산태그 정렬 및 최소 거래수 필터 지원)
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --sort-by profit --min-trades 3
 ```
 
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
