@@ -41,6 +41,8 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "martin_ratio": 0.0,
             "pain_ratio": 0.0,
             "calmar_ratio": 0.0,
+            "recovery_factor": 0.0,
+            "max_drawdown_duration_trades": 0,
         }
 
     # Reconstruct equity curve (starting at 1.0)
@@ -76,6 +78,20 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     # Calmar Ratio = Total Return / Max Drawdown
     calmar_ratio = (total_return_pct / mdd_pct) if mdd_pct > 1e-6 else (999.0 if total_return_pct > 0 else 0.0)
 
+    # Recovery Factor = Total Return / Max Drawdown
+    recovery_factor = (total_return_pct / mdd_pct) if mdd_pct > 1e-6 else (999.0 if total_return_pct > 0 else 0.0)
+
+    # Calculate max underwater trade duration (streak of consecutive trades spent below peak)
+    curr_underwater = 0
+    max_underwater = 0
+    for dd in drawdowns_pct:
+        if dd < -1e-6:
+            curr_underwater += 1
+            if curr_underwater > max_underwater:
+                max_underwater = curr_underwater
+        else:
+            curr_underwater = 0
+
     return {
         "total_return_pct": round(total_return_pct, 2),
         "max_drawdown_pct": round(mdd_pct, 2),
@@ -84,6 +100,8 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "martin_ratio": round(martin_ratio, 3),
         "pain_ratio": round(pain_ratio, 3),
         "calmar_ratio": round(calmar_ratio, 3),
+        "recovery_factor": round(recovery_factor, 3),
+        "max_drawdown_duration_trades": max_underwater,
     }
 
 
@@ -334,8 +352,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 마틴 비율(UPI) | 칼마 비율 |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -346,7 +364,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
             f"{data['profit_factor']:.2f} | {data['expectancy_pct']:+.3f}% | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
-            f"{data['martin_ratio']:.2f} | {data['calmar_ratio']:.2f} |"
+            f"{data['martin_ratio']:.2f} | {data['calmar_ratio']:.2f} | "
+            f"{data.get('recovery_factor', 0.0):.2f} | {data.get('max_drawdown_duration_trades', 0)}회 |"
         )
 
     # Detailed exit reason tables
@@ -387,6 +406,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
     lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
     lines.append("- **보유시간 비대칭도 (Win/Loss Duration Ratio)**: 수익 거래 평균 보유시간 / 손실 거래 평균 보유시간. 1.0 이상이면 손실을 빠르게 끊고 이익을 길게 가져가는(Let winners run, cut losers) 바람직한 추세추종 특성을 나타냅니다.")
+    lines.append("- **회복 계수 (Recovery Factor)**: 총 순수익률을 최대 낙폭(MDD)으로 나눈 값으로, 감내한 최대 하방 위험 대비 얼마만큼의 자본 증식을 달성했는지 평가합니다.")
+    lines.append("- **최대 침체 기간 (Max Underwater Trades)**: 고점 갱신 후 새로운 고점을 탈환하지 못하고 지속된 최장 연속 거래 횟수입니다.")
     return "\n".join(lines)
 
 
