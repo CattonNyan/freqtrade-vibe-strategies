@@ -643,8 +643,11 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("[ValidateRange(-1, 128)]", source)
         self.assertIn("[int]$Jobs = -1", source)
         self.assertIn("[System.Nullable[int]]$RandomState = $null", source)
+        self.assertIn("[ValidateRange(0, 10000)]", source)
+        self.assertIn("[int]$MinTrades = 0", source)
         self.assertIn('"-j", [string]$Jobs', source)
         self.assertIn('"--random-state", [string]$RandomState', source)
+        self.assertIn('"--min-trades", [string]$MinTrades', source)
 
     def test_analysis_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-StrategyAnalysis.ps1")
@@ -1231,6 +1234,40 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn('"class": "VibeRsiStrategy"', json_output)
         parsed_json = json.loads(json_output)
         self.assertEqual(len(parsed_json), 3)
+
+    def test_summarize_strategy_configs_sorting_and_filtering(self) -> None:
+        from scripts.summarize_strategy_configs import (
+            filter_strategy_configs,
+            get_strategy_configs,
+            sort_strategy_configs,
+        )
+        configs = get_strategy_configs()
+
+        # Test filter trailing stop
+        trailing_only = filter_strategy_configs(configs, has_trailing=True)
+        self.assertEqual(len(trailing_only), 1)
+        self.assertEqual(trailing_only[0]["class"], "KoreanStarterStrategy")
+
+        # Test filter custom stoploss
+        csl_only = filter_strategy_configs(configs, custom_stoploss_only=True)
+        self.assertEqual(len(csl_only), 1)
+        self.assertEqual(csl_only[0]["class"], "MultiTimeframeAtrStrategy")
+
+        # Test sort by timeframe
+        sorted_by_tf = sort_strategy_configs(configs, sort_by="timeframe")
+        self.assertEqual([c["timeframe"] for c in sorted_by_tf], ["5m", "5m", "15m"])
+
+        # Test sort reverse
+        sorted_by_tf_rev = sort_strategy_configs(configs, sort_by="timeframe", reverse=True)
+        self.assertEqual(sorted_by_tf_rev[0]["timeframe"], "15m")
+
+        # Test sort by startup candle count
+        sorted_by_startup = sort_strategy_configs(configs, sort_by="startup")
+        self.assertEqual(sorted_by_startup[0]["startup_candle_count"], 199)
+
+        # Test sort by class
+        sorted_by_class = sort_strategy_configs(configs, sort_by="class")
+        self.assertEqual(sorted_by_class[0]["class"], "KoreanStarterStrategy")
 
 
 if __name__ == "__main__":
