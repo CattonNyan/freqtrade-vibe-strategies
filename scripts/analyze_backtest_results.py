@@ -81,6 +81,20 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     # Recovery Factor = Total Return / Max Drawdown
     recovery_factor = (total_return_pct / mdd_pct) if mdd_pct > 1e-6 else (999.0 if total_return_pct > 0 else 0.0)
 
+    # Downside Deviation (RMS of negative returns) and Sortino Ratio
+    negative_returns = [p for p in clean_profits if p < 0.0]
+    downside_dev = (
+        math.sqrt(sum(p ** 2 for p in negative_returns) / len(clean_profits))
+        if clean_profits and negative_returns
+        else 0.0
+    )
+    downside_dev_pct = downside_dev * 100.0
+    sortino_ratio = (
+        (total_return_pct / downside_dev_pct)
+        if downside_dev_pct > 1e-6
+        else (999.0 if total_return_pct > 0 else 0.0)
+    )
+
     # Calculate max underwater trade duration (streak of consecutive trades spent below peak)
     curr_underwater = 0
     max_underwater = 0
@@ -101,6 +115,8 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "pain_ratio": round(pain_ratio, 3),
         "calmar_ratio": round(calmar_ratio, 3),
         "recovery_factor": round(recovery_factor, 3),
+        "downside_deviation_pct": round(downside_dev_pct, 2),
+        "sortino_ratio": round(sortino_ratio, 3),
         "max_drawdown_duration_trades": max_underwater,
     }
 
@@ -125,6 +141,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "win_loss_duration_ratio": 0.0,
             "max_consecutive_wins": 0,
             "max_consecutive_losses": 0,
+            "full_kelly_pct": 0.0,
+            "half_kelly_pct": 0.0,
         }
 
     wins = []
@@ -186,6 +204,24 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     avg_loss_dur = (sum(loss_durations) / len(loss_durations)) if loss_durations else 0.0
     win_loss_dur_ratio = (avg_win_dur / avg_loss_dur) if avg_loss_dur > 0 else (999.0 if avg_win_dur > 0 else 0.0)
 
+    # Kelly Criterion calculation: f* = (p * b - q) / b = p - (1 - p) / b
+    if total_trades > 0 and loss_count > 0 and avg_loss > 0:
+        b = avg_win / avg_loss
+        p = win_count / total_trades
+        q = 1.0 - p
+        if b > 1e-6:
+            f_star = (p * b - q) / b
+            full_k = max(0.0, min(1.0, f_star)) * 100.0
+        else:
+            full_k = 0.0
+        half_k = full_k / 2.0
+    elif total_trades > 0 and loss_count == 0 and win_count > 0:
+        full_k = 100.0
+        half_k = 50.0
+    else:
+        full_k = 0.0
+        half_k = 0.0
+
     return {
         "total_trades": total_trades,
         "wins": win_count,
@@ -203,6 +239,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "win_loss_duration_ratio": round(win_loss_dur_ratio, 2),
         "max_consecutive_wins": max_win_streak,
         "max_consecutive_losses": max_loss_streak,
+        "full_kelly_pct": round(full_k, 2),
+        "half_kelly_pct": round(half_k, 2),
     }
 
 
@@ -352,18 +390,22 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
         max_cw = data.get("max_consecutive_wins", 0)
         max_cl = data.get("max_consecutive_losses", 0)
         streak_str = f"{max_cw}승/{max_cl}패"
+        full_k = data.get("full_kelly_pct", 0.0)
+        half_k = data.get("half_kelly_pct", 0.0)
+        kelly_str = f"{full_k:.1f}%/{half_k:.1f}%"
         lines.append(
             f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
-            f"{data['profit_factor']:.2f} | {data['expectancy_pct']:+.3f}% | "
+            f"{data['profit_factor']:.2f} | {data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
+            f"{data.get('sortino_ratio', 0.0):.2f} | "
             f"{data['martin_ratio']:.2f} | {data['calmar_ratio']:.2f} | "
             f"{data.get('recovery_factor', 0.0):.2f} | {data.get('max_drawdown_duration_trades', 0)}회 |"
         )
@@ -402,6 +444,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("### 💡 지표 설명 (Methodology)")
     lines.append("- **궤양지수 (Ulcer Index, Peter Martin 1987)**: 고점 대비 하락폭(Drawdown)의 제곱평균제곱근(RMS). 단순 변동성과 달리 상승 변동성은 처벌하지 않고 깊고 긴 하락장만을 집중 가중 처벌합니다.")
     lines.append("- **마틴 비율 (Martin Ratio / UPI)**: 총 수익률을 궤양지수로 나눈 값으로, 샤프 지수보다 추세추종 전략의 실질 하방 위험 대비 성과를 정확하게 평가합니다.")
+    lines.append("- **소르티노 비율 (Sortino Ratio)**: 하방 변동성(Downside Deviation)만을 페널티로 부여하여 하방 손실 위험 대비 전략의 초과 수익률을 평가합니다.")
+    lines.append("- **켈리 비율 (Kelly Criterion, Full/Half)**: 승률과 손익비를 바탕으로 자본 성장을 극대화하는 이론적 최적 베팅 비중(f*) 및 암호화폐 시장의 꼬리 위험을 완화한 보수적 권장치인 하프 켈리(Half-Kelly, f*/2) 비율입니다.")
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
     lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
