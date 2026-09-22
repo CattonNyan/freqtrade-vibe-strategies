@@ -112,8 +112,17 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 | **페어별 성과 비교 (Pair Breakdown)** | 거래 페어(`pair`)별 거래수, 승률, 누적 손익, 손익비 | 전략에 부적합하거나 손실이 편중된 자산 식별 및 화이트리스트 조정 |
 | **최대 연승/연패 (Streak Metrics)** | $\max(\text{Consecutive Wins}), \max(\text{Consecutive Losses})$ | 연패 구간 자금 관리 및 최대 연속 손실 감내 수준 평가 |
 | **보유시간 비대칭도 (Duration Asymmetry)** | $\frac{\bar{T}_{win}}{\bar{T}_{loss}}$ | $\ge 1.0$ 이상 권장 (이익 포지션을 길게 유지하고 손실을 신속하게 정리하는지 진단) |
+| **회복 계수 (Recovery Factor)** | $\frac{\text{총 수익률}}{\text{MDD}}$ | $> 2.0$ 이상 권장 (최대 손실 대비 자본 회복 속도 및 누적 성과 배수) |
+| **최대 침체 기간 (Max Underwater Trades)** | $\max(\text{Trades below peak equity})$ | 낮을수록 우수 (고점 탈환까지 소요된 최장 거래 횟수) |
 
-퀀트 분석 결과는 자동화 파이프라인에서 바로 활용할 수 있도록 JSON 내보내기도 지원합니다:
+백테스트 실행 시 `-QuantReport`와 `-QuantJson` 플래그를 통해 마크다운 리포트와 정형 JSON 결과를 즉시 생성할 수 있습니다:
+
+```powershell
+# 백테스트 실행과 동시에 심층 퀀트 Markdown 리포트 및 정형 JSON 데이터 동시 생성
+.\scripts\Invoke-Backtest.ps1 -Strategy KoreanStarterStrategy -Timerange 20250101-20260101 -QuantReport -QuantJson
+```
+
+퀀트 분석 결과는 자동화 파이프라인에서 바로 활용할 수 있도록 JSON 독립 내보내기도 지원합니다:
 
 ```powershell
 python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --json .\user_data\backtest_results\quant-metrics.json
