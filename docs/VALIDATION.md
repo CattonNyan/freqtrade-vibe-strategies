@@ -111,6 +111,13 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 | **청산 사유별 분석 (Exit Breakdown)** | 청산 태그(`exit_tag`/`exit_reason`)별 승률, P.F., 평균 보유시간 | 손절 태그 누적 손실 과다 시 진입 조건 재검토 |
 | **페어별 성과 비교 (Pair Breakdown)** | 거래 페어(`pair`)별 거래수, 승률, 누적 손익, 손익비 | 전략에 부적합하거나 손실이 편중된 자산 식별 및 화이트리스트 조정 |
 | **최대 연승/연패 (Streak Metrics)** | $\max(\text{Consecutive Wins}), \max(\text{Consecutive Losses})$ | 연패 구간 자금 관리 및 최대 연속 손실 감내 수준 평가 |
+| **보유시간 비대칭도 (Duration Asymmetry)** | $\frac{\bar{T}_{win}}{\bar{T}_{loss}}$ | $\ge 1.0$ 이상 권장 (이익 포지션을 길게 유지하고 손실을 신속하게 정리하는지 진단) |
+
+퀀트 분석 결과는 자동화 파이프라인에서 바로 활용할 수 있도록 JSON 내보내기도 지원합니다:
+
+```powershell
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --json .\user_data\backtest_results\quant-metrics.json
+```
 
 또한 정적 검사 시 `-DetailedReport` 스위치를 사용하여 전략별 핵심 파라미터 매트릭스를 즉시 확인할 수 있습니다:
 
