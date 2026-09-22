@@ -44,6 +44,9 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "recovery_factor": 0.0,
             "downside_deviation_pct": 0.0,
             "sortino_ratio": 0.0,
+            "burke_ratio": 0.0,
+            "time_underwater_pct": 0.0,
+            "avg_drawdown_pct": 0.0,
             "max_drawdown_duration_trades": 0,
         }
 
@@ -67,6 +70,19 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     # Ulcer Index = sqrt( mean( DD^2 ) )
     sq_dd = [dd ** 2 for dd in drawdowns_pct]
     ulcer_index = math.sqrt(sum(sq_dd) / len(sq_dd)) if sq_dd else 0.0
+
+    # Burke Ratio = Total Return / sqrt( sum( DD^2 ) )
+    sum_sq_dd = sum(sq_dd)
+    burke_ratio = (
+        (total_return_pct / math.sqrt(sum_sq_dd))
+        if sum_sq_dd > 1e-6
+        else (999.0 if total_return_pct > 0 else 0.0)
+    )
+
+    # Time Underwater & Average Drawdown Depth
+    underwater_trades = [dd for dd in drawdowns_pct if dd < -1e-6]
+    time_underwater_pct = (len(underwater_trades) / len(drawdowns_pct) * 100.0) if drawdowns_pct else 0.0
+    avg_drawdown_pct = (sum(abs(dd) for dd in underwater_trades) / len(underwater_trades)) if underwater_trades else 0.0
 
     # Pain Index = mean( |DD| )
     pain_index = sum(abs(dd) for dd in drawdowns_pct) / len(drawdowns_pct) if drawdowns_pct else 0.0
@@ -119,6 +135,9 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "recovery_factor": round(recovery_factor, 3),
         "downside_deviation_pct": round(downside_dev_pct, 2),
         "sortino_ratio": round(sortino_ratio, 3),
+        "burke_ratio": round(burke_ratio, 3),
+        "time_underwater_pct": round(time_underwater_pct, 2),
+        "avg_drawdown_pct": round(avg_drawdown_pct, 2),
         "max_drawdown_duration_trades": max_underwater,
     }
 
