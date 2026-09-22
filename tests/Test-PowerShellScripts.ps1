@@ -136,6 +136,17 @@ if (-not $caughtMessage) {
 
 $caughtMessage = $null
 try {
+    & (Join-Path $repositoryRoot "scripts/Get-MarketData.ps1") -Timerange "invalid-timerange"
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "An invalid timerange in Get-MarketData.ps1 was not rejected."
+}
+
+$caughtMessage = $null
+try {
     Assert-MarketDataAvailable `
         -Pairs "BTC-USDT" `
         -Timeframes "5m" `
@@ -471,7 +482,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
         throw "Script $scriptRelative is missing a .SYNOPSIS comment-based help block."
     }
     $expectedParameters = switch ($scriptRelative) {
-        "scripts/Get-MarketData.ps1" { @("Days", "Pairs", "Timeframes", "Erase") }
+        "scripts/Get-MarketData.ps1" { @("Days", "Timerange", "Pairs", "Timeframes", "Erase") }
         "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "Force") }

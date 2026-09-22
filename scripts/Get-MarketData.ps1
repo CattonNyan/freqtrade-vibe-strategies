@@ -1,13 +1,16 @@
-<#
+﻿<#
 .SYNOPSIS
     Freqtrade 전략 백테스트에 필요한 과거 시장 데이터를 거래소로부터 다운로드합니다.
 
 .DESCRIPTION
-    지정된 일수(Days) 동안의 5m, 15m, 1h 캔들 데이터를 자동으로 내려받아 user_data/data 디렉터리에 저장합니다.
+    지정된 일수(Days) 또는 특정 기간(Timerange) 동안의 5m, 15m, 1h 캔들 데이터를 자동으로 내려받아 user_data/data 디렉터리에 저장합니다.
     Docker 또는 로컬 가상환경(.venv)의 Freqtrade 런타임을 자동으로 감지하여 실행합니다.
 
 .PARAMETER Days
     다운로드할 과거 데이터 기간 (일 단위, 기본값: 365, 최소: 30, 최대: 3650).
+
+.PARAMETER Timerange
+    다운로드할 과거 데이터 기간 (YYYYMMDD-YYYYMMDD 형식, 예: 20250101-20260101). 지정 시 -Days 대신 해당 기간의 캔들을 정확히 수집합니다.
 
 .PARAMETER Pairs
     다운로드할 거래 페어 목록 (기본값: @("BTC/USDT", "ETH/USDT")).
@@ -22,6 +25,9 @@
     .\scripts\Get-MarketData.ps1 -Days 180
 
 .EXAMPLE
+    .\scripts\Get-MarketData.ps1 -Timerange 20250101-20260101
+
+.EXAMPLE
     .\scripts\Get-MarketData.ps1 -Days 365 -Pairs @("BTC/USDT", "ETH/USDT", "SOL/USDT")
 
 .EXAMPLE
@@ -34,6 +40,9 @@
 param(
     [ValidateRange(30, 3650)]
     [int]$Days = 365,
+
+    [ValidatePattern("^\d{8}-\d{8}$")]
+    [string]$Timerange,
 
     [ValidateNotNullOrEmpty()]
     [ValidatePattern("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$")]
@@ -54,9 +63,19 @@ Initialize-FreqtradeDirectory -RelativePath "user_data/data"
 $normalizedPairs = @($Pairs | Sort-Object -Unique)
 $normalizedTimeframes = @($Timeframes | Sort-Object -Unique)
 
+if ($Timerange) {
+    Assert-ValidTimerange -Timerange $Timerange
+    $timeArguments = @("--timerange", $Timerange)
+    $periodDescription = "기간: $Timerange"
+}
+else {
+    $timeArguments = @("--days", $Days)
+    $periodDescription = "기간: ${Days}일"
+}
+
 $commonArguments = @(
-    "download-data",
-    "--days", $Days,
+    "download-data"
+) + $timeArguments + @(
     "--timeframes"
 ) + $normalizedTimeframes + @(
     "--pairs"
@@ -65,7 +84,7 @@ if ($Erase) {
     $commonArguments += "--erase"
 }
 
-Write-Host "[*] 시장 데이터 다운로드 시작 (기간: ${Days}일, 대상: $($normalizedPairs -join ', '))"
+Write-Host "[*] 시장 데이터 다운로드 시작 ($periodDescription, 대상: $($normalizedPairs -join ', '))"
 
 Invoke-FreqtradeCommand `
     -DockerArguments ($commonArguments + @("--config", "/freqtrade/user_data/config/backtest.example.json")) `
