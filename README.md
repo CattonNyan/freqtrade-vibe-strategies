@@ -93,7 +93,7 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -Fee 0.001
 ```
 
-하이퍼옵트로 전략 파라미터를 최적화합니다. 병렬 CPU 코어 수(-Jobs)와 재현성 난수 시드(-RandomState)를 제어할 수 있습니다.
+하이퍼옵트로 전략 파라미터를 최적화합니다. 병렬 CPU 코어 수(-Jobs), 과적합 방지 최소 거래수(-MinTrades), 재현성 난수 시드(-RandomState)를 제어할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-Hyperopt.ps1 `
@@ -102,12 +102,13 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -Epochs 100 `
   -Spaces buy,sell
 
-# 전체 CPU 코어 병렬 탐색(-Jobs -1) 및 재현성 고정(-RandomState 42)
+# 전체 CPU 코어 병렬 탐색(-Jobs -1), 최소 10회 이상 거래 필터(-MinTrades 10), 난수 시드 고정(-RandomState 42)
 .\scripts\Invoke-Hyperopt.ps1 `
   -Strategy VibeRsiStrategy `
   -Timerange 20250101-20260101 `
   -Epochs 200 `
   -Spaces buy,sell `
+  -MinTrades 10 `
   -Jobs -1 `
   -RandomState 42
 ```
@@ -146,6 +147,10 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 
 # 전략 설정 매트릭스 요약표 함께 출력
 .\scripts\Invoke-Checks.ps1 -DetailedReport
+
+# 전략 설정 타임프레임순 정렬 및 트레일링 스탑 필터링 검토
+python .\scripts\summarize_strategy_configs.py --sort-by timeframe
+python .\scripts\summarize_strategy_configs.py --has-trailing --markdown
 ```
 
 개별 검사를 직접 실행하려면 다음 명령을 사용합니다.
