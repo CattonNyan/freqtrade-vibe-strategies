@@ -1269,6 +1269,31 @@ class StrategySourceTests(unittest.TestCase):
         sorted_by_class = sort_strategy_configs(configs, sort_by="class")
         self.assertEqual(sorted_by_class[0]["class"], "KoreanStarterStrategy")
 
+        # Test filter timeframe
+        tf_5m = filter_strategy_configs(configs, timeframe="5m")
+        self.assertEqual(len(tf_5m), 2)
+        self.assertEqual({c["class"] for c in tf_5m}, {"VibeRsiStrategy", "MultiTimeframeAtrStrategy"})
+
+        tf_15m = filter_strategy_configs(configs, timeframe="15m")
+        self.assertEqual(len(tf_15m), 1)
+        self.assertEqual(tf_15m[0]["class"], "KoreanStarterStrategy")
+
+    def test_burke_ratio_and_underwater_metrics(self) -> None:
+        from scripts.analyze_backtest_results import calculate_ulcer_and_drawdown_metrics
+
+        empty = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty["burke_ratio"], 0.0)
+        self.assertEqual(empty["time_underwater_pct"], 0.0)
+        self.assertEqual(empty["avg_drawdown_pct"], 0.0)
+
+        # Profits with clear drawdowns
+        profits = [0.05, -0.02, 0.03, -0.01, 0.04]
+        res = calculate_ulcer_and_drawdown_metrics(profits)
+        self.assertGreater(res["burke_ratio"], 0.0)
+        self.assertGreater(res["time_underwater_pct"], 0.0)
+        self.assertGreater(res["avg_drawdown_pct"], 0.0)
+        self.assertEqual(res["max_drawdown_duration_trades"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
