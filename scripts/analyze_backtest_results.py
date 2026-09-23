@@ -443,8 +443,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 버크 비율(Burke) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -459,8 +459,11 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data['profit_factor']:.2f} | {data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
             f"{data.get('sortino_ratio', 0.0):.2f} | "
+            f"{data.get('burke_ratio', 0.0):.2f} | "
             f"{data['martin_ratio']:.2f} | {data['calmar_ratio']:.2f} | "
-            f"{data.get('recovery_factor', 0.0):.2f} | {data.get('max_drawdown_duration_trades', 0)}회 |"
+            f"{data.get('recovery_factor', 0.0):.2f} | "
+            f"{data.get('time_underwater_pct', 0.0):.1f}% | "
+            f"{data.get('max_drawdown_duration_trades', 0)}회 |"
         )
 
     # Detailed exit reason tables
@@ -498,6 +501,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **궤양지수 (Ulcer Index, Peter Martin 1987)**: 고점 대비 하락폭(Drawdown)의 제곱평균제곱근(RMS). 단순 변동성과 달리 상승 변동성은 처벌하지 않고 깊고 긴 하락장만을 집중 가중 처벌합니다.")
     lines.append("- **마틴 비율 (Martin Ratio / UPI)**: 총 수익률을 궤양지수로 나눈 값으로, 샤프 지수보다 추세추종 전략의 실질 하방 위험 대비 성과를 정확하게 평가합니다.")
     lines.append("- **소르티노 비율 (Sortino Ratio)**: 하방 변동성(Downside Deviation)만을 페널티로 부여하여 하방 손실 위험 대비 전략의 초과 수익률을 평가합니다.")
+    lines.append("- **버크 비율 (Burke Ratio, Gibbons Burke 1994)**: 총 수익률을 개별 낙폭(Drawdown)들의 제곱합의 제곱근으로 나눈 비율로, 단일 극단값뿐 아니라 누적된 다수의 하락 충격을 종합 반영합니다.")
+    lines.append("- **수중 기간 비율 (Time Underwater %)**: 전체 거래 중 최고점(High-Water Mark)을 탈환하지 못하고 손실 구간에 머무른 거래 수의 백분율입니다.")
     lines.append("- **켈리 비율 (Kelly Criterion, Full/Half)**: 승률과 손익비를 바탕으로 자본 성장을 극대화하는 이론적 최적 베팅 비중(f*) 및 암호화폐 시장의 꼬리 위험을 완화한 보수적 권장치인 하프 켈리(Half-Kelly, f*/2) 비율입니다.")
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
