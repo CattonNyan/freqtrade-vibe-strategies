@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     지정된 Freqtrade 전략과 기간에 대해 안전하고 재현 가능한 백테스트를 실행합니다.
 
@@ -31,6 +31,12 @@
 .PARAMETER QuantJson
     백테스트 완료 후 궤양지수(Ulcer Index), 손익비, 페어별 성과를 담은 정형 JSON 리포트(quant-analysis.json)를 자동 생성합니다.
 
+.PARAMETER QuantSortBy
+    퀀트 분석 시 청산 태그 및 페어별 분석 테이블 정렬 기준 (trades, profit, win_rate, pf 중 선택).
+
+.PARAMETER QuantMinTrades
+    퀀트 분석 시 청산 태그 및 페어별 분석 테이블에 포함할 최소 거래수 필터 (기본값: 1, 최소: 1, 최대: 10000).
+
 .EXAMPLE
     .\scripts\Invoke-Backtest.ps1 -Strategy KoreanStarterStrategy -Timerange 20250101-20260101
 
@@ -61,7 +67,13 @@ param(
 
     [switch]$QuantReport,
 
-    [switch]$QuantJson
+    [switch]$QuantJson,
+
+    [ValidateSet("trades", "profit", "win_rate", "pf")]
+    [string]$QuantSortBy,
+
+    [ValidateRange(1, 10000)]
+    [int]$QuantMinTrades = 1
 )
 
 Set-StrictMode -Version Latest
@@ -150,6 +162,12 @@ try {
             }
             if ($QuantJson) {
                 $analyzerArgs += @("-j", $quantJsonPath)
+            }
+            if ($QuantSortBy) {
+                $analyzerArgs += @("--sort-by", $QuantSortBy)
+            }
+            if ($QuantMinTrades -gt 1) {
+                $analyzerArgs += @("--min-trades", [string]$QuantMinTrades)
             }
 
             & $pythonExe @analyzerArgs
