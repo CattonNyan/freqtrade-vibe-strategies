@@ -142,6 +142,7 @@ def filter_strategy_configs(
     configs: list[dict[str, object]],
     has_trailing: bool | None = None,
     custom_stoploss_only: bool = False,
+    timeframe: str | None = None,
 ) -> list[dict[str, object]]:
     """Filter strategy configuration list based on criteria."""
     filtered = list(configs)
@@ -149,6 +150,8 @@ def filter_strategy_configs(
         filtered = [c for c in filtered if bool(c.get("trailing_stop")) == has_trailing]
     if custom_stoploss_only:
         filtered = [c for c in filtered if bool(c.get("use_custom_stoploss"))]
+    if timeframe:
+        filtered = [c for c in filtered if str(c.get("timeframe", "")).strip().lower() == timeframe.strip().lower()]
     return filtered
 
 
@@ -173,6 +176,12 @@ def main():
     parser.add_argument(
         "--custom-stoploss-only", action="store_true", help="Show only strategies that define custom stoploss"
     )
+    parser.add_argument(
+        "--filter-timeframe",
+        type=str,
+        default=None,
+        help="Filter strategies matching a specific timeframe (e.g. 5m, 15m, 1h)",
+    )
     parser.add_argument("--output", "-o", type=str, default=None, help="Path to write output report to")
     args = parser.parse_args()
 
@@ -183,6 +192,8 @@ def main():
         configs = filter_strategy_configs(configs, has_trailing=True)
     if args.custom_stoploss_only:
         configs = filter_strategy_configs(configs, custom_stoploss_only=True)
+    if args.filter_timeframe:
+        configs = filter_strategy_configs(configs, timeframe=args.filter_timeframe)
 
     configs = sort_strategy_configs(configs, sort_by=args.sort_by, reverse=args.reverse)
 
