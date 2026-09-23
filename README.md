@@ -85,12 +85,15 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -Timerange 20250101-20260101 `
   -Pairs BTC/USDT,ETH/USDT
 
-# 월별 집계표 출력(-Breakdown month) 및 0.1% 수수료(-Fee 0.001) 반영 백테스트
+# 월별 집계표 출력(-Breakdown month), 0.1% 수수료(-Fee 0.001), 퀀트 리포트 자동 생성(-QuantReport) 및 수익순 정렬
 .\scripts\Invoke-Backtest.ps1 `
   -Strategy KoreanStarterStrategy `
   -Timerange 20250101-20260101 `
   -Breakdown month `
-  -Fee 0.001
+  -Fee 0.001 `
+  -QuantReport `
+  -QuantSortBy profit `
+  -QuantMinTrades 3
 ```
 
 하이퍼옵트로 전략 파라미터를 최적화합니다. 병렬 CPU 코어 수(-Jobs), 과적합 방지 최소 거래수(-MinTrades), 재현성 난수 시드(-RandomState)를 제어할 수 있습니다.
@@ -123,7 +126,7 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
-전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
+전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 버크 비율(Burke Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-StrategyAnalysis.ps1 `
@@ -148,9 +151,10 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 # 전략 설정 매트릭스 요약표 함께 출력
 .\scripts\Invoke-Checks.ps1 -DetailedReport
 
-# 전략 설정 타임프레임순 정렬 및 트레일링 스탑 필터링 검토
+# 전략 설정 타임프레임순 정렬, 트레일링 스탑 필터링 및 5m 전용 전략 검토
 python .\scripts\summarize_strategy_configs.py --sort-by timeframe
 python .\scripts\summarize_strategy_configs.py --has-trailing --markdown
+python .\scripts\summarize_strategy_configs.py --filter-timeframe 5m
 ```
 
 개별 검사를 직접 실행하려면 다음 명령을 사용합니다.
