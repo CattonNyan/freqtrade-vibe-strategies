@@ -615,10 +615,18 @@ class StrategySourceTests(unittest.TestCase):
             self.script_validate_set("Invoke-Backtest.ps1", "Breakdown"),
             {"day", "week", "month"},
         )
+        self.assertEqual(
+            self.script_validate_set("Invoke-Backtest.ps1", "QuantSortBy"),
+            {"trades", "profit", "win_rate", "pf"},
+        )
         self.assertIn("[ValidateRange(0.0, 0.1)]", source)
         self.assertIn("[double]$Fee = 0.0", source)
+        self.assertIn("[ValidateRange(1, 10000)]", source)
+        self.assertIn("[int]$QuantMinTrades = 1", source)
         self.assertIn('"--breakdown", $Breakdown', source)
         self.assertIn('"--fee", [string]$Fee', source)
+        self.assertIn('"--sort-by", $QuantSortBy', source)
+        self.assertIn('"--min-trades", [string]$QuantMinTrades', source)
 
     def test_dry_run_script_supports_every_strategy(self) -> None:
         source = self.script_source("Invoke-DryRun.ps1")
