@@ -451,6 +451,20 @@ if ((Get-Location).Path -ne $originalLocation) {
     throw "The caller working directory was not restored."
 }
 
+$caughtMessage = $null
+try {
+    & (Join-Path $repositoryRoot "scripts/Invoke-Backtest.ps1") `
+        -Strategy "VibeRsiStrategy" `
+        -Timerange "20250101-20260101" `
+        -QuantMinTrades 0
+}
+catch {
+    $caughtMessage = $_.Exception.Message
+}
+if (-not $caughtMessage) {
+    throw "The backtest script accepted a zero QuantMinTrades value."
+}
+
 $slugSingle = Get-PairSlug -Pairs @("BTC/USDT")
 if ($slugSingle -ne "BTC-USDT") {
     throw "Get-PairSlug produced unexpected result for single pair: $slugSingle"
@@ -497,7 +511,7 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     }
     $expectedParameters = switch ($scriptRelative) {
         "scripts/Get-MarketData.ps1" { @("Days", "Timerange", "Pairs", "Timeframes", "Erase") }
-        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson") }
+        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson", "QuantSortBy", "QuantMinTrades") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "MinTrades", "Force") }
         "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
