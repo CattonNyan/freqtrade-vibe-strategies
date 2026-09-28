@@ -511,10 +511,10 @@ foreach ($scriptRelative in $scriptsWithHelp) {
     }
     $expectedParameters = switch ($scriptRelative) {
         "scripts/Get-MarketData.ps1" { @("Days", "Timerange", "Pairs", "Timeframes", "Erase") }
-        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson", "QuantCsv", "QuantSortBy", "QuantMinTrades") }
+        "scripts/Invoke-Backtest.ps1" { @("Strategy", "Timerange", "Pairs", "Force", "Breakdown", "Fee", "QuantReport", "QuantJson", "QuantCsv", "QuantHtml", "QuantSortBy", "QuantMinTrades") }
         "scripts/Invoke-DryRun.ps1" { @("Strategy", "Start") }
         "scripts/Invoke-Hyperopt.ps1" { @("Strategy", "Timerange", "Pairs", "Epochs", "Spaces", "HyperoptLoss", "Jobs", "RandomState", "MinTrades", "Force") }
-        "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics") }
+        "scripts/Invoke-StrategyAnalysis.ps1" { @("Timerange", "Strategies", "Pair", "MinimumTradeAmount", "TargetedTradeAmount", "StartupCandles", "Force", "AdvancedQuantMetrics", "QuantJson", "QuantCsv", "QuantHtml", "QuantSortBy", "QuantMinTrades") }
         "scripts/Invoke-Checks.ps1" { @("DetailedReport") }
         default { @() }
     }
