@@ -11,6 +11,8 @@ Computes institutional performance and downside risk metrics:
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import math
 from pathlib import Path
@@ -524,11 +526,59 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
+    """Export strategy analysis summary as a formatted CSV string."""
+    headers = [
+        "strategy",
+        "total_trades",
+        "win_rate_pct",
+        "wins",
+        "losses",
+        "draws",
+        "max_consecutive_wins",
+        "max_consecutive_losses",
+        "profit_factor",
+        "expectancy_pct",
+        "avg_win_pct",
+        "avg_loss_pct",
+        "win_loss_ratio",
+        "avg_duration_min",
+        "avg_win_duration_min",
+        "avg_loss_duration_min",
+        "win_loss_duration_ratio",
+        "full_kelly_pct",
+        "half_kelly_pct",
+        "total_return_pct",
+        "max_drawdown_pct",
+        "ulcer_index",
+        "pain_index",
+        "sortino_ratio",
+        "burke_ratio",
+        "sterling_ratio",
+        "martin_ratio",
+        "calmar_ratio",
+        "recovery_factor",
+        "downside_deviation_pct",
+        "time_underwater_pct",
+        "avg_drawdown_pct",
+        "max_drawdown_duration_trades",
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    for name, data in analysis_results.items():
+        row = dict(data)
+        row["strategy"] = name
+        writer.writerow(row)
+    return output.getvalue()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyze Freqtrade backtest results for Ulcer Index and Expectancy")
     parser.add_argument("file", type=str, help="Path to backtest-result.json file")
     parser.add_argument("--output", "-o", type=str, default=None, help="Optional output Markdown path")
     parser.add_argument("--json", "-j", type=str, default=None, help="Optional output JSON path for programmatic consumption")
+    parser.add_argument("--csv", "-c", type=str, default=None, help="Optional output CSV path for tabular consumption")
     parser.add_argument(
         "--sort-by",
         type=str,
@@ -561,13 +611,21 @@ def main():
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"[+] Quant analysis JSON exported to: {json_path}")
 
+    if args.csv:
+        csv_content = export_quant_analysis_csv(results)
+        csv_path = Path(args.csv)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(csv_path, "w", encoding="utf-8") as f:
+            f.write(csv_content)
+        print(f"[+] Quant analysis CSV exported to: {csv_path}")
+
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(md_content)
         print(f"[+] Quant analysis report exported to: {out_path}")
-    elif not args.json:
+    elif not args.json and not args.csv:
         print(md_content)
 
 
