@@ -94,6 +94,7 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -QuantReport `
   -QuantJson `
   -QuantCsv `
+  -QuantHtml `
   -QuantSortBy profit `
   -QuantMinTrades 3
 ```
@@ -128,15 +129,18 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
-전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 버크 비율(Burke Ratio), 스털링 비율(Sterling Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
+전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics`, `-QuantJson`, `-QuantCsv`, `-QuantHtml` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 버크 비율(Burke Ratio), 스털링 비율(Sterling Ratio), 게인투페인 비율(Gain-to-Pain Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-StrategyAnalysis.ps1 `
   -Timerange 20250101-20260101 `
-  -AdvancedQuantMetrics
+  -AdvancedQuantMetrics `
+  -QuantJson `
+  -QuantCsv `
+  -QuantHtml
 
-# 독립 퀀트 리스크 분석기 실행 (Markdown, 정형 JSON 및 플랫 CSV 출력 지원)
-python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --output report.md --json report.json --csv report.csv --sort-by profit --min-trades 3
+# 독립 퀀트 리스크 분석기 실행 (Markdown, 정형 JSON, 플랫 CSV 및 독립 HTML 시각화 출력 지원)
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --output report.md --json report.json --csv report.csv --html report.html --sort-by profit --min-trades 3
 ```
 
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
