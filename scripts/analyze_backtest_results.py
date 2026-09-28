@@ -587,12 +587,221 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
     return output.getvalue()
 
 
+def generate_html_report(analysis_results: dict[str, Any]) -> str:
+    """Generate standalone interactive HTML quant report from backtest analysis results."""
+    sections = []
+    for name, data in analysis_results.items():
+        total_trades = data.get("total_trades", 0)
+        win_rate = data.get("win_rate_pct", 0.0)
+        pf = data.get("profit_factor", 0.0)
+        expectancy = data.get("expectancy_pct", 0.0)
+        total_ret = data.get("total_return_pct", 0.0)
+        mdd = data.get("max_drawdown_pct", 0.0)
+        ulcer = data.get("ulcer_index", 0.0)
+        martin = data.get("martin_ratio", 0.0)
+        sortino = data.get("sortino_ratio", 0.0)
+        burke = data.get("burke_ratio", 0.0)
+        sterling = data.get("sterling_ratio", 0.0)
+        gain_to_pain = data.get("gain_to_pain_ratio", 0.0)
+        full_kelly = data.get("full_kelly_pct", 0.0)
+        half_kelly = data.get("half_kelly_pct", 0.0)
+        underwater = data.get("time_underwater_pct", 0.0)
+        max_streak = f"{data.get('max_consecutive_wins', 0)}W / {data.get('max_consecutive_losses', 0)}L"
+
+        cards_html = f"""
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">총 거래수 / 승률</div>
+                <div class="metric-value">{total_trades}회 <span class="badge badge-primary">{win_rate:.1f}%</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">손익비 (Profit Factor)</div>
+                <div class="metric-value">{pf:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">거래 기대값 (Expectancy)</div>
+                <div class="metric-value {('positive' if expectancy >= 0 else 'negative')}">{expectancy:+.3f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">누적 수익률</div>
+                <div class="metric-value {('positive' if total_ret >= 0 else 'negative')}">{total_ret:+.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">최대 낙폭 (Max Drawdown)</div>
+                <div class="metric-value negative">-{mdd:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">궤양지수 (Ulcer Index)</div>
+                <div class="metric-value">{ulcer:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">마틴 비율 (Martin / UPI)</div>
+                <div class="metric-value">{martin:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">소르티노 비율 (Sortino)</div>
+                <div class="metric-value">{sortino:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">버크 비율 (Burke)</div>
+                <div class="metric-value">{burke:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">스털링 비율 (Sterling)</div>
+                <div class="metric-value">{sterling:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">게인 투 페인 (Gain-to-Pain)</div>
+                <div class="metric-value">{gain_to_pain:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">켈리 비율 (Full / Half)</div>
+                <div class="metric-value">{full_kelly:.1f}% / {half_kelly:.1f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">최대 연승/연패</div>
+                <div class="metric-value">{max_streak}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">수중 기간 (Underwater)</div>
+                <div class="metric-value">{underwater:.1f}%</div>
+            </div>
+        </div>
+        """
+
+        exits = data.get("exit_reasons", {})
+        exit_rows = []
+        for tag, s in exits.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            exit_rows.append(f"""
+            <tr>
+                <td><code>{tag}</code></td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td>{s.get('avg_duration_min', 0.0):.1f}분</td>
+            </tr>
+            """)
+        exit_table_html = f"""
+        <h3>🏷️ 청산 사유 및 태그별 성과</h3>
+        <table>
+            <thead>
+                <tr><th>청산 태그</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>손익비</th><th>평균 보유시간</th></tr>
+            </thead>
+            <tbody>
+                {''.join(exit_rows) if exit_rows else '<tr><td colspan="7">청산 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if exits else ""
+
+        pairs = data.get("pair_performance", {})
+        pair_rows = []
+        for pair, s in pairs.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            pair_rows.append(f"""
+            <tr>
+                <td><strong>{pair}</strong></td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td>{s.get('avg_duration_min', 0.0):.1f}분</td>
+            </tr>
+            """)
+        pair_table_html = f"""
+        <h3>🪙 거래 페어별 성과 비교</h3>
+        <table>
+            <thead>
+                <tr><th>페어</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>손익비</th><th>평균 보유시간</th></tr>
+            </thead>
+            <tbody>
+                {''.join(pair_rows) if pair_rows else '<tr><td colspan="7">페어 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if pairs else ""
+
+        sections.append(f"""
+        <section class="strategy-section">
+            <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
+            {cards_html}
+            {exit_table_html}
+            {pair_table_html}
+        </section>
+        """)
+
+    full_html = f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freqtrade Quantitative Backtest Report</title>
+    <style>
+        :root {{
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --heading: #f0f6fc;
+            --primary: #58a6ff;
+            --green: #3fb950;
+            --red: #f85149;
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 32px 24px;
+            line-height: 1.5;
+        }}
+        .container {{ max-width: 1200px; margin: 0 auto; }}
+        header {{ margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }}
+        h1 {{ color: var(--heading); font-size: 26px; display: flex; align-items: center; gap: 8px; }}
+        h2 {{ color: var(--heading); font-size: 20px; margin: 24px 0 16px; }}
+        h3 {{ color: var(--heading); font-size: 16px; margin: 20px 0 10px; }}
+        .strategy-title {{ color: var(--primary); }}
+        .strategy-section {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 32px; }}
+        .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }}
+        .metric-card {{ background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }}
+        .metric-label {{ font-size: 12px; color: #8b949e; margin-bottom: 6px; }}
+        .metric-value {{ font-size: 18px; font-weight: 600; color: var(--heading); }}
+        .positive {{ color: var(--green) !important; }}
+        .negative {{ color: var(--red) !important; }}
+        .badge {{ display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 500; border-radius: 10px; margin-left: 6px; }}
+        .badge-primary {{ background: rgba(88, 166, 255, 0.15); color: var(--primary); border: 1px solid rgba(88, 166, 255, 0.3); }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 20px; font-size: 13px; }}
+        th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }}
+        th {{ background: var(--bg); color: #8b949e; font-weight: 600; }}
+        tr:hover td {{ background: rgba(255, 255, 255, 0.02); }}
+        code {{ background: rgba(110, 118, 129, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--primary); }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Freqtrade Quantitative Backtest Report</h1>
+            <p style="color: #8b949e; font-size: 13px; margin-top: 4px;">Institutional Performance & Downside Risk Analytics</p>
+        </header>
+        {''.join(sections)}
+    </div>
+</body>
+</html>
+"""
+    return full_html
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyze Freqtrade backtest results for Ulcer Index and Expectancy")
     parser.add_argument("file", type=str, help="Path to backtest-result.json file")
     parser.add_argument("--output", "-o", type=str, default=None, help="Optional output Markdown path")
     parser.add_argument("--json", "-j", type=str, default=None, help="Optional output JSON path for programmatic consumption")
     parser.add_argument("--csv", "-c", type=str, default=None, help="Optional output CSV path for tabular consumption")
+    parser.add_argument("--html", "-H", type=str, default=None, help="Optional output HTML path for standalone visual report")
     parser.add_argument(
         "--sort-by",
         type=str,
@@ -633,13 +842,21 @@ def main():
             f.write(csv_content)
         print(f"[+] Quant analysis CSV exported to: {csv_path}")
 
+    if args.html:
+        html_content = generate_html_report(results)
+        html_path = Path(args.html)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print(f"[+] Quant analysis HTML exported to: {html_path}")
+
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(md_content)
         print(f"[+] Quant analysis report exported to: {out_path}")
-    elif not args.json and not args.csv:
+    elif not args.json and not args.csv and not args.html:
         print(md_content)
 
 
