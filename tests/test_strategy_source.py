@@ -1302,6 +1302,72 @@ class StrategySourceTests(unittest.TestCase):
         self.assertGreater(res["avg_drawdown_pct"], 0.0)
         self.assertEqual(res["max_drawdown_duration_trades"], 1)
 
+    def test_sterling_ratio_calculation(self) -> None:
+        from scripts.analyze_backtest_results import calculate_ulcer_and_drawdown_metrics
+
+        empty = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty["sterling_ratio"], 0.0)
+
+        # Standard drawdown scenario
+        profits = [0.05, -0.02, 0.03, -0.01, 0.04]
+        res = calculate_ulcer_and_drawdown_metrics(profits)
+        self.assertGreater(res["sterling_ratio"], 0.0)
+        self.assertAlmostEqual(
+            res["sterling_ratio"],
+            res["total_return_pct"] / res["avg_drawdown_pct"],
+            places=1,
+        )
+
+        # Strictly positive profits (no drawdown) -> returns 999.0
+        no_dd = calculate_ulcer_and_drawdown_metrics([0.05, 0.03, 0.02])
+        self.assertEqual(no_dd["sterling_ratio"], 999.0)
+
+    def test_export_quant_analysis_csv(self) -> None:
+        from scripts.analyze_backtest_results import export_quant_analysis_csv
+
+        mock_results = {
+            "TestStrategy": {
+                "total_trades": 10,
+                "win_rate_pct": 70.0,
+                "profit_factor": 2.5,
+                "total_return_pct": 15.0,
+                "max_drawdown_pct": 3.0,
+                "sterling_ratio": 5.0,
+                "burke_ratio": 3.2,
+                "ulcer_index": 1.1,
+            }
+        }
+        csv_text = export_quant_analysis_csv(mock_results)
+        self.assertIn("strategy,total_trades,win_rate_pct", csv_text)
+        self.assertIn("sterling_ratio", csv_text)
+        self.assertIn("TestStrategy,10,70.0", csv_text)
+
+    def test_strategy_config_csv_and_short_filter(self) -> None:
+        from scripts.summarize_strategy_configs import (
+            filter_strategy_configs,
+            format_config_csv,
+            get_strategy_configs,
+        )
+
+        configs = get_strategy_configs(Path(__file__).resolve().parents[1] / "strategies")
+        self.assertGreaterEqual(len(configs), 3)
+
+        # CSV formatting check
+        csv_output = format_config_csv(configs)
+        self.assertIn("file,class,timeframe", csv_output)
+        self.assertIn("can_short", csv_output)
+        self.assertIn("KoreanStarterStrategy", csv_output)
+
+        # Can-short filtering
+        short_capable = filter_strategy_configs(configs, can_short_only=True)
+        self.assertEqual(len(short_capable), 0)  # default spot strategies cannot short
+
+    def test_backtest_script_quant_csv_parameter(self) -> None:
+        script_path = Path(__file__).resolve().parents[1] / "scripts" / "Invoke-Backtest.ps1"
+        content = script_path.read_text(encoding="utf-8-sig")
+        self.assertIn("[switch]$QuantCsv", content)
+        self.assertIn(".PARAMETER QuantCsv", content)
+
 
 if __name__ == "__main__":
     unittest.main()
