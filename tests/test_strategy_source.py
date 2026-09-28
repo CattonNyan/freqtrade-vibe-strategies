@@ -1368,6 +1368,89 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("[switch]$QuantCsv", content)
         self.assertIn(".PARAMETER QuantCsv", content)
 
+    def test_gain_to_pain_ratio_calculation(self) -> None:
+        from scripts.analyze_backtest_results import calculate_ulcer_and_drawdown_metrics
+
+        # Empty returns -> 0.0
+        empty_res = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty_res["gain_to_pain_ratio"], 0.0)
+
+        # Strictly positive profits -> 999.0
+        pos_res = calculate_ulcer_and_drawdown_metrics([0.05, 0.03, 0.02])
+        self.assertEqual(pos_res["gain_to_pain_ratio"], 999.0)
+
+        # Mixed profits: +0.05, +0.03, -0.02, -0.01 -> sum all = 0.05, sum abs loss = 0.03 -> GPR = 0.05 / 0.03 = 1.667
+        mixed_res = calculate_ulcer_and_drawdown_metrics([0.05, 0.03, -0.02, -0.01])
+        self.assertAlmostEqual(mixed_res["gain_to_pain_ratio"], 5.0 / 3.0, places=3)
+
+    def test_generate_html_report(self) -> None:
+        from scripts.analyze_backtest_results import generate_html_report
+
+        mock_results = {
+            "KoreanStarterStrategy": {
+                "total_trades": 15,
+                "win_rate_pct": 66.7,
+                "profit_factor": 2.1,
+                "expectancy_pct": 0.45,
+                "total_return_pct": 18.5,
+                "max_drawdown_pct": 5.2,
+                "ulcer_index": 2.3,
+                "martin_ratio": 8.04,
+                "sortino_ratio": 4.12,
+                "burke_ratio": 3.5,
+                "sterling_ratio": 4.2,
+                "gain_to_pain_ratio": 2.8,
+                "full_kelly_pct": 25.0,
+                "half_kelly_pct": 12.5,
+                "time_underwater_pct": 33.3,
+                "max_consecutive_wins": 5,
+                "max_consecutive_losses": 2,
+                "exit_reasons": {
+                    "rsi_overbought": {
+                        "trades": 10,
+                        "win_rate_pct": 80.0,
+                        "total_profit_pct": 15.0,
+                        "avg_profit_pct": 1.5,
+                        "profit_factor": 3.0,
+                        "avg_duration_min": 45.0,
+                    }
+                },
+                "pair_performance": {
+                    "BTC/USDT": {
+                        "trades": 15,
+                        "win_rate_pct": 66.7,
+                        "total_profit_pct": 18.5,
+                        "avg_profit_pct": 1.23,
+                        "profit_factor": 2.1,
+                        "avg_duration_min": 50.0,
+                    }
+                },
+            }
+        }
+        html_out = generate_html_report(mock_results)
+        self.assertIn("<!DOCTYPE html>", html_out)
+        self.assertIn("KoreanStarterStrategy", html_out)
+        self.assertIn("Freqtrade Quantitative Backtest Report", html_out)
+        self.assertIn("rsi_overbought", html_out)
+        self.assertIn("BTC/USDT", html_out)
+        self.assertIn("게인 투 페인", html_out)
+
+    def test_backtest_script_quant_html_parameter(self) -> None:
+        script_path = Path(__file__).resolve().parents[1] / "scripts" / "Invoke-Backtest.ps1"
+        content = script_path.read_text(encoding="utf-8-sig")
+        self.assertIn("[switch]$QuantHtml", content)
+        self.assertIn(".PARAMETER QuantHtml", content)
+
+    def test_strategy_analysis_script_quant_parameters(self) -> None:
+        script_path = Path(__file__).resolve().parents[1] / "scripts" / "Invoke-StrategyAnalysis.ps1"
+        content = script_path.read_text(encoding="utf-8-sig")
+        self.assertIn("[switch]$QuantJson", content)
+        self.assertIn("[switch]$QuantCsv", content)
+        self.assertIn("[switch]$QuantHtml", content)
+        self.assertIn(".PARAMETER QuantJson", content)
+        self.assertIn(".PARAMETER QuantCsv", content)
+        self.assertIn(".PARAMETER QuantHtml", content)
+
 
 if __name__ == "__main__":
     unittest.main()
