@@ -32,6 +32,21 @@
 .PARAMETER AdvancedQuantMetrics
     Freqtrade 백테스트 JSON 결과가 있는 경우 궤양지수(Ulcer Index), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성합니다.
 
+.PARAMETER QuantJson
+    Freqtrade 백테스트 JSON 결과가 있는 경우 궤양지수(Ulcer Index), 손익비, 페어별 성과를 담은 정형 JSON 리포트(quant-analysis.json)를 자동 생성합니다.
+
+.PARAMETER QuantCsv
+    Freqtrade 백테스트 JSON 결과가 있는 경우 전략별 퀀트 지표(MDD, 궤양지수, 버크 비율, 스털링 비율 등)를 담은 CSV 리포트(quant-analysis.csv)를 자동 생성합니다.
+
+.PARAMETER QuantHtml
+    Freqtrade 백테스트 JSON 결과가 있는 경우 전략별 퀀트 지표, 청산 사유, 페어별 성과를 담은 시각화 HTML 리포트(quant-analysis.html)를 자동 생성합니다.
+
+.PARAMETER QuantSortBy
+    퀀트 분석 시 청산 태그 및 페어별 분석 테이블 정렬 기준 (trades, profit, win_rate, pf 중 선택).
+
+.PARAMETER QuantMinTrades
+    퀀트 분석 시 청산 태그 및 페어별 분석 테이블에 포함할 최소 거래수 필터 (기본값: 1, 최소: 1, 최대: 10000).
+
 .EXAMPLE
     .\scripts\Invoke-StrategyAnalysis.ps1 -Timerange 20250101-20260101
 
@@ -66,7 +81,19 @@ param(
 
     [switch]$Force,
 
-    [switch]$AdvancedQuantMetrics
+    [switch]$AdvancedQuantMetrics,
+
+    [switch]$QuantJson,
+
+    [switch]$QuantCsv,
+
+    [switch]$QuantHtml,
+
+    [ValidateSet("trades", "profit", "win_rate", "pf")]
+    [string]$QuantSortBy,
+
+    [ValidateRange(1, 10000)]
+    [int]$QuantMinTrades = 1
 )
 
 Set-StrictMode -Version Latest
@@ -165,16 +192,51 @@ foreach ($strategy in $normalizedStrategies) {
         -LogPath $lookaheadLogPath
 }
 
-if ($AdvancedQuantMetrics) {
+if ($AdvancedQuantMetrics -or $QuantJson -or $QuantCsv -or $QuantHtml) {
     Write-Host "[*] 퀀트 심층 하방 리스크 분석(Ulcer Index & Expectancy) 리포트 생성 중..."
     $analyzerScript = Join-Path $PSScriptRoot "analyze_backtest_results.py"
     $resultsDir = Join-Path $repositoryRoot "user_data/backtest_results"
     $latestJson = Get-ChildItem -Path $resultsDir -Filter "*.json" -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($null -ne $latestJson) {
-        $reportPath = Join-Path $resultsDir "quant-analysis-$Timerange.md"
         $pythonExe = if (Test-Path "$repositoryRoot/.venv/Scripts/python.exe") { "$repositoryRoot/.venv/Scripts/python.exe" } else { "python" }
-        & $pythonExe $analyzerScript $latestJson.FullName -o $reportPath
-        Write-Host "[+] 퀀트 심층 리포트 저장 완료: $reportPath"
+        $analyzerArgs = @($analyzerScript, $latestJson.FullName)
+        $reportPath = Join-Path $resultsDir "quant-analysis-$Timerange.md"
+        $quantJsonPath = Join-Path $resultsDir "quant-analysis-$Timerange.json"
+        $quantCsvPath = Join-Path $resultsDir "quant-analysis-$Timerange.csv"
+        $quantHtmlPath = Join-Path $resultsDir "quant-analysis-$Timerange.html"
+
+        if ($AdvancedQuantMetrics) {
+            $analyzerArgs += @("-o", $reportPath)
+        }
+        if ($QuantJson) {
+            $analyzerArgs += @("-j", $quantJsonPath)
+        }
+        if ($QuantCsv) {
+            $analyzerArgs += @("-c", $quantCsvPath)
+        }
+        if ($QuantHtml) {
+            $analyzerArgs += @("-H", $quantHtmlPath)
+        }
+        if ($QuantSortBy) {
+            $analyzerArgs += @("--sort-by", $QuantSortBy)
+        }
+        if ($QuantMinTrades -gt 1) {
+            $analyzerArgs += @("--min-trades", [string]$QuantMinTrades)
+        }
+
+        & $pythonExe @analyzerArgs
+        if ($AdvancedQuantMetrics) {
+            Write-Host "[+] 퀀트 심층 리포트 저장 완료: $reportPath"
+        }
+        if ($QuantJson) {
+            Write-Host "[+] 퀀트 JSON 저장 완료: $quantJsonPath"
+        }
+        if ($QuantCsv) {
+            Write-Host "[+] 퀀트 CSV 저장 완료: $quantCsvPath"
+        }
+        if ($QuantHtml) {
+            Write-Host "[+] 퀀트 HTML 저장 완료: $quantHtmlPath"
+        }
     } else {
         Write-Host "[!] 백테스트 JSON 결과 파일이 없어 퀀트 분석 생략 (먼저 Invoke-Backtest.ps1 실행 권장)"
     }
