@@ -28,6 +28,21 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
         return default
 
 
+def _percentile(values: list[float], pct: float) -> float:
+    """Calculate percentile from a list of floats using standard linear interpolation."""
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    k = (len(sorted_vals) - 1) * (pct / 100.0)
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return sorted_vals[int(k)]
+    d0 = sorted_vals[int(f)] * (c - k)
+    d1 = sorted_vals[int(c)] * (k - f)
+    return d0 + d1
+
+
 def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str, float]:
     """Calculate cumulative equity curve, max drawdown, Ulcer Index, and Pain Index from trade profit percentages.
 
@@ -186,6 +201,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "max_consecutive_losses": 0,
             "full_kelly_pct": 0.0,
             "half_kelly_pct": 0.0,
+            "tail_ratio": 0.0,
+            "common_sense_ratio": 0.0,
         }
 
     wins = []
@@ -265,6 +282,21 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         full_k = 0.0
         half_k = 0.0
 
+    # Tail Ratio (p95 / |p05|) and Common Sense Ratio (CSR = Profit Factor * Tail Ratio)
+    all_trade_profits_pct = [
+        _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0)) * 100.0
+        for t in trades
+    ]
+    if len(all_trade_profits_pct) >= 2:
+        p95 = _percentile(all_trade_profits_pct, 95.0)
+        p05 = _percentile(all_trade_profits_pct, 5.0)
+        abs_p05 = abs(p05)
+        tail_ratio = (p95 / abs_p05) if abs_p05 > 1e-6 else (999.0 if p95 > 0 else 0.0)
+        common_sense_ratio = (profit_factor * tail_ratio) if (profit_factor > 0 and tail_ratio > 0) else 0.0
+    else:
+        tail_ratio = 0.0
+        common_sense_ratio = 0.0
+
     return {
         "total_trades": total_trades,
         "wins": win_count,
@@ -284,6 +316,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "max_consecutive_losses": max_loss_streak,
         "full_kelly_pct": round(full_k, 2),
         "half_kelly_pct": round(half_k, 2),
+        "tail_ratio": round(tail_ratio, 2),
+        "common_sense_ratio": round(common_sense_ratio, 2),
     }
 
 
@@ -465,8 +499,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -478,7 +512,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
         kelly_str = f"{full_k:.1f}%/{half_k:.1f}%"
         lines.append(
             f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
-            f"{data['profit_factor']:.2f} | {data['expectancy_pct']:+.3f}% | {kelly_str} | "
+            f"{data['profit_factor']:.2f} | {data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
+            f"{data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
             f"{data.get('sortino_ratio', 0.0):.2f} | "
             f"{data.get('burke_ratio', 0.0):.2f} | "
@@ -522,6 +557,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
+    lines.append("- **테일 비율 (Tail Ratio)**: 95분위수 수익률 / 5분위수 손실률 절대값 (p95 / |p05|). 1.0 초과 시 우측 꼬리(수익)가 좌측 꼬리(손실)보다 비대칭적으로 우세함을 의미합니다.")
+    lines.append("- **상식 비율 (Common Sense Ratio / CSR)**: 손익비(Profit Factor) × 테일 비율(Tail Ratio). 트레이딩 엣지가 단지 대칭적 분산에 의한 것이 아니라 진정한 비대칭 우위에 기반하는지 측정하는 복합 척도입니다.")
     lines.append("- **궤양지수 (Ulcer Index, Peter Martin 1987)**: 고점 대비 하락폭(Drawdown)의 제곱평균제곱근(RMS). 단순 변동성과 달리 상승 변동성은 처벌하지 않고 깊고 긴 하락장만을 집중 가중 처벌합니다.")
     lines.append("- **마틴 비율 (Martin Ratio / UPI)**: 총 수익률을 궤양지수로 나눈 값으로, 샤프 지수보다 추세추종 전략의 실질 하방 위험 대비 성과를 정확하게 평가합니다.")
     lines.append("- **소르티노 비율 (Sortino Ratio)**: 하방 변동성(Downside Deviation)만을 페널티로 부여하여 하방 손실 위험 대비 전략의 초과 수익률을 평가합니다.")
@@ -551,6 +588,8 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "max_consecutive_wins",
         "max_consecutive_losses",
         "profit_factor",
+        "tail_ratio",
+        "common_sense_ratio",
         "expectancy_pct",
         "avg_win_pct",
         "avg_loss_pct",
