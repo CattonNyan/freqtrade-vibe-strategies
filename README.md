@@ -92,6 +92,8 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -Breakdown month `
   -Fee 0.001 `
   -QuantReport `
+  -QuantJson `
+  -QuantCsv `
   -QuantSortBy profit `
   -QuantMinTrades 3
 ```
@@ -126,15 +128,15 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
-전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 버크 비율(Burke Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
+전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics` 스위치를 통해 궤양지수(Ulcer Index), 소르티노 비율, 버크 비율(Burke Ratio), 스털링 비율(Sterling Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-StrategyAnalysis.ps1 `
   -Timerange 20250101-20260101 `
   -AdvancedQuantMetrics
 
-# 독립 퀀트 리스크 분석기 실행 (페어/청산태그 정렬 및 최소 거래수 필터 지원)
-python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --sort-by profit --min-trades 3
+# 독립 퀀트 리스크 분석기 실행 (Markdown, 정형 JSON 및 플랫 CSV 출력 지원)
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --output report.md --json report.json --csv report.csv --sort-by profit --min-trades 3
 ```
 
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
@@ -151,10 +153,11 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 # 전략 설정 매트릭스 요약표 함께 출력
 .\scripts\Invoke-Checks.ps1 -DetailedReport
 
-# 전략 설정 타임프레임순 정렬, 트레일링 스탑 필터링 및 5m 전용 전략 검토
+# 전략 설정 타임프레임순 정렬, 트레일링 스탑 필터링, 공매도 지원 필터 및 CSV 내보내기
 python .\scripts\summarize_strategy_configs.py --sort-by timeframe
 python .\scripts\summarize_strategy_configs.py --has-trailing --markdown
 python .\scripts\summarize_strategy_configs.py --filter-timeframe 5m
+python .\scripts\summarize_strategy_configs.py --can-short-only --csv
 ```
 
 개별 검사를 직접 실행하려면 다음 명령을 사용합니다.
