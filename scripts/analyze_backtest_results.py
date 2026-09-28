@@ -48,6 +48,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "sortino_ratio": 0.0,
             "burke_ratio": 0.0,
             "sterling_ratio": 0.0,
+            "gain_to_pain_ratio": 0.0,
             "time_underwater_pct": 0.0,
             "avg_drawdown_pct": 0.0,
             "max_drawdown_duration_trades": 0,
@@ -92,6 +93,15 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         (total_return_pct / avg_drawdown_pct)
         if avg_drawdown_pct > 1e-6
         else (999.0 if total_return_pct > 0 else 0.0)
+    )
+
+    # Gain-to-Pain Ratio (Jack Schwager) = Sum(All Returns) / Sum(|Negative Returns|)
+    sum_all_profits = sum(clean_profits)
+    sum_abs_loss = sum(abs(p) for p in clean_profits if p < 0.0)
+    gain_to_pain_ratio = (
+        (sum_all_profits / sum_abs_loss)
+        if sum_abs_loss > 1e-6
+        else (999.0 if sum_all_profits > 0 else 0.0)
     )
 
     # Pain Index = mean( |DD| )
@@ -147,6 +157,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "sortino_ratio": round(sortino_ratio, 3),
         "burke_ratio": round(burke_ratio, 3),
         "sterling_ratio": round(sterling_ratio, 3),
+        "gain_to_pain_ratio": round(gain_to_pain_ratio, 3),
         "time_underwater_pct": round(time_underwater_pct, 2),
         "avg_drawdown_pct": round(avg_drawdown_pct, 2),
         "max_drawdown_duration_trades": max_underwater,
@@ -454,8 +465,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -472,6 +483,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data.get('sortino_ratio', 0.0):.2f} | "
             f"{data.get('burke_ratio', 0.0):.2f} | "
             f"{data.get('sterling_ratio', 0.0):.2f} | "
+            f"{data.get('gain_to_pain_ratio', 0.0):.2f} | "
             f"{data['martin_ratio']:.2f} | {data['calmar_ratio']:.2f} | "
             f"{data.get('recovery_factor', 0.0):.2f} | "
             f"{data.get('time_underwater_pct', 0.0):.1f}% | "
@@ -515,6 +527,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **소르티노 비율 (Sortino Ratio)**: 하방 변동성(Downside Deviation)만을 페널티로 부여하여 하방 손실 위험 대비 전략의 초과 수익률을 평가합니다.")
     lines.append("- **버크 비율 (Burke Ratio, Gibbons Burke 1994)**: 총 수익률을 개별 낙폭(Drawdown)들의 제곱합의 제곱근으로 나눈 비율로, 단일 극단값뿐 아니라 누적된 다수의 하락 충격을 종합 반영합니다.")
     lines.append("- **스털링 비율 (Sterling Ratio)**: 총 수익률을 평균 낙폭(Average Drawdown)으로 나눈 값으로, 일상적인 조정 깊이 대비 수익 창출력을 측정합니다.")
+    lines.append("- **게인 투 페인 비율 (Gain-to-Pain Ratio, Jack Schwager)**: 전체 거래 순손익률의 합을 손실 거래 손실률 절대값의 합으로 나눈 비율로, 감내한 하방 고통(손실액) 대비 누적 창출 수익의 효율성을 직관적으로 평가합니다.")
     lines.append("- **수중 기간 비율 (Time Underwater %)**: 전체 거래 중 최고점(High-Water Mark)을 탈환하지 못하고 손실 구간에 머무른 거래 수의 백분율입니다.")
     lines.append("- **켈리 비율 (Kelly Criterion, Full/Half)**: 승률과 손익비를 바탕으로 자본 성장을 극대화하는 이론적 최적 베팅 비중(f*) 및 암호화폐 시장의 꼬리 위험을 완화한 보수적 권장치인 하프 켈리(Half-Kelly, f*/2) 비율입니다.")
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
@@ -555,6 +568,7 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "sortino_ratio",
         "burke_ratio",
         "sterling_ratio",
+        "gain_to_pain_ratio",
         "martin_ratio",
         "calmar_ratio",
         "recovery_factor",
