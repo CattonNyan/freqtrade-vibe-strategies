@@ -31,6 +31,9 @@
 .PARAMETER QuantJson
     백테스트 완료 후 궤양지수(Ulcer Index), 손익비, 페어별 성과를 담은 정형 JSON 리포트(quant-analysis.json)를 자동 생성합니다.
 
+.PARAMETER QuantCsv
+    백테스트 완료 후 전략별 퀀트 지표(MDD, 궤양지수, 버크 비율, 스털링 비율 등)를 담은 CSV 리포트(quant-analysis.csv)를 자동 생성합니다.
+
 .PARAMETER QuantSortBy
     퀀트 분석 시 청산 태그 및 페어별 분석 테이블 정렬 기준 (trades, profit, win_rate, pf 중 선택).
 
@@ -68,6 +71,8 @@ param(
     [switch]$QuantReport,
 
     [switch]$QuantJson,
+
+    [switch]$QuantCsv,
 
     [ValidateSet("trades", "profit", "win_rate", "pf")]
     [string]$QuantSortBy,
@@ -147,7 +152,7 @@ try {
         -FailureMessage "백테스트에 실패했습니다."
 
     Write-Host "[+] [$Strategy] 백테스트 완료. (결과 위치: user_data/backtest_results/$resultDirectoryName)"
-    if ($QuantReport -or $QuantJson) {
+    if ($QuantReport -or $QuantJson -or $QuantCsv) {
         Write-Host "[*] [$Strategy] 퀀트 심층 리스크 및 페어별 성과 분석 처리 중..."
         $analyzerScript = Join-Path $PSScriptRoot "analyze_backtest_results.py"
         $backtestJson = Get-ChildItem -Path $resultPath -Filter "*.json" -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -156,12 +161,16 @@ try {
             $analyzerArgs = @($analyzerScript, $backtestJson.FullName)
             $reportPath = Join-Path $resultPath "quant-report.md"
             $quantJsonPath = Join-Path $resultPath "quant-analysis.json"
+            $quantCsvPath = Join-Path $resultPath "quant-analysis.csv"
 
             if ($QuantReport) {
                 $analyzerArgs += @("-o", $reportPath)
             }
             if ($QuantJson) {
                 $analyzerArgs += @("-j", $quantJsonPath)
+            }
+            if ($QuantCsv) {
+                $analyzerArgs += @("-c", $quantCsvPath)
             }
             if ($QuantSortBy) {
                 $analyzerArgs += @("--sort-by", $QuantSortBy)
@@ -176,6 +185,9 @@ try {
             }
             if ($QuantJson) {
                 Write-Host "[+] [$Strategy] 퀀트 JSON 저장 완료: $quantJsonPath"
+            }
+            if ($QuantCsv) {
+                Write-Host "[+] [$Strategy] 퀀트 CSV 저장 완료: $quantCsvPath"
             }
         } else {
             Write-Host "[!] 백테스트 결과 디렉터리에 JSON 파일이 없어 퀀트 분석을 건너뜁니다."
