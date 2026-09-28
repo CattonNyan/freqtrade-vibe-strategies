@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import csv
+import io
 import json
 from pathlib import Path
 
@@ -84,8 +86,8 @@ def format_config_table(configs: list[dict[str, object]]) -> str:
 def format_config_markdown(configs: list[dict[str, object]]) -> str:
     """Format strategy configuration list into a GitHub Flavored Markdown table."""
     lines = [
-        "| Strategy Class | Timeframe | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Process New Only |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| Strategy Class | Timeframe | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Can Short | Process New Only |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
     for c in configs:
         cls_name = str(c["class"])
@@ -94,9 +96,31 @@ def format_config_markdown(configs: list[dict[str, object]]) -> str:
         sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c["stoploss"], (int, float)) else str(c["stoploss"])
         ts = "YES" if c["trailing_stop"] else "NO"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
+        cs = "YES" if c.get("can_short") else "NO"
         pno = "YES" if c.get("process_only_new_candles", True) else "NO"
-        lines.append(f"| **{cls_name}** | {tf} | {startup} | {sl} | {ts} | {csl} | {pno} |")
+        lines.append(f"| **{cls_name}** | {tf} | {startup} | {sl} | {ts} | {csl} | {cs} | {pno} |")
     return "\n".join(lines)
+
+
+def format_config_csv(configs: list[dict[str, object]]) -> str:
+    """Format strategy configuration list into a CSV string."""
+    headers = [
+        "file",
+        "class",
+        "timeframe",
+        "startup_candle_count",
+        "stoploss",
+        "trailing_stop",
+        "use_custom_stoploss",
+        "can_short",
+        "process_only_new_candles",
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    for c in configs:
+        writer.writerow(c)
+    return output.getvalue()
 
 
 def sort_strategy_configs(
@@ -143,6 +167,7 @@ def filter_strategy_configs(
     has_trailing: bool | None = None,
     custom_stoploss_only: bool = False,
     timeframe: str | None = None,
+    can_short_only: bool = False,
 ) -> list[dict[str, object]]:
     """Filter strategy configuration list based on criteria."""
     filtered = list(configs)
@@ -152,6 +177,8 @@ def filter_strategy_configs(
         filtered = [c for c in filtered if bool(c.get("use_custom_stoploss"))]
     if timeframe:
         filtered = [c for c in filtered if str(c.get("timeframe", "")).strip().lower() == timeframe.strip().lower()]
+    if can_short_only:
+        filtered = [c for c in filtered if bool(c.get("can_short"))]
     return filtered
 
 
@@ -164,6 +191,7 @@ def main():
     parser = argparse.ArgumentParser(description="Summarize strategy configurations.")
     parser.add_argument("--dir", type=str, default=None, help="Custom strategies directory path")
     parser.add_argument("--json", action="store_true", help="Output configurations as JSON")
+    parser.add_argument("--csv", action="store_true", help="Output configurations as CSV")
     parser.add_argument("--markdown", "-m", action="store_true", help="Output configurations as Markdown table")
     parser.add_argument(
         "--sort-by",
@@ -175,6 +203,9 @@ def main():
     parser.add_argument("--has-trailing", action="store_true", help="Show only strategies with trailing stop enabled")
     parser.add_argument(
         "--custom-stoploss-only", action="store_true", help="Show only strategies that define custom stoploss"
+    )
+    parser.add_argument(
+        "--can-short-only", action="store_true", help="Show only strategies supporting short positions"
     )
     parser.add_argument(
         "--filter-timeframe",
@@ -192,6 +223,8 @@ def main():
         configs = filter_strategy_configs(configs, has_trailing=True)
     if args.custom_stoploss_only:
         configs = filter_strategy_configs(configs, custom_stoploss_only=True)
+    if args.can_short_only:
+        configs = filter_strategy_configs(configs, can_short_only=True)
     if args.filter_timeframe:
         configs = filter_strategy_configs(configs, timeframe=args.filter_timeframe)
 
@@ -199,6 +232,8 @@ def main():
 
     if args.json:
         output_text = export_strategy_configs_json(configs)
+    elif args.csv:
+        output_text = format_config_csv(configs)
     elif args.markdown:
         output_text = format_config_markdown(configs)
     else:
