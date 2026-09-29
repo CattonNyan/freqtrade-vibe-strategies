@@ -64,6 +64,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "burke_ratio": 0.0,
             "sterling_ratio": 0.0,
             "gain_to_pain_ratio": 0.0,
+            "k_ratio": 0.0,
             "time_underwater_pct": 0.0,
             "avg_drawdown_pct": 0.0,
             "max_drawdown_duration_trades": 0,
@@ -159,6 +160,28 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         else:
             curr_underwater = 0
 
+    # K-Ratio (Lars Kestner) = Slope of equity curve / (Standard Error of slope * sqrt(T))
+    T = len(drawdowns_pct)
+    if T >= 3:
+        cum_ret = [(val - 1.0) * 100.0 for val in equity[1:]]
+        mean_t = (T - 1) / 2.0
+        mean_y = sum(cum_ret) / T
+        ss_xx = sum((t - mean_t) ** 2 for t in range(T))
+        ss_xy = sum((t - mean_t) * (y - mean_y) for t, y in enumerate(cum_ret))
+        if ss_xx > 1e-9:
+            slope = ss_xy / ss_xx
+            intercept = mean_y - slope * mean_t
+            ss_res = sum((y - (intercept + slope * t)) ** 2 for t, y in enumerate(cum_ret))
+            se_slope = math.sqrt(ss_res / ((T - 2) * ss_xx))
+            if se_slope > 1e-9:
+                k_ratio = slope / (se_slope * math.sqrt(T))
+            else:
+                k_ratio = 999.0 if slope > 0 else (-999.0 if slope < 0 else 0.0)
+        else:
+            k_ratio = 0.0
+    else:
+        k_ratio = 0.0
+
     return {
         "total_return_pct": round(total_return_pct, 2),
         "max_drawdown_pct": round(mdd_pct, 2),
@@ -173,6 +196,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "burke_ratio": round(burke_ratio, 3),
         "sterling_ratio": round(sterling_ratio, 3),
         "gain_to_pain_ratio": round(gain_to_pain_ratio, 3),
+        "k_ratio": round(k_ratio, 3),
         "time_underwater_pct": round(time_underwater_pct, 2),
         "avg_drawdown_pct": round(avg_drawdown_pct, 2),
         "max_drawdown_duration_trades": max_underwater,
@@ -203,6 +227,9 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "half_kelly_pct": 0.0,
             "tail_ratio": 0.0,
             "common_sense_ratio": 0.0,
+            "sqn": 0.0,
+            "sqn_100": 0.0,
+            "sqn_rating": "N/A",
         }
 
     wins = []
@@ -287,15 +314,44 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0)) * 100.0
         for t in trades
     ]
+    tail_ratio = 0.0
+    common_sense_ratio = 0.0
     if len(all_trade_profits_pct) >= 2:
         p95 = _percentile(all_trade_profits_pct, 95.0)
         p05 = _percentile(all_trade_profits_pct, 5.0)
         abs_p05 = abs(p05)
         tail_ratio = (p95 / abs_p05) if abs_p05 > 1e-6 else (999.0 if p95 > 0 else 0.0)
         common_sense_ratio = (profit_factor * tail_ratio) if (profit_factor > 0 and tail_ratio > 0) else 0.0
+    # Van Tharp System Quality Number (SQN)
+    N = len(all_trade_profits_pct)
+    if N >= 2:
+        mean_pnl = sum(all_trade_profits_pct) / N
+        var_pnl = sum((x - mean_pnl) ** 2 for x in all_trade_profits_pct) / (N - 1)
+        std_pnl = math.sqrt(var_pnl)
+        if std_pnl > 1e-6:
+            sqn = math.sqrt(N) * (mean_pnl / std_pnl)
+            sqn_100 = math.sqrt(min(N, 100)) * (mean_pnl / std_pnl)
+        else:
+            sqn = 999.0 if mean_pnl > 0 else (-999.0 if mean_pnl < 0 else 0.0)
+            sqn_100 = sqn
     else:
-        tail_ratio = 0.0
-        common_sense_ratio = 0.0
+        sqn = 0.0
+        sqn_100 = 0.0
+
+    if sqn >= 7.0:
+        sqn_rating = "Holy Grail"
+    elif sqn >= 5.0:
+        sqn_rating = "Superb"
+    elif sqn >= 3.0:
+        sqn_rating = "Excellent"
+    elif sqn >= 2.5:
+        sqn_rating = "Good"
+    elif sqn >= 2.0:
+        sqn_rating = "Average"
+    elif sqn >= 1.6:
+        sqn_rating = "Below Average"
+    else:
+        sqn_rating = "Poor"
 
     return {
         "total_trades": total_trades,
@@ -318,6 +374,9 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "half_kelly_pct": round(half_k, 2),
         "tail_ratio": round(tail_ratio, 2),
         "common_sense_ratio": round(common_sense_ratio, 2),
+        "sqn": round(sqn, 2),
+        "sqn_100": round(sqn_100, 2),
+        "sqn_rating": sqn_rating,
     }
 
 
@@ -499,8 +558,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -510,11 +569,16 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
         full_k = data.get("full_kelly_pct", 0.0)
         half_k = data.get("half_kelly_pct", 0.0)
         kelly_str = f"{full_k:.1f}%/{half_k:.1f}%"
+        sqn_val = data.get("sqn", 0.0)
+        sqn_r = data.get("sqn_rating", "N/A")
+        sqn_str = f"{sqn_val:.2f} ({sqn_r})"
         lines.append(
             f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
-            f"{data['profit_factor']:.2f} | {data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
+            f"{data['profit_factor']:.2f} | {sqn_str} | "
+            f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
             f"{data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
+            f"{data.get('k_ratio', 0.0):.2f} | "
             f"{data.get('sortino_ratio', 0.0):.2f} | "
             f"{data.get('burke_ratio', 0.0):.2f} | "
             f"{data.get('sterling_ratio', 0.0):.2f} | "
@@ -557,6 +621,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
+    lines.append("- **시스템 품질 지수 (System Quality Number / SQN, Van Tharp)**: sqrt(N) * (평균 수익률 / 수익률 표준편차). 거래 전략의 통계적 우수성을 종합 평가하는 지표로, 2.0 이상이면 평균, 3.0 이상이면 우수(Excellent), 5.0 이상이면 탁월(Superb), 7.0 이상이면 성배(Holy Grail) 등급으로 분류됩니다.")
+    lines.append("- **K-비율 (K-Ratio, Lars Kestner)**: 누적 수익 곡선의 선형 추세 기울기를 표준오차와 sqrt(T)로 정규화한 지표로, 수익 곡선이 노이즈 없이 얼마나 일관되게 우상향하는지 측정합니다.")
     lines.append("- **테일 비율 (Tail Ratio)**: 95분위수 수익률 / 5분위수 손실률 절대값 (p95 / |p05|). 1.0 초과 시 우측 꼬리(수익)가 좌측 꼬리(손실)보다 비대칭적으로 우세함을 의미합니다.")
     lines.append("- **상식 비율 (Common Sense Ratio / CSR)**: 손익비(Profit Factor) × 테일 비율(Tail Ratio). 트레이딩 엣지가 단지 대칭적 분산에 의한 것이 아니라 진정한 비대칭 우위에 기반하는지 측정하는 복합 척도입니다.")
     lines.append("- **궤양지수 (Ulcer Index, Peter Martin 1987)**: 고점 대비 하락폭(Drawdown)의 제곱평균제곱근(RMS). 단순 변동성과 달리 상승 변동성은 처벌하지 않고 깊고 긴 하락장만을 집중 가중 처벌합니다.")
@@ -588,6 +654,9 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "max_consecutive_wins",
         "max_consecutive_losses",
         "profit_factor",
+        "sqn",
+        "sqn_100",
+        "sqn_rating",
         "tail_ratio",
         "common_sense_ratio",
         "expectancy_pct",
@@ -604,6 +673,7 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "max_drawdown_pct",
         "ulcer_index",
         "pain_index",
+        "k_ratio",
         "sortino_ratio",
         "burke_ratio",
         "sterling_ratio",
