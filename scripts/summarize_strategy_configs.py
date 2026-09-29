@@ -7,6 +7,7 @@ import ast
 import csv
 import io
 import json
+import sys
 from pathlib import Path
 
 
@@ -187,12 +188,151 @@ def export_strategy_configs_json(configs: list[dict[str, object]], indent: int =
     return json.dumps(configs, indent=indent, ensure_ascii=False)
 
 
+def format_config_html(configs: list[dict[str, object]]) -> str:
+    """Format strategy configuration list into a standalone dark-themed HTML report."""
+    rows = []
+    for c in configs:
+        cls_name = str(c.get("class", ""))
+        filename = str(c.get("file", ""))
+        tf = str(c.get("timeframe", "-"))
+        startup = str(c.get("startup_candle_count", "-"))
+        sl_raw = c.get("stoploss", "-")
+        sl_str = f"{float(sl_raw) * 100:.1f}%" if isinstance(sl_raw, (int, float)) else str(sl_raw)
+        ts = "YES" if c.get("trailing_stop") else "NO"
+        csl = "YES" if c.get("use_custom_stoploss") else "NO"
+        cs = "YES" if c.get("can_short") else "NO"
+        pno = "YES" if c.get("process_only_new_candles", True) else "NO"
+
+        ts_class = "badge-success" if ts == "YES" else "badge-muted"
+        csl_class = "badge-success" if csl == "YES" else "badge-muted"
+        cs_class = "badge-warning" if cs == "YES" else "badge-muted"
+
+        rows.append(f"""
+        <tr>
+            <td><strong>{cls_name}</strong><br><small style="color:#8b949e">{filename}</small></td>
+            <td><span class="badge badge-primary">{tf}</span></td>
+            <td>{startup}</td>
+            <td style="color:#f85149; font-weight:600;">{sl_str}</td>
+            <td><span class="badge {ts_class}">{ts}</span></td>
+            <td><span class="badge {csl_class}">{csl}</span></td>
+            <td><span class="badge {cs_class}">{cs}</span></td>
+            <td>{pno}</td>
+        </tr>
+        """)
+
+    tbody = "".join(rows) if rows else '<tr><td colspan="8">전략 데이터 없음</td></tr>'
+
+    return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freqtrade Strategy Configuration Summary</title>
+    <style>
+        :root {{
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --heading: #f0f6fc;
+            --primary: #58a6ff;
+            --green: #3fb950;
+            --yellow: #d29922;
+            --red: #f85149;
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 32px 24px;
+            line-height: 1.5;
+        }}
+        .container {{ max-width: 1200px; margin: 0 auto; }}
+        header {{ margin-bottom: 28px; }}
+        h1 {{ color: var(--heading); font-size: 26px; margin-bottom: 8px; }}
+        p.subtitle {{ color: #8b949e; font-size: 14px; }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 16px;
+        }}
+        th, td {{
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }}
+        th {{ background: #21262d; color: var(--heading); font-weight: 600; font-size: 13px; }}
+        tr:last-child td {{ border-bottom: none; }}
+        .badge {{
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 12px;
+        }}
+        .badge-primary {{ background: rgba(88, 166, 255, 0.15); color: var(--primary); }}
+        .badge-success {{ background: rgba(63, 185, 80, 0.15); color: var(--green); }}
+        .badge-warning {{ background: rgba(210, 153, 34, 0.15); color: var(--yellow); }}
+        .badge-muted {{ background: rgba(139, 148, 158, 0.15); color: #8b949e; }}
+        footer {{
+            margin-top: 36px;
+            text-align: center;
+            font-size: 12px;
+            color: #8b949e;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Freqtrade Strategy Configuration Matrix</h1>
+            <p class="subtitle">Repository Strategy Parameters, Safety Rails & Timeframe Matrix</p>
+        </header>
+        <table>
+            <thead>
+                <tr>
+                    <th>전략 클래스 (파일명)</th>
+                    <th>타임프레임</th>
+                    <th>초기 캔들</th>
+                    <th>기본 손절폭</th>
+                    <th>트레일링 스탑</th>
+                    <th>커스텀 손절</th>
+                    <th>공매도(Short)</th>
+                    <th>신규 봉만 처리</th>
+                </tr>
+            </thead>
+            <tbody>
+                {tbody}
+            </tbody>
+        </table>
+        <footer>
+            Generated by Freqtrade Vibe Strategies | Strategy Configuration Summarizer
+        </footer>
+    </div>
+</body>
+</html>
+"""
+
+
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="Summarize strategy configurations.")
     parser.add_argument("--dir", type=str, default=None, help="Custom strategies directory path")
     parser.add_argument("--json", action="store_true", help="Output configurations as JSON")
     parser.add_argument("--csv", action="store_true", help="Output configurations as CSV")
     parser.add_argument("--markdown", "-m", action="store_true", help="Output configurations as Markdown table")
+    parser.add_argument("--html", "-H", action="store_true", help="Output configurations as standalone HTML report")
     parser.add_argument(
         "--sort-by",
         choices=["class", "timeframe", "startup", "stoploss"],
@@ -236,6 +376,8 @@ def main():
         output_text = format_config_csv(configs)
     elif args.markdown:
         output_text = format_config_markdown(configs)
+    elif args.html:
+        output_text = format_config_html(configs)
     else:
         output_text = format_config_table(configs)
 
