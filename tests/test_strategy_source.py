@@ -1434,6 +1434,53 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("rsi_overbought", html_out)
         self.assertIn("BTC/USDT", html_out)
         self.assertIn("게인 투 페인", html_out)
+        self.assertIn("테일 비율", html_out)
+        self.assertIn("상식 비율", html_out)
+
+    def test_tail_ratio_and_common_sense_ratio_calculation(self) -> None:
+        from scripts.analyze_backtest_results import calculate_trade_expectancy
+
+        # Empty trades -> 0.0
+        empty_res = calculate_trade_expectancy([])
+        self.assertEqual(empty_res["tail_ratio"], 0.0)
+        self.assertEqual(empty_res["common_sense_ratio"], 0.0)
+
+        # Single trade -> 0.0
+        single_res = calculate_trade_expectancy([{"profit_ratio": 0.05}])
+        self.assertEqual(single_res["tail_ratio"], 0.0)
+        self.assertEqual(single_res["common_sense_ratio"], 0.0)
+
+        # Multi trades with positive edge:
+        # 10 trades: 8 wins at 5% (0.05), 2 losses at 2% (-0.02)
+        trades = [{"profit_ratio": 0.05}] * 8 + [{"profit_ratio": -0.02}] * 2
+        res = calculate_trade_expectancy(trades)
+        self.assertGreater(res["tail_ratio"], 0.0)
+        self.assertGreater(res["common_sense_ratio"], 0.0)
+        self.assertAlmostEqual(res["profit_factor"], (8 * 0.05) / (2 * 0.02), places=2)
+        self.assertAlmostEqual(res["common_sense_ratio"], res["profit_factor"] * res["tail_ratio"], places=2)
+
+    def test_format_config_html(self) -> None:
+        from scripts.summarize_strategy_configs import format_config_html
+
+        sample_configs = [
+            {
+                "file": "TestStrategy.py",
+                "class": "TestStrategy",
+                "timeframe": "5m",
+                "startup_candle_count": 199,
+                "stoploss": -0.05,
+                "trailing_stop": True,
+                "use_custom_stoploss": False,
+                "can_short": False,
+                "process_only_new_candles": True,
+            }
+        ]
+        html_out = format_config_html(sample_configs)
+        self.assertIn("<!DOCTYPE html>", html_out)
+        self.assertIn("TestStrategy", html_out)
+        self.assertIn("-5.0%", html_out)
+        self.assertIn("badge-success", html_out)
+        self.assertIn("Freqtrade Strategy Configuration Matrix", html_out)
 
     def test_backtest_script_quant_html_parameter(self) -> None:
         script_path = Path(__file__).resolve().parents[1] / "scripts" / "Invoke-Backtest.ps1"
