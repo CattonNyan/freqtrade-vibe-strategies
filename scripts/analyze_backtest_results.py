@@ -633,6 +633,8 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         total_trades = data.get("total_trades", 0)
         win_rate = data.get("win_rate_pct", 0.0)
         pf = data.get("profit_factor", 0.0)
+        tail_ratio = data.get("tail_ratio", 0.0)
+        csr = data.get("common_sense_ratio", 0.0)
         expectancy = data.get("expectancy_pct", 0.0)
         total_ret = data.get("total_return_pct", 0.0)
         mdd = data.get("max_drawdown_pct", 0.0)
@@ -656,6 +658,14 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">손익비 (Profit Factor)</div>
                 <div class="metric-value">{pf:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">테일 비율 (Tail Ratio)</div>
+                <div class="metric-value">{tail_ratio:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">상식 비율 (CSR)</div>
+                <div class="metric-value">{csr:.2f}</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">거래 기대값 (Expectancy)</div>
