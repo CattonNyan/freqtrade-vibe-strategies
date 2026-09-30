@@ -64,6 +64,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "burke_ratio": 0.0,
             "sterling_ratio": 0.0,
             "gain_to_pain_ratio": 0.0,
+            "omega_ratio": 0.0,
             "k_ratio": 0.0,
             "time_underwater_pct": 0.0,
             "avg_drawdown_pct": 0.0,
@@ -118,6 +119,14 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         (sum_all_profits / sum_abs_loss)
         if sum_abs_loss > 1e-6
         else (999.0 if sum_all_profits > 0 else 0.0)
+    )
+
+    # Keating-Shadwick Omega Ratio (threshold = 0.0) = Sum(Upside Gains) / Sum(|Downside Losses|)
+    sum_upside_gains = sum(p for p in clean_profits if p > 0.0)
+    omega_ratio = (
+        (sum_upside_gains / sum_abs_loss)
+        if sum_abs_loss > 1e-6
+        else (999.0 if sum_upside_gains > 0 else 0.0)
     )
 
     # Pain Index = mean( |DD| )
@@ -196,6 +205,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "burke_ratio": round(burke_ratio, 3),
         "sterling_ratio": round(sterling_ratio, 3),
         "gain_to_pain_ratio": round(gain_to_pain_ratio, 3),
+        "omega_ratio": round(omega_ratio, 3),
         "k_ratio": round(k_ratio, 3),
         "time_underwater_pct": round(time_underwater_pct, 2),
         "avg_drawdown_pct": round(avg_drawdown_pct, 2),
@@ -558,8 +568,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -575,6 +585,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
         lines.append(
             f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
             f"{data['profit_factor']:.2f} | {sqn_str} | "
+            f"{data.get('omega_ratio', 0.0):.2f} | "
             f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
             f"{data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
@@ -678,6 +689,7 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "burke_ratio",
         "sterling_ratio",
         "gain_to_pain_ratio",
+        "omega_ratio",
         "martin_ratio",
         "calmar_ratio",
         "recovery_factor",
