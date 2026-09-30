@@ -129,7 +129,7 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
 .\scripts\Invoke-DryRun.ps1 -Strategy KoreanStarterStrategy -Start
 ```
 
-전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics`, `-QuantJson`, `-QuantCsv`, `-QuantHtml` 스위치를 통해 궤양지수(Ulcer Index), 반 타프 시스템 품질 지수(Van Tharp SQN), 케스트너 K-비율(K-Ratio), 테일 비율(Tail Ratio), 상식 비율(Common Sense Ratio), 소르티노 비율, 버크 비율(Burke Ratio), 스털링 비율(Sterling Ratio), 게인투페인 비율(Gain-to-Pain Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
+전략의 지표 안정성(recursive) 및 미래 참조 편향(lookahead)을 검증하고, `-AdvancedQuantMetrics`, `-QuantJson`, `-QuantCsv`, `-QuantHtml` 스위치를 통해 궤양지수(Ulcer Index), 반 타프 시스템 품질 지수(Van Tharp SQN), 케스트너 K-비율(K-Ratio), 키팅-샤드윅 오메가 비율(Omega Ratio), 테일 비율(Tail Ratio), 상식 비율(Common Sense Ratio), 소르티노 비율, 버크 비율(Burke Ratio), 스털링 비율(Sterling Ratio), 게인투페인 비율(Gain-to-Pain Ratio), 수중 기간(Time Underwater %), 켈리 비율(Kelly Criterion), 마틴 비율, 트레이드 기대값 등 심층 퀀트 위험 분석 리포트를 함께 생성할 수 있습니다.
 
 ```powershell
 .\scripts\Invoke-StrategyAnalysis.ps1 `

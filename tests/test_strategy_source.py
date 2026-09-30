@@ -1542,6 +1542,48 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("시스템 품질 지수 (SQN)", html_out)
         self.assertIn("K-비율 (K-Ratio / Lars Kestner)", html_out)
 
+    def test_keating_shadwick_omega_ratio(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_ulcer_and_drawdown_metrics,
+            generate_markdown_report,
+            export_quant_analysis_csv,
+            generate_html_report,
+        )
+
+        # Empty returns
+        empty_dd = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty_dd["omega_ratio"], 0.0)
+
+        # All positive returns (zero loss -> 999.0)
+        all_pos = calculate_ulcer_and_drawdown_metrics([0.05, 0.03, 0.02])
+        self.assertEqual(all_pos["omega_ratio"], 999.0)
+
+        # Mixed returns: upside sum = 0.06, downside abs sum = 0.02 -> omega = 3.0
+        mixed = calculate_ulcer_and_drawdown_metrics([0.04, -0.01, 0.02, -0.01])
+        self.assertAlmostEqual(mixed["omega_ratio"], 3.0, places=2)
+
+        # All negative returns: upside = 0 -> omega = 0.0
+        all_neg = calculate_ulcer_and_drawdown_metrics([-0.02, -0.03])
+        self.assertEqual(all_neg["omega_ratio"], 0.0)
+
+        # Markdown report check
+        from scripts.analyze_backtest_results import calculate_trade_expectancy
+        trade_data = calculate_trade_expectancy([{"profit_ratio": 0.04}, {"profit_ratio": -0.01}, {"profit_ratio": 0.02}, {"profit_ratio": -0.01}])
+        mock_results = {"StratA": {**trade_data, **mixed}}
+        md = generate_markdown_report(mock_results)
+        self.assertIn("오메가(Omega)", md)
+        self.assertIn("3.00", md)
+
+        # CSV report check
+        csv_out = export_quant_analysis_csv(mock_results)
+        self.assertIn("omega_ratio", csv_out)
+        self.assertIn("3.0", csv_out)
+
+        # HTML report check
+        html_out = generate_html_report(mock_results)
+        self.assertIn("오메가 비율 (Omega Ratio)", html_out)
+        self.assertIn("Superb", html_out)
+
     def test_strategy_config_summary_stats(self) -> None:
         from scripts.summarize_strategy_configs import (
             compute_config_summary_stats,
