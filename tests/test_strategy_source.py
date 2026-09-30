@@ -1498,6 +1498,113 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn(".PARAMETER QuantCsv", content)
         self.assertIn(".PARAMETER QuantHtml", content)
 
+    def test_van_tharp_sqn_and_kestner_k_ratio(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_trade_expectancy,
+            calculate_ulcer_and_drawdown_metrics,
+            generate_html_report,
+        )
+
+        # Empty / single trade edge cases
+        empty_res = calculate_trade_expectancy([])
+        self.assertEqual(empty_res["sqn"], 0.0)
+        self.assertEqual(empty_res["sqn_rating"], "N/A")
+
+        single_res = calculate_trade_expectancy([{"profit_ratio": 0.05}])
+        self.assertEqual(single_res["sqn"], 0.0)
+        self.assertEqual(single_res["sqn_rating"], "Poor")
+
+        # Robust positive trades: 10 trades, mean > 0
+        trades = [{"profit_ratio": 0.04}] * 7 + [{"profit_ratio": -0.01}] * 3
+        res = calculate_trade_expectancy(trades)
+        self.assertGreater(res["sqn"], 0.0)
+        self.assertIn(res["sqn_rating"], ["Holy Grail", "Superb", "Excellent", "Good", "Average"])
+
+        # K-Ratio edge cases
+        empty_dd = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty_dd["k_ratio"], 0.0)
+
+        short_dd = calculate_ulcer_and_drawdown_metrics([0.02, 0.03])
+        self.assertEqual(short_dd["k_ratio"], 0.0)
+
+        # Upward equity curve: 10 positive trades
+        up_dd = calculate_ulcer_and_drawdown_metrics([0.02] * 10)
+        self.assertGreater(up_dd["k_ratio"], 0.0)
+
+        # HTML report verification
+        report_data = {
+            "TestStrat": {
+                **res,
+                **up_dd,
+            }
+        }
+        html_out = generate_html_report(report_data)
+        self.assertIn("시스템 품질 지수 (SQN)", html_out)
+        self.assertIn("K-비율 (K-Ratio / Lars Kestner)", html_out)
+
+    def test_strategy_config_summary_stats(self) -> None:
+        from scripts.summarize_strategy_configs import (
+            compute_config_summary_stats,
+            format_config_summary_stats,
+            format_config_markdown,
+            export_strategy_configs_json,
+            format_config_html,
+        )
+
+        empty_stats = compute_config_summary_stats([])
+        self.assertEqual(empty_stats["total_strategies"], 0)
+
+        sample_configs = [
+            {
+                "file": "StratA.py",
+                "class": "StratA",
+                "timeframe": "5m",
+                "startup_candle_count": 100,
+                "stoploss": -0.05,
+                "trailing_stop": True,
+                "use_custom_stoploss": True,
+                "can_short": False,
+                "process_only_new_candles": True,
+            },
+            {
+                "file": "StratB.py",
+                "class": "StratB",
+                "timeframe": "15m",
+                "startup_candle_count": 200,
+                "stoploss": -0.10,
+                "trailing_stop": False,
+                "use_custom_stoploss": False,
+                "can_short": True,
+                "process_only_new_candles": True,
+            },
+        ]
+
+        stats = compute_config_summary_stats(sample_configs)
+        self.assertEqual(stats["total_strategies"], 2)
+        self.assertEqual(stats["trailing_stop_count"], 1)
+        self.assertEqual(stats["trailing_stop_pct"], 50.0)
+        self.assertEqual(stats["custom_stoploss_count"], 1)
+        self.assertEqual(stats["can_short_count"], 1)
+        self.assertAlmostEqual(stats["avg_stoploss_pct"], -7.5)
+
+        stat_block = format_config_summary_stats(stats)
+        self.assertIn("Strategy Repository Statistics", stat_block)
+        self.assertIn("Trailing Stop Enabled", stat_block)
+
+        md_out = format_config_markdown(sample_configs, include_stats=True)
+        self.assertIn("Strategy Repository Summary", md_out)
+        self.assertIn("-7.5% avg", md_out)
+
+        json_out = export_strategy_configs_json(sample_configs, include_stats=True)
+        loaded = json.loads(json_out)
+        self.assertIn("stats", loaded)
+        self.assertIn("strategies", loaded)
+        self.assertEqual(loaded["stats"]["total_strategies"], 2)
+
+        html_out = format_config_html(sample_configs, include_stats=True)
+        self.assertIn("stats-grid", html_out)
+        self.assertIn("stat-card", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()
