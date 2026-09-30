@@ -68,6 +68,78 @@ def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, o
     return configs
 
 
+def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, object]:
+    """Compute aggregate statistics across strategy configurations."""
+    total = len(configs)
+    if total == 0:
+        return {
+            "total_strategies": 0,
+            "timeframe_distribution": {},
+            "trailing_stop_count": 0,
+            "trailing_stop_pct": 0.0,
+            "custom_stoploss_count": 0,
+            "custom_stoploss_pct": 0.0,
+            "can_short_count": 0,
+            "can_short_pct": 0.0,
+            "avg_stoploss_pct": 0.0,
+            "min_stoploss_pct": 0.0,
+            "max_stoploss_pct": 0.0,
+        }
+
+    tf_counts: dict[str, int] = {}
+    trailing_count = 0
+    custom_sl_count = 0
+    can_short_count = 0
+    stoplosses: list[float] = []
+
+    for c in configs:
+        tf = str(c.get("timeframe", "-"))
+        tf_counts[tf] = tf_counts.get(tf, 0) + 1
+        if c.get("trailing_stop"):
+            trailing_count += 1
+        if c.get("use_custom_stoploss"):
+            custom_sl_count += 1
+        if c.get("can_short"):
+            can_short_count += 1
+        sl = c.get("stoploss")
+        if isinstance(sl, (int, float)):
+            stoplosses.append(float(sl) * 100.0)
+
+    avg_sl = (sum(stoplosses) / len(stoplosses)) if stoplosses else 0.0
+    min_sl = min(stoplosses) if stoplosses else 0.0
+    max_sl = max(stoplosses) if stoplosses else 0.0
+
+    return {
+        "total_strategies": total,
+        "timeframe_distribution": tf_counts,
+        "trailing_stop_count": trailing_count,
+        "trailing_stop_pct": round((trailing_count / total) * 100.0, 1),
+        "custom_stoploss_count": custom_sl_count,
+        "custom_stoploss_pct": round((custom_sl_count / total) * 100.0, 1),
+        "can_short_count": can_short_count,
+        "can_short_pct": round((can_short_count / total) * 100.0, 1),
+        "avg_stoploss_pct": round(avg_sl, 2),
+        "min_stoploss_pct": round(min_sl, 2),
+        "max_stoploss_pct": round(max_sl, 2),
+    }
+
+
+def format_config_summary_stats(stats: dict[str, object]) -> str:
+    """Format repository summary statistics into a terminal-friendly block."""
+    tf_str = ", ".join(f"{k}: {v}" for k, v in stats.get("timeframe_distribution", {}).items()) or "None"
+    lines = [
+        "================ Strategy Repository Statistics ================",
+        f"  Total Strategies        : {stats['total_strategies']}",
+        f"  Timeframe Breakdown     : {tf_str}",
+        f"  Trailing Stop Enabled   : {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
+        f"  Custom Stoploss Defined : {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
+        f"  Shorting Supported      : {stats['can_short_count']} ({stats['can_short_pct']}%)",
+        f"  Fixed Stoploss Range    : {stats['avg_stoploss_pct']:+.1f}% avg (Min: {stats['min_stoploss_pct']:+.1f}%, Max: {stats['max_stoploss_pct']:+.1f}%)",
+        "================================================================",
+    ]
+    return "\n".join(lines)
+
+
 def format_config_table(configs: list[dict[str, object]]) -> str:
     """Format strategy configuration list into a readable table."""
     lines = [
@@ -84,12 +156,26 @@ def format_config_table(configs: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
-def format_config_markdown(configs: list[dict[str, object]]) -> str:
+def format_config_markdown(configs: list[dict[str, object]], include_stats: bool = False) -> str:
     """Format strategy configuration list into a GitHub Flavored Markdown table."""
-    lines = [
+    lines = []
+    if include_stats:
+        stats = compute_config_summary_stats(configs)
+        tf_str = ", ".join(f"`{k}`: {v}" for k, v in stats.get("timeframe_distribution", {}).items()) or "None"
+        lines.extend([
+            "### 📊 Strategy Repository Summary",
+            f"- **Total Strategies**: {stats['total_strategies']}",
+            f"- **Timeframe Distribution**: {tf_str}",
+            f"- **Trailing Stop Adoption**: {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
+            f"- **Custom Stoploss Adoption**: {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
+            f"- **Shorting Supported**: {stats['can_short_count']} ({stats['can_short_pct']}%)",
+            f"- **Fixed Stoploss**: {stats['avg_stoploss_pct']:+.1f}% avg (Min: {stats['min_stoploss_pct']:+.1f}%, Max: {stats['max_stoploss_pct']:+.1f}%)",
+            "",
+        ])
+    lines.extend([
         "| Strategy Class | Timeframe | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Can Short | Process New Only |",
         "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ]
+    ])
     for c in configs:
         cls_name = str(c["class"])
         tf = str(c["timeframe"])
@@ -183,13 +269,52 @@ def filter_strategy_configs(
     return filtered
 
 
-def export_strategy_configs_json(configs: list[dict[str, object]], indent: int = 2) -> str:
+def export_strategy_configs_json(
+    configs: list[dict[str, object]],
+    indent: int = 2,
+    include_stats: bool = False,
+) -> str:
     """Serialize strategy configuration list into formatted JSON string."""
-    return json.dumps(configs, indent=indent, ensure_ascii=False)
+    if include_stats:
+        payload: dict[str, object] = {
+            "stats": compute_config_summary_stats(configs),
+            "strategies": configs,
+        }
+    else:
+        payload = configs
+    return json.dumps(payload, indent=indent, ensure_ascii=False)
 
 
-def format_config_html(configs: list[dict[str, object]]) -> str:
+def format_config_html(configs: list[dict[str, object]], include_stats: bool = True) -> str:
     """Format strategy configuration list into a standalone dark-themed HTML report."""
+    stats = compute_config_summary_stats(configs)
+    stats_html = ""
+    if include_stats and stats["total_strategies"] > 0:
+        stats_html = f"""
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">총 전략 수</div>
+                <div class="stat-value">{stats['total_strategies']}개</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">트레일링 스탑 채택률</div>
+                <div class="stat-value">{stats['trailing_stop_pct']}% <span class="stat-sub">({stats['trailing_stop_count']}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">커스텀 스톱로스</div>
+                <div class="stat-value">{stats['custom_stoploss_pct']}% <span class="stat-sub">({stats['custom_stoploss_count']}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">공매도(Short) 지원</div>
+                <div class="stat-value">{stats['can_short_pct']}% <span class="stat-sub">({stats['can_short_count']}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">평균 고정 손절폭</div>
+                <div class="stat-value">{stats['avg_stoploss_pct']:+.1f}% <span class="stat-sub">({stats['min_stoploss_pct']:+.1f}% ~ {stats['max_stoploss_pct']:+.1f}%)</span></div>
+            </div>
+        </div>
+        """
+
     rows = []
     for c in configs:
         cls_name = str(c.get("class", ""))
@@ -252,6 +377,21 @@ def format_config_html(configs: list[dict[str, object]]) -> str:
         header {{ margin-bottom: 28px; }}
         h1 {{ color: var(--heading); font-size: 26px; margin-bottom: 8px; }}
         p.subtitle {{ color: #8b949e; font-size: 14px; }}
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }}
+        .stat-card {{
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }}
+        .stat-label {{ font-size: 12px; color: #8b949e; margin-bottom: 6px; }}
+        .stat-value {{ font-size: 20px; font-weight: 700; color: var(--heading); }}
+        .stat-sub {{ font-size: 13px; font-weight: 400; color: #8b949e; }}
         table {{
             width: 100%;
             border-collapse: collapse;
@@ -294,6 +434,7 @@ def format_config_html(configs: list[dict[str, object]]) -> str:
             <h1>Freqtrade Strategy Configuration Matrix</h1>
             <p class="subtitle">Repository Strategy Parameters, Safety Rails & Timeframe Matrix</p>
         </header>
+        {stats_html}
         <table>
             <thead>
                 <tr>
@@ -333,6 +474,7 @@ def main():
     parser.add_argument("--csv", action="store_true", help="Output configurations as CSV")
     parser.add_argument("--markdown", "-m", action="store_true", help="Output configurations as Markdown table")
     parser.add_argument("--html", "-H", action="store_true", help="Output configurations as standalone HTML report")
+    parser.add_argument("--stats", "-s", action="store_true", help="Display repository summary statistics")
     parser.add_argument(
         "--sort-by",
         choices=["class", "timeframe", "startup", "stoploss"],
@@ -371,15 +513,20 @@ def main():
     configs = sort_strategy_configs(configs, sort_by=args.sort_by, reverse=args.reverse)
 
     if args.json:
-        output_text = export_strategy_configs_json(configs)
+        output_text = export_strategy_configs_json(configs, include_stats=args.stats)
     elif args.csv:
         output_text = format_config_csv(configs)
     elif args.markdown:
-        output_text = format_config_markdown(configs)
+        output_text = format_config_markdown(configs, include_stats=args.stats)
     elif args.html:
-        output_text = format_config_html(configs)
+        output_text = format_config_html(configs, include_stats=True)
     else:
-        output_text = format_config_table(configs)
+        table_text = format_config_table(configs)
+        if args.stats:
+            stats = compute_config_summary_stats(configs)
+            output_text = f"{format_config_summary_stats(stats)}\n\n{table_text}"
+        else:
+            output_text = table_text
 
     if args.output:
         out_path = Path(args.output)
