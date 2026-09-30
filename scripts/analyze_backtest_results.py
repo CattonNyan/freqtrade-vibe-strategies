@@ -733,6 +733,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         sqn = data.get("sqn", 0.0)
         sqn_rating = data.get("sqn_rating", "N/A")
         k_ratio = data.get("k_ratio", 0.0)
+        omega = data.get("omega_ratio", 0.0)
 
         if sqn >= 3.0:
             sqn_badge_cls = "badge-success"
@@ -742,6 +743,19 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             sqn_badge_cls = "badge-warning"
         else:
             sqn_badge_cls = "badge-danger"
+
+        if omega >= 2.0:
+            omega_badge_cls = "badge-success"
+            omega_rating = "Superb"
+        elif omega >= 1.5:
+            omega_badge_cls = "badge-primary"
+            omega_rating = "Strong"
+        elif omega >= 1.0:
+            omega_badge_cls = "badge-warning"
+            omega_rating = "Acceptable"
+        else:
+            omega_badge_cls = "badge-danger"
+            omega_rating = "Sub-optimal"
 
         cards_html = f"""
         <div class="metrics-grid">
@@ -760,6 +774,10 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">K-비율 (K-Ratio / Lars Kestner)</div>
                 <div class="metric-value">{k_ratio:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">오메가 비율 (Omega Ratio)</div>
+                <div class="metric-value">{omega:.2f} <span class="badge {omega_badge_cls}">{omega_rating}</span></div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">테일 비율 (Tail Ratio)</div>
