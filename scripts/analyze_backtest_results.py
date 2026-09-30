@@ -718,6 +718,18 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         half_kelly = data.get("half_kelly_pct", 0.0)
         underwater = data.get("time_underwater_pct", 0.0)
         max_streak = f"{data.get('max_consecutive_wins', 0)}W / {data.get('max_consecutive_losses', 0)}L"
+        sqn = data.get("sqn", 0.0)
+        sqn_rating = data.get("sqn_rating", "N/A")
+        k_ratio = data.get("k_ratio", 0.0)
+
+        if sqn >= 3.0:
+            sqn_badge_cls = "badge-success"
+        elif sqn >= 2.0:
+            sqn_badge_cls = "badge-primary"
+        elif sqn >= 1.6:
+            sqn_badge_cls = "badge-warning"
+        else:
+            sqn_badge_cls = "badge-danger"
 
         cards_html = f"""
         <div class="metrics-grid">
@@ -728,6 +740,14 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">손익비 (Profit Factor)</div>
                 <div class="metric-value">{pf:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">시스템 품질 지수 (SQN)</div>
+                <div class="metric-value">{sqn:.2f} <span class="badge {sqn_badge_cls}">{sqn_rating}</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">K-비율 (K-Ratio / Lars Kestner)</div>
+                <div class="metric-value">{k_ratio:.2f}</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">테일 비율 (Tail Ratio)</div>
@@ -893,6 +913,9 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         .negative {{ color: var(--red) !important; }}
         .badge {{ display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 500; border-radius: 10px; margin-left: 6px; }}
         .badge-primary {{ background: rgba(88, 166, 255, 0.15); color: var(--primary); border: 1px solid rgba(88, 166, 255, 0.3); }}
+        .badge-success {{ background: rgba(63, 185, 80, 0.15); color: var(--green); border: 1px solid rgba(63, 185, 80, 0.3); }}
+        .badge-warning {{ background: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.3); }}
+        .badge-danger {{ background: rgba(248, 81, 73, 0.15); color: var(--red); border: 1px solid rgba(248, 81, 73, 0.3); }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 20px; font-size: 13px; }}
         th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }}
         th {{ background: var(--bg); color: #8b949e; font-weight: 600; }}
