@@ -139,9 +139,12 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -QuantCsv `
   -QuantHtml
 
-# 독립 퀀트 리스크 분석기 실행 (Markdown, 정형 JSON, 플랫 CSV 및 독립 HTML 시각화 출력 지원)
-python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.json --output report.md --json report.json --csv report.csv --html report.html --sort-by profit --min-trades 3
+# 독립 퀀트 리스크 분석기 실행 (.zip 압축 아카이브, .json 파일 및 --latest 최신 결과 자동 탐색 지원)
+python .\scripts\analyze_backtest_results.py --latest --output report.md --json report.json --csv report.csv --html report.html --sort-by profit --min-trades 3
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\ --html report.html
+python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.zip --csv report.csv
 ```
+
 
 백테스트와 분석 스크립트는 요청한 페어의 전략별 필수 타임프레임 데이터가 없으면 다운로드 명령을 안내하고 실행을 중단합니다.
 공통 백테스트 설정은 타임프레임을 덮어쓰지 않으며, 각 전략의 `timeframe` 값이 그대로 적용됩니다.

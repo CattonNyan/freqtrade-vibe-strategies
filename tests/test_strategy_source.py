@@ -1806,7 +1806,65 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("1.25", csv_out)
         self.assertIn("2.45", csv_out)
 
+    def test_load_backtest_data_and_discovery(self):
+        import sys
+        scripts_dir = str(ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from analyze_backtest_results import find_latest_backtest_file, load_backtest_data
+        import tempfile
+        import zipfile
+
+        mock_payload = {
+            "strategy": {
+                "MockStrategy": {
+                    "trades": [
+                        {"profit_ratio": 0.04, "trade_duration": 60},
+                        {"profit_ratio": -0.02, "trade_duration": 30},
+                    ]
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            json_file = tmp_path / "backtest-result-2026-01-01_10-00-00.json"
+            json_file.write_text(json.dumps(mock_payload), encoding="utf-8")
+
+            # Direct json loading
+            data1, p1 = load_backtest_data(json_file)
+            self.assertEqual(p1, json_file)
+            self.assertIn("MockStrategy", data1["strategy"])
+
+            # Directory discovery (json only)
+            p_found = find_latest_backtest_file(tmp_path)
+            self.assertEqual(p_found, json_file)
+
+            # Zip creation
+            zip_file = tmp_path / "backtest-result-2026-01-02_10-00-00.zip"
+            with zipfile.ZipFile(zip_file, "w") as zf:
+                zf.writestr("backtest-result-2026-01-02_10-00-00.json", json.dumps(mock_payload))
+                zf.writestr("backtest-result-2026-01-02_10-00-00_config.json", "{}")
+
+            # Loading from zip directly
+            data2, p2 = load_backtest_data(zip_file)
+            self.assertEqual(p2, zip_file)
+            self.assertIn("MockStrategy", data2["strategy"])
+
+            # Discovery with .last_result.json
+            last_result_file = tmp_path / ".last_result.json"
+            last_result_file.write_text(json.dumps({"latest_backtest": zip_file.name}), encoding="utf-8")
+            data3, p3 = load_backtest_data(tmp_path)
+            self.assertEqual(p3, zip_file)
+            self.assertIn("MockStrategy", data3["strategy"])
+
+        # Test against repo's existing backtest results
+        data_real, path_real = load_backtest_data(latest=True)
+        self.assertTrue(path_real.exists())
+        self.assertIn("strategy", data_real)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
