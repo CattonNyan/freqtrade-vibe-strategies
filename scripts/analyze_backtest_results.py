@@ -16,7 +16,16 @@ import io
 import json
 import math
 from pathlib import Path
+import sys
 from typing import Any
+import zipfile
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 
 
 def _safe_float(val: Any, default: float = 0.0) -> float:
@@ -1022,9 +1031,136 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
     return full_html
 
 
+def find_latest_backtest_file(directory: Path | str | None = None) -> Path:
+    """Find the most recent backtest result file (.zip or .json) in the specified directory.
+
+    Checks:
+    1. .last_result.json in directory if present (reads 'latest_backtest' attribute)
+    2. Most recently modified backtest-result-*.zip or backtest-result-*.json
+    3. Any *.zip or *.json (excluding .meta.json, _config.json, .last_result.json, quant-analysis*)
+    """
+    if directory is None:
+        repo_root = Path(__file__).resolve().parents[1]
+        default_dir = repo_root / "user_data" / "backtest_results"
+        target_dir = default_dir if default_dir.is_dir() else Path.cwd()
+    else:
+        target_dir = Path(directory)
+
+    if not target_dir.is_dir():
+        raise FileNotFoundError(f"Target directory for backtest discovery does not exist: {target_dir}")
+
+    # Check .last_result.json
+    last_result_meta = target_dir / ".last_result.json"
+    if last_result_meta.is_file():
+        try:
+            with open(last_result_meta, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            latest_filename = meta.get("latest_backtest")
+            if latest_filename:
+                candidate = target_dir / latest_filename
+                if candidate.is_file():
+                    return candidate
+        except Exception:
+            pass
+
+    excluded_suffixes = {".meta.json", ".csv", ".html", ".md", ".feather"}
+    candidates: list[Path] = []
+
+    # First search target_dir directly, and immediate subdirectories
+    search_paths = [target_dir]
+    for sub in target_dir.iterdir():
+        if sub.is_dir() and not sub.name.startswith("."):
+            search_paths.append(sub)
+
+    for p in search_paths:
+        for f in p.glob("*"):
+            if not f.is_file():
+                continue
+            name_lower = f.name.lower()
+            if any(name_lower.endswith(ex) for ex in excluded_suffixes):
+                continue
+            if name_lower.startswith(".last_result") or name_lower.endswith("_config.json") or "quant-analysis" in name_lower:
+                continue
+            if f.suffix.lower() in {".zip", ".json"}:
+                candidates.append(f)
+
+    if not candidates:
+        raise FileNotFoundError(f"No backtest result (.zip or .json) found in {target_dir}")
+
+    def sort_key(p: Path) -> tuple[int, float]:
+        is_primary = 1 if "backtest-result" in p.name.lower() else 0
+        try:
+            mtime = p.stat().st_mtime
+        except Exception:
+            mtime = 0.0
+        return (is_primary, mtime)
+
+    candidates.sort(key=sort_key, reverse=True)
+    return candidates[0]
+
+
+def load_backtest_data(
+    file_or_dir_path: Path | str | None = None,
+    latest: bool = False,
+) -> tuple[dict[str, Any], Path]:
+    """Load and parse Freqtrade backtest data from a .json file, a .zip archive, or directory.
+
+    Returns (parsed_data_dict, resolved_file_path).
+    """
+    if file_or_dir_path is None or latest:
+        resolved = find_latest_backtest_file(file_or_dir_path if file_or_dir_path else None)
+    else:
+        p = Path(file_or_dir_path)
+        if p.is_dir():
+            resolved = find_latest_backtest_file(p)
+        elif p.name.lower() == ".last_result.json":
+            resolved = find_latest_backtest_file(p.parent)
+        elif not p.exists():
+            raise FileNotFoundError(f"Backtest result file not found: {p}")
+        else:
+            resolved = p
+
+    if resolved.suffix.lower() == ".zip":
+        with zipfile.ZipFile(resolved, "r") as zf:
+            namelist = zf.namelist()
+            target_name = None
+            expected_json_name = resolved.stem + ".json"
+            if expected_json_name in namelist:
+                target_name = expected_json_name
+            else:
+                for name in namelist:
+                    n_lower = name.lower()
+                    if n_lower.endswith(".json") and not n_lower.endswith("_config.json") and not n_lower.endswith(".meta.json"):
+                        target_name = name
+                        break
+            if not target_name:
+                raise ValueError(f"No valid backtest result JSON found inside archive: {resolved}")
+            raw_bytes = zf.read(target_name)
+            data = json.loads(raw_bytes.decode("utf-8"))
+    else:
+        with open(resolved, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+    return data, resolved
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Analyze Freqtrade backtest results for Ulcer Index and Expectancy")
-    parser.add_argument("file", type=str, help="Path to backtest-result.json file")
+    parser = argparse.ArgumentParser(
+        description="Analyze Freqtrade backtest results for Ulcer Index, Drawdown & institutional metrics"
+    )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        type=str,
+        default=None,
+        help="Path to backtest-result.json, .zip archive, or results directory (optional if --latest is used)",
+    )
+    parser.add_argument(
+        "--latest",
+        "-l",
+        action="store_true",
+        help="Automatically find and analyze the most recent backtest result (.zip or .json) in user_data/backtest_results",
+    )
     parser.add_argument("--output", "-o", type=str, default=None, help="Optional output Markdown path")
     parser.add_argument("--json", "-j", type=str, default=None, help="Optional output JSON path for programmatic consumption")
     parser.add_argument("--csv", "-c", type=str, default=None, help="Optional output CSV path for tabular consumption")
@@ -1044,12 +1180,8 @@ def main():
     )
     args = parser.parse_args()
 
-    file_path = Path(args.file)
-    if not file_path.exists():
-        raise FileNotFoundError(f"Backtest result file not found: {file_path}")
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data, file_path = load_backtest_data(args.file, latest=args.latest)
+    print(f"[*] Analyzing backtest results from: {file_path}")
 
     results = parse_freqtrade_backtest_json(data, sort_by=args.sort_by, min_trades=args.min_trades)
     md_content = generate_markdown_report(results)
@@ -1084,8 +1216,12 @@ def main():
             f.write(md_content)
         print(f"[+] Quant analysis report exported to: {out_path}")
     elif not args.json and not args.csv and not args.html:
-        print(md_content)
+        try:
+            print(md_content)
+        except UnicodeEncodeError:
+            print(md_content.encode("ascii", "replace").decode("ascii"))
 
 
 if __name__ == "__main__":
     main()
+

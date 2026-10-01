@@ -160,10 +160,12 @@ try {
     if ($QuantReport -or $QuantJson -or $QuantCsv -or $QuantHtml) {
         Write-Host "[*] [$Strategy] 퀀트 심층 리스크 및 페어별 성과 분석 처리 중..."
         $analyzerScript = Join-Path $PSScriptRoot "analyze_backtest_results.py"
-        $backtestJson = Get-ChildItem -Path $resultPath -Filter "*.json" -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($null -ne $backtestJson) {
+        $backtestCandidate = Get-ChildItem -Path $resultPath -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in @(".zip", ".json") -and $_.Name -notmatch "(\.meta\.json|_config\.json|\.last_result\.json|quant-analysis)" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $targetInput = if ($null -ne $backtestCandidate) { $backtestCandidate.FullName } else { $resultPath }
+        if (Test-Path $targetInput) {
             $pythonExe = if (Test-Path "$repositoryRoot/.venv/Scripts/python.exe") { "$repositoryRoot/.venv/Scripts/python.exe" } else { "python" }
-            $analyzerArgs = @($analyzerScript, $backtestJson.FullName)
+            $analyzerArgs = @($analyzerScript, $targetInput)
+
             $reportPath = Join-Path $resultPath "quant-report.md"
             $quantJsonPath = Join-Path $resultPath "quant-analysis.json"
             $quantCsvPath = Join-Path $resultPath "quant-analysis.csv"
