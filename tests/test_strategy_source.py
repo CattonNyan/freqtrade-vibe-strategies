@@ -1647,6 +1647,166 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("stats-grid", html_out)
         self.assertIn("stat-card", html_out)
 
+    def test_strategy_config_export_csv(self) -> None:
+        import sys
+        import tempfile
+        scripts_dir = str(ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from summarize_strategy_configs import export_config_csv
+
+        sample_configs = [
+            {
+                "file": "StratA.py",
+                "class": "StratA",
+                "timeframe": "5m",
+                "startup_candle_count": 100,
+                "stoploss": -0.05,
+                "trailing_stop": True,
+                "use_custom_stoploss": True,
+                "can_short": False,
+                "process_only_new_candles": True,
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "sub" / "strategy_configs.csv"
+            res = export_config_csv(sample_configs, out_file)
+            self.assertEqual(res, out_file)
+            self.assertTrue(out_file.exists())
+            content = out_file.read_text(encoding="utf-8")
+            self.assertIn("file,class,timeframe", content)
+            self.assertIn("StratA.py,StratA,5m,100,-0.05,True,True,False,True", content)
+
+    def test_trade_expectancy_skewness_and_kurtosis(self) -> None:
+        import sys
+        scripts_dir = str(ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from analyze_backtest_results import calculate_trade_expectancy
+
+        # Empty trades
+        empty_res = calculate_trade_expectancy([])
+        self.assertEqual(empty_res["skewness"], 0.0)
+        self.assertEqual(empty_res["kurtosis"], 0.0)
+
+        # Insufficient sample trades (N < 3 for skew, N < 4 for kurt)
+        few_trades = [
+            {"profit_ratio": 0.02, "trade_duration": 10},
+            {"profit_ratio": -0.01, "trade_duration": 15},
+        ]
+        few_res = calculate_trade_expectancy(few_trades)
+        self.assertEqual(few_res["skewness"], 0.0)
+        self.assertEqual(few_res["kurtosis"], 0.0)
+
+        # Trend following profile (Right-tailed: many small losses, huge win)
+        trend_trades = [
+            {"profit_ratio": -0.01, "trade_duration": 10},
+            {"profit_ratio": -0.01, "trade_duration": 10},
+            {"profit_ratio": -0.01, "trade_duration": 10},
+            {"profit_ratio": -0.01, "trade_duration": 10},
+            {"profit_ratio": 0.20, "trade_duration": 60},
+        ]
+        trend_res = calculate_trade_expectancy(trend_trades)
+        self.assertGreater(trend_res["skewness"], 0.5)
+        self.assertIn("skewness", trend_res)
+        self.assertIn("kurtosis", trend_res)
+
+        # Mean reversion profile (Left-tailed: small wins, one huge loss)
+        mean_rev_trades = [
+            {"profit_ratio": 0.01, "trade_duration": 10},
+            {"profit_ratio": 0.01, "trade_duration": 10},
+            {"profit_ratio": 0.01, "trade_duration": 10},
+            {"profit_ratio": 0.01, "trade_duration": 10},
+            {"profit_ratio": -0.20, "trade_duration": 60},
+        ]
+        mean_rev_res = calculate_trade_expectancy(mean_rev_trades)
+        self.assertLess(mean_rev_res["skewness"], -0.5)
+
+    def test_quant_html_and_csv_reports_include_skewness_and_kurtosis(self) -> None:
+        import sys
+        scripts_dir = str(ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from analyze_backtest_results import (
+            generate_html_report,
+            export_quant_analysis_csv,
+            generate_markdown_report,
+        )
+
+        mock_analysis = {
+            "TestStrategy": {
+                "strategy": "TestStrategy",
+                "total_trades": 25,
+                "win_rate_pct": 60.0,
+                "wins": 15,
+                "losses": 10,
+                "draws": 0,
+                "profit_factor": 2.15,
+                "expectancy_pct": 1.45,
+                "avg_win_pct": 3.5,
+                "avg_loss_pct": 1.2,
+                "win_loss_ratio": 2.92,
+                "avg_duration_min": 120.0,
+                "avg_win_duration_min": 150.0,
+                "avg_loss_duration_min": 75.0,
+                "win_loss_duration_ratio": 2.0,
+                "max_consecutive_wins": 5,
+                "max_consecutive_losses": 2,
+                "full_kelly_pct": 35.0,
+                "half_kelly_pct": 17.5,
+                "tail_ratio": 1.85,
+                "common_sense_ratio": 3.98,
+                "sqn": 3.42,
+                "sqn_100": 3.42,
+                "sqn_rating": "Excellent",
+                "skewness": 1.25,
+                "kurtosis": 2.45,
+                "total_return_pct": 42.5,
+                "max_drawdown_pct": 6.8,
+                "ulcer_index": 2.1,
+                "pain_index": 1.4,
+                "martin_ratio": 20.24,
+                "pain_ratio": 30.36,
+                "calmar_ratio": 6.25,
+                "recovery_factor": 6.25,
+                "downside_deviation_pct": 1.8,
+                "sortino_ratio": 23.6,
+                "burke_ratio": 15.2,
+                "sterling_ratio": 18.5,
+                "gain_to_pain_ratio": 3.54,
+                "omega_ratio": 2.35,
+                "k_ratio": 2.15,
+                "time_underwater_pct": 18.5,
+                "avg_drawdown_pct": 2.3,
+                "max_drawdown_duration_trades": 4,
+                "exit_reasons": {},
+                "pair_performance": {},
+            }
+        }
+
+        # HTML report checks
+        html_out = generate_html_report(mock_analysis)
+        self.assertIn("수익률 왜도 (Skewness)", html_out)
+        self.assertIn("초과 첨도 (Excess Kurtosis)", html_out)
+        self.assertIn("Right-Tailed", html_out)
+        self.assertIn("Fat-Tailed", html_out)
+
+        # Markdown report checks
+        md_out = generate_markdown_report(mock_analysis)
+        self.assertIn("왜도(Skew)", md_out)
+        self.assertIn("첨도(Kurt)", md_out)
+        self.assertIn("+1.25", md_out)
+        self.assertIn("+2.45", md_out)
+
+        # CSV report checks
+        csv_out = export_quant_analysis_csv(mock_analysis)
+        self.assertIn("skewness", csv_out)
+        self.assertIn("kurtosis", csv_out)
+        self.assertIn("1.25", csv_out)
+        self.assertIn("2.45", csv_out)
+
 
 if __name__ == "__main__":
     unittest.main()
+
