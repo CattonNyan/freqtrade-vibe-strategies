@@ -240,6 +240,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "sqn": 0.0,
             "sqn_100": 0.0,
             "sqn_rating": "N/A",
+            "skewness": 0.0,
+            "kurtosis": 0.0,
         }
 
     wins = []
@@ -363,6 +365,21 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     else:
         sqn_rating = "Poor"
 
+    # Skewness and Excess Kurtosis of trade returns distribution
+    if N >= 3 and std_pnl > 1e-6:
+        m3_sum = sum(((x - mean_pnl) / std_pnl) ** 3 for x in all_trade_profits_pct)
+        skewness = (N / ((N - 1) * (N - 2))) * m3_sum
+    else:
+        skewness = 0.0
+
+    if N >= 4 and std_pnl > 1e-6:
+        m4_sum = sum(((x - mean_pnl) / std_pnl) ** 4 for x in all_trade_profits_pct)
+        c1 = (N * (N + 1)) / ((N - 1) * (N - 2) * (N - 3))
+        c2 = (3.0 * ((N - 1) ** 2)) / ((N - 2) * (N - 3))
+        kurtosis = (c1 * m4_sum) - c2
+    else:
+        kurtosis = 0.0
+
     return {
         "total_trades": total_trades,
         "wins": win_count,
@@ -387,6 +404,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "sqn": round(sqn, 2),
         "sqn_100": round(sqn_100, 2),
         "sqn_rating": sqn_rating,
+        "skewness": round(skewness, 3),
+        "kurtosis": round(kurtosis, 3),
     }
 
 
@@ -568,8 +587,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -586,6 +605,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"| **{name}** | {data['total_trades']}회 | {data['win_rate_pct']:.1f}% | {streak_str} | "
             f"{data['profit_factor']:.2f} | {sqn_str} | "
             f"{data.get('omega_ratio', 0.0):.2f} | "
+            f"{data.get('skewness', 0.0):+.2f} | {data.get('kurtosis', 0.0):+.2f} | "
             f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
             f"{data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
@@ -647,6 +667,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
     lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
+    lines.append("- **수익률 왜도 (Skewness)**: 거래별 손익률 분포의 비대칭성을 나타내며, 0보다 크면(양의 왜도) 이익 거래의 꼬리가 길어 손익비가 우수한 추세추종 전략의 특성을 보이고, 0보다 작으면(음의 왜도) 승률은 높으나 급락 위험(Left-tail risk)이 있는 역추세 전략의 특성을 나타냅니다.")
+    lines.append("- **초과 첨도 (Excess Kurtosis)**: 정규분포(0.0) 대비 극단치(Fat-tail) 발생 가능성을 측정하며, 양수이면 이상치(대박 또는 대형 손실) 거래가 빈번하게 발생하는 팻 테일 분포임을 의미합니다.")
     lines.append("- **보유시간 비대칭도 (Win/Loss Duration Ratio)**: 수익 거래 평균 보유시간 / 손실 거래 평균 보유시간. 1.0 이상이면 손실을 빠르게 끊고 이익을 길게 가져가는(Let winners run, cut losers) 바람직한 추세추종 특성을 나타냅니다.")
     lines.append("- **회복 계수 (Recovery Factor)**: 총 순수익률을 최대 낙폭(MDD)으로 나눈 값으로, 감내한 최대 하방 위험 대비 얼마만큼의 자본 증식을 달성했는지 평가합니다.")
     lines.append("- **최대 침체 기간 (Max Underwater Trades)**: 고점 갱신 후 새로운 고점을 탈환하지 못하고 지속된 최장 연속 거래 횟수입니다.")
@@ -668,6 +690,8 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "sqn",
         "sqn_100",
         "sqn_rating",
+        "skewness",
+        "kurtosis",
         "tail_ratio",
         "common_sense_ratio",
         "expectancy_pct",
@@ -757,6 +781,29 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             omega_badge_cls = "badge-danger"
             omega_rating = "Sub-optimal"
 
+        skewness = data.get("skewness", 0.0)
+        kurtosis = data.get("kurtosis", 0.0)
+
+        if skewness > 0.5:
+            skew_badge_cls = "badge-success"
+            skew_rating = "Right-Tailed"
+        elif skewness < -0.5:
+            skew_badge_cls = "badge-danger"
+            skew_rating = "Left-Tailed"
+        else:
+            skew_badge_cls = "badge-primary"
+            skew_rating = "Symmetric"
+
+        if kurtosis > 1.0:
+            kurt_badge_cls = "badge-warning"
+            kurt_rating = "Fat-Tailed"
+        elif kurtosis < -1.0:
+            kurt_badge_cls = "badge-muted"
+            kurt_rating = "Thin-Tailed"
+        else:
+            kurt_badge_cls = "badge-primary"
+            kurt_rating = "Mesokurtic"
+
         cards_html = f"""
         <div class="metrics-grid">
             <div class="metric-card">
@@ -778,6 +825,14 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">오메가 비율 (Omega Ratio)</div>
                 <div class="metric-value">{omega:.2f} <span class="badge {omega_badge_cls}">{omega_rating}</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">수익률 왜도 (Skewness)</div>
+                <div class="metric-value">{skewness:+.2f} <span class="badge {skew_badge_cls}">{skew_rating}</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">초과 첨도 (Excess Kurtosis)</div>
+                <div class="metric-value">{kurtosis:+.2f} <span class="badge {kurt_badge_cls}">{kurt_rating}</span></div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">테일 비율 (Tail Ratio)</div>
