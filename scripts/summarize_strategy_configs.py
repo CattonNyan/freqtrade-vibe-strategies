@@ -210,6 +210,16 @@ def format_config_csv(configs: list[dict[str, object]]) -> str:
     return output.getvalue()
 
 
+def export_config_csv(configs: list[dict[str, object]], output_path: str | Path) -> Path:
+    """Export strategy configurations directly to a CSV file."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content = format_config_csv(configs)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+
 def sort_strategy_configs(
     configs: list[dict[str, object]],
     sort_by: str = "class",
@@ -495,6 +505,7 @@ def main():
         default=None,
         help="Filter strategies matching a specific timeframe (e.g. 5m, 15m, 1h)",
     )
+    parser.add_argument("--export-csv", type=str, default=None, help="Export strategy configurations directly to specified CSV file")
     parser.add_argument("--output", "-o", type=str, default=None, help="Path to write output report to")
     args = parser.parse_args()
 
@@ -528,12 +539,16 @@ def main():
         else:
             output_text = table_text
 
+    if args.export_csv:
+        csv_path = export_config_csv(configs, args.export_csv)
+        print(f"[+] Strategy configuration CSV written to: {csv_path}")
+
     if args.output:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(output_text, encoding="utf-8")
         print(f"[+] Strategy configuration summary written to: {out_path}")
-    else:
+    elif not args.export_csv:
         print(output_text)
 
 
