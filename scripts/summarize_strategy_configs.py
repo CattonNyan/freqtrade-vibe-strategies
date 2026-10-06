@@ -11,6 +11,26 @@ import sys
 from pathlib import Path
 
 
+def get_initial_roi(roi: object) -> float | None:
+    """Extract initial target profit ratio from minimal_roi dictionary."""
+    if not isinstance(roi, dict) or not roi:
+        return None
+    if "0" in roi and isinstance(roi["0"], (int, float)):
+        return float(roi["0"])
+    if 0 in roi and isinstance(roi[0], (int, float)):
+        return float(roi[0])
+    try:
+        int_keys = sorted(
+            [(int(k), v) for k, v in roi.items() if isinstance(v, (int, float))],
+            key=lambda x: x[0],
+        )
+        if int_keys:
+            return float(int_keys[0][1])
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, object]]:
     """Parse strategy files using ast and return configuration dictionary for each strategy."""
     if strategies_dir is None:
@@ -57,12 +77,15 @@ def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, o
                     "file": filename,
                     "class": node.name,
                     "timeframe": vals.get("timeframe", "-"),
+                    "informative_timeframe": vals.get("informative_timeframe", "-"),
                     "startup_candle_count": vals.get("startup_candle_count", "-"),
                     "stoploss": vals.get("stoploss", "-"),
                     "trailing_stop": vals.get("trailing_stop", False),
                     "use_custom_stoploss": vals.get("use_custom_stoploss", False),
                     "process_only_new_candles": vals.get("process_only_new_candles", True),
                     "can_short": vals.get("can_short", False),
+                    "use_exit_signal": vals.get("use_exit_signal", True),
+                    "minimal_roi": vals.get("minimal_roi", {}),
                 })
 
     return configs
@@ -81,16 +104,24 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
             "custom_stoploss_pct": 0.0,
             "can_short_count": 0,
             "can_short_pct": 0.0,
+            "multi_timeframe_count": 0,
+            "multi_timeframe_pct": 0.0,
+            "exit_signal_count": 0,
+            "exit_signal_pct": 0.0,
             "avg_stoploss_pct": 0.0,
             "min_stoploss_pct": 0.0,
             "max_stoploss_pct": 0.0,
+            "avg_initial_roi_pct": 0.0,
         }
 
     tf_counts: dict[str, int] = {}
     trailing_count = 0
     custom_sl_count = 0
     can_short_count = 0
+    mtf_count = 0
+    exit_signal_count = 0
     stoplosses: list[float] = []
+    initial_rois: list[float] = []
 
     for c in configs:
         tf = str(c.get("timeframe", "-"))
@@ -101,13 +132,22 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
             custom_sl_count += 1
         if c.get("can_short"):
             can_short_count += 1
+        info_tf = c.get("informative_timeframe")
+        if info_tf and str(info_tf).strip() not in ("-", "", "None"):
+            mtf_count += 1
+        if c.get("use_exit_signal", True):
+            exit_signal_count += 1
         sl = c.get("stoploss")
         if isinstance(sl, (int, float)):
             stoplosses.append(float(sl) * 100.0)
+        init_roi = get_initial_roi(c.get("minimal_roi"))
+        if init_roi is not None:
+            initial_rois.append(init_roi * 100.0)
 
     avg_sl = (sum(stoplosses) / len(stoplosses)) if stoplosses else 0.0
     min_sl = min(stoplosses) if stoplosses else 0.0
     max_sl = max(stoplosses) if stoplosses else 0.0
+    avg_roi = (sum(initial_rois) / len(initial_rois)) if initial_rois else 0.0
 
     return {
         "total_strategies": total,
@@ -118,9 +158,14 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
         "custom_stoploss_pct": round((custom_sl_count / total) * 100.0, 1),
         "can_short_count": can_short_count,
         "can_short_pct": round((can_short_count / total) * 100.0, 1),
+        "multi_timeframe_count": mtf_count,
+        "multi_timeframe_pct": round((mtf_count / total) * 100.0, 1),
+        "exit_signal_count": exit_signal_count,
+        "exit_signal_pct": round((exit_signal_count / total) * 100.0, 1),
         "avg_stoploss_pct": round(avg_sl, 2),
         "min_stoploss_pct": round(min_sl, 2),
         "max_stoploss_pct": round(max_sl, 2),
+        "avg_initial_roi_pct": round(avg_roi, 2),
     }
 
 
@@ -131,10 +176,13 @@ def format_config_summary_stats(stats: dict[str, object]) -> str:
         "================ Strategy Repository Statistics ================",
         f"  Total Strategies        : {stats['total_strategies']}",
         f"  Timeframe Breakdown     : {tf_str}",
+        f"  Multi-Timeframe Active  : {stats.get('multi_timeframe_count', 0)} ({stats.get('multi_timeframe_pct', 0.0)}%)",
         f"  Trailing Stop Enabled   : {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
         f"  Custom Stoploss Defined : {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
+        f"  Exit Signal Enabled     : {stats.get('exit_signal_count', 0)} ({stats.get('exit_signal_pct', 0.0)}%)",
         f"  Shorting Supported      : {stats['can_short_count']} ({stats['can_short_pct']}%)",
         f"  Fixed Stoploss Range    : {stats['avg_stoploss_pct']:+.1f}% avg (Min: {stats['min_stoploss_pct']:+.1f}%, Max: {stats['max_stoploss_pct']:+.1f}%)",
+        f"  Avg Initial ROI Target  : {stats.get('avg_initial_roi_pct', 0.0):+.1f}%",
         "================================================================",
     ]
     return "\n".join(lines)
@@ -143,16 +191,20 @@ def format_config_summary_stats(stats: dict[str, object]) -> str:
 def format_config_table(configs: list[dict[str, object]]) -> str:
     """Format strategy configuration list into a readable table."""
     lines = [
-        f"{'Strategy Class':<28} | {'Timeframe':<10} | {'Startup':<10} | {'Stoploss':<10} | {'Trailing Stop'}",
-        "-" * 78,
+        f"{'Strategy Class':<26} | {'TF':<5} | {'Info TF':<7} | {'Startup':<8} | {'Stoploss':<9} | {'Trailing':<8} | {'Custom SL':<9} | {'Initial ROI'}",
+        "-" * 98,
     ]
     for c in configs:
-        cls_name = str(c["class"])
-        tf = str(c["timeframe"])
-        startup = str(c["startup_candle_count"])
-        sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c["stoploss"], (int, float)) else str(c["stoploss"])
-        ts = "YES" if c["trailing_stop"] else "NO"
-        lines.append(f"{cls_name:<28} | {tf:<10} | {startup:<10} | {sl:<10} | {ts}")
+        cls_name = str(c.get("class", ""))
+        tf = str(c.get("timeframe", "-"))
+        info_tf = str(c.get("informative_timeframe", "-"))
+        startup = str(c.get("startup_candle_count", "-"))
+        sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c.get("stoploss"), (int, float)) else str(c.get("stoploss", "-"))
+        ts = "YES" if c.get("trailing_stop") else "NO"
+        csl = "YES" if c.get("use_custom_stoploss") else "NO"
+        init_roi = get_initial_roi(c.get("minimal_roi"))
+        roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
+        lines.append(f"{cls_name:<26} | {tf:<5} | {info_tf:<7} | {startup:<8} | {sl:<9} | {ts:<8} | {csl:<9} | {roi_str}")
     return "\n".join(lines)
 
 
@@ -166,26 +218,33 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
             "### 📊 Strategy Repository Summary",
             f"- **Total Strategies**: {stats['total_strategies']}",
             f"- **Timeframe Distribution**: {tf_str}",
+            f"- **Multi-Timeframe Adoption**: {stats.get('multi_timeframe_count', 0)} ({stats.get('multi_timeframe_pct', 0.0)}%)",
             f"- **Trailing Stop Adoption**: {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
             f"- **Custom Stoploss Adoption**: {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
+            f"- **Exit Signal Adoption**: {stats.get('exit_signal_count', 0)} ({stats.get('exit_signal_pct', 0.0)}%)",
             f"- **Shorting Supported**: {stats['can_short_count']} ({stats['can_short_pct']}%)",
             f"- **Fixed Stoploss**: {stats['avg_stoploss_pct']:+.1f}% avg (Min: {stats['min_stoploss_pct']:+.1f}%, Max: {stats['max_stoploss_pct']:+.1f}%)",
+            f"- **Avg Initial ROI**: {stats.get('avg_initial_roi_pct', 0.0):+.1f}%",
             "",
         ])
     lines.extend([
-        "| Strategy Class | Timeframe | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Can Short | Process New Only |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| Strategy Class | Timeframe | Informative TF | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Exit Signal | Can Short | Process New Only | Initial ROI |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
     for c in configs:
-        cls_name = str(c["class"])
-        tf = str(c["timeframe"])
-        startup = str(c["startup_candle_count"])
-        sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c["stoploss"], (int, float)) else str(c["stoploss"])
-        ts = "YES" if c["trailing_stop"] else "NO"
+        cls_name = str(c.get("class", ""))
+        tf = str(c.get("timeframe", "-"))
+        info_tf = str(c.get("informative_timeframe", "-"))
+        startup = str(c.get("startup_candle_count", "-"))
+        sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c.get("stoploss"), (int, float)) else str(c.get("stoploss", "-"))
+        ts = "YES" if c.get("trailing_stop") else "NO"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
+        es = "YES" if c.get("use_exit_signal", True) else "NO"
         cs = "YES" if c.get("can_short") else "NO"
         pno = "YES" if c.get("process_only_new_candles", True) else "NO"
-        lines.append(f"| **{cls_name}** | {tf} | {startup} | {sl} | {ts} | {csl} | {cs} | {pno} |")
+        init_roi = get_initial_roi(c.get("minimal_roi"))
+        roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
+        lines.append(f"| **{cls_name}** | {tf} | {info_tf} | {startup} | {sl} | {ts} | {csl} | {es} | {cs} | {pno} | {roi_str} |")
     return "\n".join(lines)
 
 
@@ -195,18 +254,26 @@ def format_config_csv(configs: list[dict[str, object]]) -> str:
         "file",
         "class",
         "timeframe",
+        "informative_timeframe",
         "startup_candle_count",
         "stoploss",
         "trailing_stop",
         "use_custom_stoploss",
+        "use_exit_signal",
         "can_short",
         "process_only_new_candles",
+        "initial_roi_pct",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
     writer.writeheader()
     for c in configs:
-        writer.writerow(c)
+        row = dict(c)
+        row["informative_timeframe"] = c.get("informative_timeframe", "-")
+        row["use_exit_signal"] = c.get("use_exit_signal", True)
+        init_roi = get_initial_roi(c.get("minimal_roi"))
+        row["initial_roi_pct"] = round(init_roi * 100.0, 2) if init_roi is not None else ""
+        writer.writerow(row)
     return output.getvalue()
 
 
@@ -248,12 +315,17 @@ def sort_strategy_configs(
     def _sort_key(c: dict[str, object]):
         if sort_by == "timeframe":
             return _timeframe_to_minutes(c.get("timeframe", ""))
+        elif sort_by == "informative_timeframe":
+            return _timeframe_to_minutes(c.get("informative_timeframe", ""))
         elif sort_by == "startup":
             val = c.get("startup_candle_count", 0)
             return int(val) if isinstance(val, (int, float)) else 0
         elif sort_by == "stoploss":
             val = c.get("stoploss", 0.0)
             return float(val) if isinstance(val, (int, float)) else 0.0
+        elif sort_by == "roi":
+            init_roi = get_initial_roi(c.get("minimal_roi"))
+            return float(init_roi) if init_roi is not None else -999.0
         return str(c.get("class", "")).lower()
 
     return sorted(configs, key=_sort_key, reverse=reverse)
@@ -265,6 +337,8 @@ def filter_strategy_configs(
     custom_stoploss_only: bool = False,
     timeframe: str | None = None,
     can_short_only: bool = False,
+    multi_timeframe_only: bool = False,
+    exit_signal_only: bool = False,
 ) -> list[dict[str, object]]:
     """Filter strategy configuration list based on criteria."""
     filtered = list(configs)
@@ -276,6 +350,10 @@ def filter_strategy_configs(
         filtered = [c for c in filtered if str(c.get("timeframe", "")).strip().lower() == timeframe.strip().lower()]
     if can_short_only:
         filtered = [c for c in filtered if bool(c.get("can_short"))]
+    if multi_timeframe_only:
+        filtered = [c for c in filtered if str(c.get("informative_timeframe", "-")).strip() not in ("-", "", "None")]
+    if exit_signal_only:
+        filtered = [c for c in filtered if bool(c.get("use_exit_signal", True))]
     return filtered
 
 
@@ -307,12 +385,20 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                 <div class="stat-value">{stats['total_strategies']}개</div>
             </div>
             <div class="stat-card">
+                <div class="stat-label">다중 타임프레임 채택률</div>
+                <div class="stat-value">{stats.get('multi_timeframe_pct', 0.0)}% <span class="stat-sub">({stats.get('multi_timeframe_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-label">트레일링 스탑 채택률</div>
                 <div class="stat-value">{stats['trailing_stop_pct']}% <span class="stat-sub">({stats['trailing_stop_count']}개)</span></div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">커스텀 스톱로스</div>
                 <div class="stat-value">{stats['custom_stoploss_pct']}% <span class="stat-sub">({stats['custom_stoploss_count']}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">청산 시그널 지원</div>
+                <div class="stat-value">{stats.get('exit_signal_pct', 0.0)}% <span class="stat-sub">({stats.get('exit_signal_count', 0)}개)</span></div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">공매도(Short) 지원</div>
@@ -322,6 +408,10 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                 <div class="stat-label">평균 고정 손절폭</div>
                 <div class="stat-value">{stats['avg_stoploss_pct']:+.1f}% <span class="stat-sub">({stats['min_stoploss_pct']:+.1f}% ~ {stats['max_stoploss_pct']:+.1f}%)</span></div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">평균 초기 목표 수익률</div>
+                <div class="stat-value">{stats.get('avg_initial_roi_pct', 0.0):+.1f}%</div>
+            </div>
         </div>
         """
 
@@ -330,39 +420,50 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
         cls_name = str(c.get("class", ""))
         filename = str(c.get("file", ""))
         tf = str(c.get("timeframe", "-"))
+        info_tf = str(c.get("informative_timeframe", "-"))
         startup = str(c.get("startup_candle_count", "-"))
         sl_raw = c.get("stoploss", "-")
         sl_str = f"{float(sl_raw) * 100:.1f}%" if isinstance(sl_raw, (int, float)) else str(sl_raw)
         ts = "YES" if c.get("trailing_stop") else "NO"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
+        es = "YES" if c.get("use_exit_signal", True) else "NO"
         cs = "YES" if c.get("can_short") else "NO"
         pno = "YES" if c.get("process_only_new_candles", True) else "NO"
 
+        init_roi = get_initial_roi(c.get("minimal_roi"))
+        roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
+        roi_color = "#3fb950" if (init_roi is not None and init_roi > 0) else "var(--text)"
+
         ts_class = "badge-success" if ts == "YES" else "badge-muted"
         csl_class = "badge-success" if csl == "YES" else "badge-muted"
+        es_class = "badge-success" if es == "YES" else "badge-muted"
         cs_class = "badge-warning" if cs == "YES" else "badge-muted"
+        info_badge = f'<span class="badge badge-primary">{info_tf}</span>' if info_tf != "-" else '<span class="badge badge-muted">-</span>'
 
         rows.append(f"""
         <tr>
             <td><strong>{cls_name}</strong><br><small style="color:#8b949e">{filename}</small></td>
             <td><span class="badge badge-primary">{tf}</span></td>
+            <td>{info_badge}</td>
             <td>{startup}</td>
             <td style="color:#f85149; font-weight:600;">{sl_str}</td>
+            <td style="color:{roi_color}; font-weight:600;">{roi_str}</td>
             <td><span class="badge {ts_class}">{ts}</span></td>
             <td><span class="badge {csl_class}">{csl}</span></td>
+            <td><span class="badge {es_class}">{es}</span></td>
             <td><span class="badge {cs_class}">{cs}</span></td>
             <td>{pno}</td>
         </tr>
         """)
 
-    tbody = "".join(rows) if rows else '<tr><td colspan="8">전략 데이터 없음</td></tr>'
+    tbody = "".join(rows) if rows else '<tr><td colspan="11">전략 데이터 없음</td></tr>'
 
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Freqtrade Strategy Configuration Summary</title>
+    <title>Freqtrade Strategy Configuration Matrix</title>
     <style>
         :root {{
             --bg: #0d1117;
@@ -449,11 +550,14 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
             <thead>
                 <tr>
                     <th>전략 클래스 (파일명)</th>
-                    <th>타임프레임</th>
+                    <th>기본 TF</th>
+                    <th>보조 TF</th>
                     <th>초기 캔들</th>
                     <th>기본 손절폭</th>
+                    <th>초기 ROI</th>
                     <th>트레일링 스탑</th>
                     <th>커스텀 손절</th>
+                    <th>청산 시그널</th>
                     <th>공매도(Short)</th>
                     <th>신규 봉만 처리</th>
                 </tr>
@@ -487,9 +591,9 @@ def main():
     parser.add_argument("--stats", "-s", action="store_true", help="Display repository summary statistics")
     parser.add_argument(
         "--sort-by",
-        choices=["class", "timeframe", "startup", "stoploss"],
+        choices=["class", "timeframe", "startup", "stoploss", "roi", "informative_timeframe"],
         default="class",
-        help="Field to sort strategies by (class, timeframe, startup, stoploss)",
+        help="Field to sort strategies by (class, timeframe, startup, stoploss, roi, informative_timeframe)",
     )
     parser.add_argument("--reverse", action="store_true", help="Sort in descending order")
     parser.add_argument("--has-trailing", action="store_true", help="Show only strategies with trailing stop enabled")
@@ -498,6 +602,12 @@ def main():
     )
     parser.add_argument(
         "--can-short-only", action="store_true", help="Show only strategies supporting short positions"
+    )
+    parser.add_argument(
+        "--multi-timeframe-only", action="store_true", help="Show only strategies utilizing multi-timeframe informative candles"
+    )
+    parser.add_argument(
+        "--exit-signal-only", action="store_true", help="Show only strategies using exit signals"
     )
     parser.add_argument(
         "--filter-timeframe",
@@ -518,6 +628,10 @@ def main():
         configs = filter_strategy_configs(configs, custom_stoploss_only=True)
     if args.can_short_only:
         configs = filter_strategy_configs(configs, can_short_only=True)
+    if args.multi_timeframe_only:
+        configs = filter_strategy_configs(configs, multi_timeframe_only=True)
+    if args.exit_signal_only:
+        configs = filter_strategy_configs(configs, exit_signal_only=True)
     if args.filter_timeframe:
         configs = filter_strategy_configs(configs, timeframe=args.filter_timeframe)
 

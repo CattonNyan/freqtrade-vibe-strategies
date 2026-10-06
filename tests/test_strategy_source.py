@@ -1217,6 +1217,7 @@ class StrategySourceTests(unittest.TestCase):
             export_strategy_configs_json,
             format_config_markdown,
             format_config_table,
+            get_initial_roi,
             get_strategy_configs,
         )
         configs = get_strategy_configs()
@@ -1228,18 +1229,34 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("VibeRsiStrategy", table_output)
         self.assertIn("KoreanStarterStrategy", table_output)
         self.assertIn("MultiTimeframeAtrStrategy", table_output)
+        self.assertIn("Info TF", table_output)
+        self.assertIn("Initial ROI", table_output)
 
         md_output = format_config_markdown(configs)
         self.assertIn("| Strategy Class |", md_output)
         self.assertIn("| **VibeRsiStrategy** |", md_output)
         self.assertIn("Custom Stoploss", md_output)
+        self.assertIn("Informative TF", md_output)
+        self.assertIn("Initial ROI", md_output)
 
         config_map = {c["class"]: c for c in configs}
         self.assertTrue(config_map["MultiTimeframeAtrStrategy"]["use_custom_stoploss"])
         self.assertFalse(config_map["KoreanStarterStrategy"]["use_custom_stoploss"])
+        self.assertEqual(config_map["MultiTimeframeAtrStrategy"]["informative_timeframe"], "1h")
+        self.assertEqual(config_map["KoreanStarterStrategy"]["informative_timeframe"], "-")
+        self.assertEqual(config_map["VibeRsiStrategy"]["informative_timeframe"], "-")
+        self.assertTrue(config_map["MultiTimeframeAtrStrategy"]["use_exit_signal"])
+        self.assertTrue(config_map["KoreanStarterStrategy"]["use_exit_signal"])
+
+        self.assertEqual(get_initial_roi(config_map["MultiTimeframeAtrStrategy"]["minimal_roi"]), 0.05)
+        self.assertEqual(get_initial_roi(config_map["KoreanStarterStrategy"]["minimal_roi"]), 0.03)
+        self.assertEqual(get_initial_roi(config_map["VibeRsiStrategy"]["minimal_roi"]), 0.04)
+        self.assertIsNone(get_initial_roi({}))
+        self.assertIsNone(get_initial_roi(None))
 
         json_output = export_strategy_configs_json(configs)
         self.assertIn('"class": "VibeRsiStrategy"', json_output)
+        self.assertIn('"informative_timeframe": "1h"', json_output)
         parsed_json = json.loads(json_output)
         self.assertEqual(len(parsed_json), 3)
 
@@ -1261,6 +1278,15 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(len(csl_only), 1)
         self.assertEqual(csl_only[0]["class"], "MultiTimeframeAtrStrategy")
 
+        # Test filter multi timeframe
+        mtf_only = filter_strategy_configs(configs, multi_timeframe_only=True)
+        self.assertEqual(len(mtf_only), 1)
+        self.assertEqual(mtf_only[0]["class"], "MultiTimeframeAtrStrategy")
+
+        # Test filter exit signal
+        exit_only = filter_strategy_configs(configs, exit_signal_only=True)
+        self.assertEqual(len(exit_only), 3)
+
         # Test sort by timeframe
         sorted_by_tf = sort_strategy_configs(configs, sort_by="timeframe")
         self.assertEqual([c["timeframe"] for c in sorted_by_tf], ["5m", "5m", "15m"])
@@ -1276,6 +1302,17 @@ class StrategySourceTests(unittest.TestCase):
         # Test sort by class
         sorted_by_class = sort_strategy_configs(configs, sort_by="class")
         self.assertEqual(sorted_by_class[0]["class"], "KoreanStarterStrategy")
+
+        # Test sort by roi
+        sorted_by_roi = sort_strategy_configs(configs, sort_by="roi", reverse=True)
+        self.assertEqual(
+            [c["class"] for c in sorted_by_roi],
+            ["MultiTimeframeAtrStrategy", "VibeRsiStrategy", "KoreanStarterStrategy"],
+        )
+
+        # Test sort by informative timeframe
+        sorted_by_infotf = sort_strategy_configs(configs, sort_by="informative_timeframe")
+        self.assertEqual(sorted_by_infotf[0]["informative_timeframe"], "1h")
 
         # Test filter timeframe
         tf_5m = filter_strategy_configs(configs, timeframe="5m")
@@ -1601,23 +1638,29 @@ class StrategySourceTests(unittest.TestCase):
                 "file": "StratA.py",
                 "class": "StratA",
                 "timeframe": "5m",
+                "informative_timeframe": "1h",
                 "startup_candle_count": 100,
                 "stoploss": -0.05,
                 "trailing_stop": True,
                 "use_custom_stoploss": True,
+                "use_exit_signal": True,
                 "can_short": False,
                 "process_only_new_candles": True,
+                "minimal_roi": {"0": 0.05},
             },
             {
                 "file": "StratB.py",
                 "class": "StratB",
                 "timeframe": "15m",
+                "informative_timeframe": "-",
                 "startup_candle_count": 200,
                 "stoploss": -0.10,
                 "trailing_stop": False,
                 "use_custom_stoploss": False,
+                "use_exit_signal": False,
                 "can_short": True,
                 "process_only_new_candles": True,
+                "minimal_roi": {"0": 0.02},
             },
         ]
 
@@ -1627,25 +1670,36 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(stats["trailing_stop_pct"], 50.0)
         self.assertEqual(stats["custom_stoploss_count"], 1)
         self.assertEqual(stats["can_short_count"], 1)
+        self.assertEqual(stats["multi_timeframe_count"], 1)
+        self.assertEqual(stats["multi_timeframe_pct"], 50.0)
+        self.assertEqual(stats["exit_signal_count"], 1)
+        self.assertEqual(stats["exit_signal_pct"], 50.0)
         self.assertAlmostEqual(stats["avg_stoploss_pct"], -7.5)
+        self.assertAlmostEqual(stats["avg_initial_roi_pct"], 3.5)
 
         stat_block = format_config_summary_stats(stats)
         self.assertIn("Strategy Repository Statistics", stat_block)
         self.assertIn("Trailing Stop Enabled", stat_block)
+        self.assertIn("Multi-Timeframe Active", stat_block)
+        self.assertIn("Exit Signal Enabled", stat_block)
 
         md_out = format_config_markdown(sample_configs, include_stats=True)
         self.assertIn("Strategy Repository Summary", md_out)
         self.assertIn("-7.5% avg", md_out)
+        self.assertIn("Multi-Timeframe Adoption", md_out)
+        self.assertIn("Exit Signal Adoption", md_out)
 
         json_out = export_strategy_configs_json(sample_configs, include_stats=True)
         loaded = json.loads(json_out)
         self.assertIn("stats", loaded)
         self.assertIn("strategies", loaded)
         self.assertEqual(loaded["stats"]["total_strategies"], 2)
+        self.assertEqual(loaded["stats"]["multi_timeframe_count"], 1)
 
         html_out = format_config_html(sample_configs, include_stats=True)
         self.assertIn("stats-grid", html_out)
         self.assertIn("stat-card", html_out)
+        self.assertIn("다중 타임프레임 채택률", html_out)
 
     def test_strategy_config_export_csv(self) -> None:
         import sys
@@ -1660,12 +1714,15 @@ class StrategySourceTests(unittest.TestCase):
                 "file": "StratA.py",
                 "class": "StratA",
                 "timeframe": "5m",
+                "informative_timeframe": "1h",
                 "startup_candle_count": 100,
                 "stoploss": -0.05,
                 "trailing_stop": True,
                 "use_custom_stoploss": True,
+                "use_exit_signal": True,
                 "can_short": False,
                 "process_only_new_candles": True,
+                "minimal_roi": {"0": 0.05},
             }
         ]
 
@@ -1676,7 +1733,9 @@ class StrategySourceTests(unittest.TestCase):
             self.assertTrue(out_file.exists())
             content = out_file.read_text(encoding="utf-8")
             self.assertIn("file,class,timeframe", content)
-            self.assertIn("StratA.py,StratA,5m,100,-0.05,True,True,False,True", content)
+            self.assertIn("informative_timeframe", content)
+            self.assertIn("initial_roi_pct", content)
+            self.assertIn("StratA.py,StratA,5m,1h,100,-0.05,True,True,True,False,True,5.0", content)
 
     def test_trade_expectancy_skewness_and_kurtosis(self) -> None:
         import sys

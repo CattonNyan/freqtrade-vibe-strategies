@@ -160,9 +160,11 @@ python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backte
 # 전략 설정 매트릭스 요약표 함께 출력
 .\scripts\Invoke-Checks.ps1 -DetailedReport
 
-# 전략 설정 타임프레임순 정렬, 트레일링 스탑 필터링, 저장소 통계 요약(--stats), CSV 및 독립형 HTML 리포트 내보내기
+# 전략 설정 정렬(timeframe, roi, informative_timeframe), 필터링(--multi-timeframe-only, --has-trailing, --exit-signal-only), 저장소 통계 요약(--stats), CSV 및 독립형 HTML 리포트 내보내기
 python .\scripts\summarize_strategy_configs.py --sort-by timeframe
+python .\scripts\summarize_strategy_configs.py --sort-by roi --reverse
 python .\scripts\summarize_strategy_configs.py --stats
+python .\scripts\summarize_strategy_configs.py --multi-timeframe-only
 python .\scripts\summarize_strategy_configs.py --has-trailing --markdown --stats
 python .\scripts\summarize_strategy_configs.py --filter-timeframe 5m
 python .\scripts\summarize_strategy_configs.py --can-short-only --csv
