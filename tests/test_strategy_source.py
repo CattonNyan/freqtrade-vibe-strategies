@@ -1970,6 +1970,62 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("VaR (95% 신뢰수준)", html_out)
         self.assertIn("CVaR (Expected Shortfall)", html_out)
 
+    def test_dar_and_cdar_metrics(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_ulcer_and_drawdown_metrics,
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+        )
+
+        empty = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty["dar_95_pct"], 0.0)
+        self.assertEqual(empty["cdar_95_pct"], 0.0)
+        self.assertEqual(empty["cdar_ratio"], 0.0)
+
+        # All positive returns -> zero drawdown -> dar = 0, cdar = 0, cdar_ratio = 999.0
+        all_pos = calculate_ulcer_and_drawdown_metrics([0.05, 0.02, 0.03])
+        self.assertEqual(all_pos["dar_95_pct"], 0.0)
+        self.assertEqual(all_pos["cdar_95_pct"], 0.0)
+        self.assertEqual(all_pos["cdar_ratio"], 999.0)
+
+        # Series with significant drawdowns
+        profits = [0.05, -0.05, 0.02, -0.08, 0.03, -0.04, 0.06, -0.02, 0.04, -0.07]
+        res = calculate_ulcer_and_drawdown_metrics(profits)
+        self.assertGreater(res["dar_95_pct"], 0.0)
+        self.assertGreaterEqual(res["cdar_95_pct"], res["dar_95_pct"])
+        self.assertLessEqual(res["cdar_95_pct"], res["max_drawdown_pct"] + 1e-6)
+
+        # Mock results check
+        mock_res = {
+            "StratA": {
+                **res,
+                "total_trades": 10,
+                "win_rate_pct": 50.0,
+                "profit_factor": 1.1,
+                "expectancy_pct": 0.05,
+            }
+        }
+
+        # CSV export check
+        csv_out = export_quant_analysis_csv(mock_res)
+        self.assertIn("dar_95_pct", csv_out)
+        self.assertIn("cdar_95_pct", csv_out)
+        self.assertIn("cdar_ratio", csv_out)
+
+        # Markdown report check
+        md_out = generate_markdown_report(mock_res)
+        self.assertIn("DaR(95%)", md_out)
+        self.assertIn("CDaR(95%)", md_out)
+        self.assertIn("CDaR 비율", md_out)
+        self.assertIn("Drawdown at Risk", md_out)
+
+        # HTML report check
+        html_out = generate_html_report(mock_res)
+        self.assertIn("DaR (95% Drawdown-at-Risk)", html_out)
+        self.assertIn("CDaR (조건부 낙폭)", html_out)
+        self.assertIn("CDaR 비율 (CDaR Ratio)", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()

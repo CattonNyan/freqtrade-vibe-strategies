@@ -82,6 +82,9 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "cvar_95_pct": 0.0,
             "var_99_pct": 0.0,
             "cvar_99_pct": 0.0,
+            "dar_95_pct": 0.0,
+            "cdar_95_pct": 0.0,
+            "cdar_ratio": 0.0,
         }
 
     # Reconstruct equity curve (starting at 1.0)
@@ -217,6 +220,17 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     tail_99 = [p * 100.0 for p in clean_profits if p <= var_99]
     cvar_99_pct = (sum(tail_99) / len(tail_99)) if tail_99 else var_99_pct
 
+    # Drawdown-at-Risk (DaR 95%) and Conditional Drawdown-at-Risk (CDaR 95% / Chekhlov, Uryasev, Zabarankin)
+    dd_depths = [abs(dd) for dd in drawdowns_pct]
+    dar_95_pct = _percentile(dd_depths, 95.0) if dd_depths else 0.0
+    tail_dar_95 = [d for d in dd_depths if d >= dar_95_pct]
+    cdar_95_pct = (sum(tail_dar_95) / len(tail_dar_95)) if tail_dar_95 else dar_95_pct
+    cdar_ratio = (
+        (total_return_pct / cdar_95_pct)
+        if cdar_95_pct > 1e-6
+        else (999.0 if total_return_pct > 0 else 0.0)
+    )
+
     return {
         "total_return_pct": round(total_return_pct, 2),
         "max_drawdown_pct": round(mdd_pct, 2),
@@ -240,6 +254,9 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "cvar_95_pct": round(cvar_95_pct, 2),
         "var_99_pct": round(var_99_pct, 2),
         "cvar_99_pct": round(cvar_99_pct, 2),
+        "dar_95_pct": round(dar_95_pct, 2),
+        "cdar_95_pct": round(cdar_95_pct, 2),
+        "cdar_ratio": round(cdar_ratio, 3),
     }
 
 
@@ -617,8 +634,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -639,7 +656,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
             f"{data['expectancy_pct']:+.3f}% | {kelly_str} | "
             f"{data.get('var_95_pct', 0.0):+.2f}% | {data.get('cvar_95_pct', 0.0):+.2f}% | "
-            f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
+            f"-{data['max_drawdown_pct']:.2f}% | -{data.get('dar_95_pct', 0.0):.2f}% | -{data.get('cdar_95_pct', 0.0):.2f}% | {data.get('cdar_ratio', 0.0):.2f} | "
+            f"{data['ulcer_index']:.2f}% | "
             f"{data.get('k_ratio', 0.0):.2f} | "
             f"{data.get('sortino_ratio', 0.0):.2f} | "
             f"{data.get('burke_ratio', 0.0):.2f} | "
@@ -704,6 +722,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **회복 계수 (Recovery Factor)**: 총 순수익률을 최대 낙폭(MDD)으로 나눈 값으로, 감내한 최대 하방 위험 대비 얼마만큼의 자본 증식을 달성했는지 평가합니다.")
     lines.append("- **최대 침체 기간 (Max Underwater Trades)**: 고점 갱신 후 새로운 고점을 탈환하지 못하고 지속된 최장 연속 거래 횟수입니다.")
     lines.append("- **VaR 및 CVaR (Value at Risk & Expected Shortfall)**: 95% 및 99% 신뢰수준에서의 단일 거래 최대 예상 손실률(VaR)과 꼬리 위험 발생 시의 평균 손실폭(CVaR / Expected Shortfall)으로, 극단적 시장 충격(Black Swan)에 대한 전략의 방어력을 정량 평가합니다.")
+    lines.append("- **DaR 및 CDaR (Drawdown at Risk & Conditional Drawdown at Risk, Chekhlov, Uryasev, Zabarankin)**: 95% 신뢰수준에서의 낙폭 깊이(DaR 95%)와 이를 초과하는 최악 5% 낙폭들의 조건부 평균 깊이(CDaR 95%)로, 단일 틱 극단치에 취약한 최대 낙폭(MDD)의 한계를 극복한 일관된(coherent) 하방 위험 척도입니다.")
+    lines.append("- **CDaR 비율 (CDaR Ratio)**: 총 수익률을 CDaR(95%)로 나눈 위험조정 수익률로, 전통적인 칼마 비율(Calmar Ratio)보다 극단치 왜곡이 적고 통계적 신뢰도가 높습니다.")
     return "\n".join(lines)
 
 
@@ -757,6 +777,9 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "cvar_95_pct",
         "var_99_pct",
         "cvar_99_pct",
+        "dar_95_pct",
+        "cdar_95_pct",
+        "cdar_ratio",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -796,6 +819,9 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         omega = data.get("omega_ratio", 0.0)
         var_95 = data.get("var_95_pct", 0.0)
         cvar_95 = data.get("cvar_95_pct", 0.0)
+        dar_95 = data.get("dar_95_pct", 0.0)
+        cdar_95 = data.get("cdar_95_pct", 0.0)
+        cdar_ratio = data.get("cdar_ratio", 0.0)
 
         if sqn >= 3.0:
             sqn_badge_cls = "badge-success"
@@ -935,6 +961,18 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">CVaR (Expected Shortfall)</div>
                 <div class="metric-value {('positive' if cvar_95 >= 0 else 'negative')}">{cvar_95:+.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">DaR (95% Drawdown-at-Risk)</div>
+                <div class="metric-value negative">-{dar_95:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">CDaR (조건부 낙폭)</div>
+                <div class="metric-value negative">-{cdar_95:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">CDaR 비율 (CDaR Ratio)</div>
+                <div class="metric-value">{cdar_ratio:.2f}</div>
             </div>
         </div>
         """
