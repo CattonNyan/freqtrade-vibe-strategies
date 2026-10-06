@@ -78,6 +78,10 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "time_underwater_pct": 0.0,
             "avg_drawdown_pct": 0.0,
             "max_drawdown_duration_trades": 0,
+            "var_95_pct": 0.0,
+            "cvar_95_pct": 0.0,
+            "var_99_pct": 0.0,
+            "cvar_99_pct": 0.0,
         }
 
     # Reconstruct equity curve (starting at 1.0)
@@ -200,6 +204,19 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     else:
         k_ratio = 0.0
 
+    # Historical Value-at-Risk (VaR) and Conditional Value-at-Risk (CVaR / Expected Shortfall)
+    # VaR 95% = 5th percentile of single-trade return
+    var_95 = _percentile(clean_profits, 5.0)
+    var_95_pct = var_95 * 100.0
+    tail_95 = [p * 100.0 for p in clean_profits if p <= var_95]
+    cvar_95_pct = (sum(tail_95) / len(tail_95)) if tail_95 else var_95_pct
+
+    # VaR 99% = 1st percentile of single-trade return
+    var_99 = _percentile(clean_profits, 1.0)
+    var_99_pct = var_99 * 100.0
+    tail_99 = [p * 100.0 for p in clean_profits if p <= var_99]
+    cvar_99_pct = (sum(tail_99) / len(tail_99)) if tail_99 else var_99_pct
+
     return {
         "total_return_pct": round(total_return_pct, 2),
         "max_drawdown_pct": round(mdd_pct, 2),
@@ -219,6 +236,10 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "time_underwater_pct": round(time_underwater_pct, 2),
         "avg_drawdown_pct": round(avg_drawdown_pct, 2),
         "max_drawdown_duration_trades": max_underwater,
+        "var_95_pct": round(var_95_pct, 2),
+        "cvar_95_pct": round(cvar_95_pct, 2),
+        "var_99_pct": round(var_99_pct, 2),
+        "cvar_99_pct": round(cvar_99_pct, 2),
     }
 
 
@@ -596,8 +617,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -617,6 +638,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data.get('skewness', 0.0):+.2f} | {data.get('kurtosis', 0.0):+.2f} | "
             f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
             f"{data['expectancy_pct']:+.3f}% | {kelly_str} | "
+            f"{data.get('var_95_pct', 0.0):+.2f}% | {data.get('cvar_95_pct', 0.0):+.2f}% | "
             f"-{data['max_drawdown_pct']:.2f}% | {data['ulcer_index']:.2f}% | "
             f"{data.get('k_ratio', 0.0):.2f} | "
             f"{data.get('sortino_ratio', 0.0):.2f} | "
@@ -681,6 +703,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **보유시간 비대칭도 (Win/Loss Duration Ratio)**: 수익 거래 평균 보유시간 / 손실 거래 평균 보유시간. 1.0 이상이면 손실을 빠르게 끊고 이익을 길게 가져가는(Let winners run, cut losers) 바람직한 추세추종 특성을 나타냅니다.")
     lines.append("- **회복 계수 (Recovery Factor)**: 총 순수익률을 최대 낙폭(MDD)으로 나눈 값으로, 감내한 최대 하방 위험 대비 얼마만큼의 자본 증식을 달성했는지 평가합니다.")
     lines.append("- **최대 침체 기간 (Max Underwater Trades)**: 고점 갱신 후 새로운 고점을 탈환하지 못하고 지속된 최장 연속 거래 횟수입니다.")
+    lines.append("- **VaR 및 CVaR (Value at Risk & Expected Shortfall)**: 95% 및 99% 신뢰수준에서의 단일 거래 최대 예상 손실률(VaR)과 꼬리 위험 발생 시의 평균 손실폭(CVaR / Expected Shortfall)으로, 극단적 시장 충격(Black Swan)에 대한 전략의 방어력을 정량 평가합니다.")
     return "\n".join(lines)
 
 
@@ -730,6 +753,10 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "time_underwater_pct",
         "avg_drawdown_pct",
         "max_drawdown_duration_trades",
+        "var_95_pct",
+        "cvar_95_pct",
+        "var_99_pct",
+        "cvar_99_pct",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -767,6 +794,8 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         sqn_rating = data.get("sqn_rating", "N/A")
         k_ratio = data.get("k_ratio", 0.0)
         omega = data.get("omega_ratio", 0.0)
+        var_95 = data.get("var_95_pct", 0.0)
+        cvar_95 = data.get("cvar_95_pct", 0.0)
 
         if sqn >= 3.0:
             sqn_badge_cls = "badge-success"
@@ -898,6 +927,14 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">수중 기간 (Underwater)</div>
                 <div class="metric-value">{underwater:.1f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">VaR (95% 신뢰수준)</div>
+                <div class="metric-value {('positive' if var_95 >= 0 else 'negative')}">{var_95:+.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">CVaR (Expected Shortfall)</div>
+                <div class="metric-value {('positive' if cvar_95 >= 0 else 'negative')}">{cvar_95:+.2f}%</div>
             </div>
         </div>
         """

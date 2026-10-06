@@ -1922,6 +1922,54 @@ class StrategySourceTests(unittest.TestCase):
         self.assertTrue(path_real.exists())
         self.assertIn("strategy", data_real)
 
+    def test_var_and_cvar_metrics(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_ulcer_and_drawdown_metrics,
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+        )
+
+        empty = calculate_ulcer_and_drawdown_metrics([])
+        self.assertEqual(empty["var_95_pct"], 0.0)
+        self.assertEqual(empty["cvar_95_pct"], 0.0)
+        self.assertEqual(empty["var_99_pct"], 0.0)
+        self.assertEqual(empty["cvar_99_pct"], 0.0)
+
+        profits = [0.05, -0.02, 0.03, -0.04, 0.01, -0.01, 0.02, -0.03, 0.04, -0.05]
+        res = calculate_ulcer_and_drawdown_metrics(profits)
+        self.assertLess(res["var_95_pct"], 0.0)
+        self.assertLessEqual(res["cvar_95_pct"], res["var_95_pct"])
+        self.assertLessEqual(res["var_99_pct"], res["var_95_pct"])
+        self.assertLessEqual(res["cvar_99_pct"], res["var_99_pct"])
+
+        # CSV export check
+        mock_res = {
+            "StratA": {
+                **res,
+                "total_trades": 10,
+                "win_rate_pct": 50.0,
+                "profit_factor": 1.2,
+                "expectancy_pct": 0.1,
+            }
+        }
+        csv_out = export_quant_analysis_csv(mock_res)
+        self.assertIn("var_95_pct", csv_out)
+        self.assertIn("cvar_95_pct", csv_out)
+        self.assertIn("var_99_pct", csv_out)
+        self.assertIn("cvar_99_pct", csv_out)
+
+        # Markdown report check
+        md_out = generate_markdown_report(mock_res)
+        self.assertIn("VaR(95%)", md_out)
+        self.assertIn("CVaR(95%)", md_out)
+        self.assertIn("Expected Shortfall", md_out)
+
+        # HTML report check
+        html_out = generate_html_report(mock_res)
+        self.assertIn("VaR (95% 신뢰수준)", html_out)
+        self.assertIn("CVaR (Expected Shortfall)", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()
