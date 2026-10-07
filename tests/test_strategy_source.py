@@ -2026,6 +2026,49 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("CDaR (조건부 낙폭)", html_out)
         self.assertIn("CDaR 비율 (CDaR Ratio)", html_out)
 
+    def test_trade_extrema_and_dispersion_metrics(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_trade_expectancy,
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+        )
+
+        empty = calculate_trade_expectancy([])
+        self.assertEqual(empty["max_win_pct"], 0.0)
+        self.assertEqual(empty["max_loss_pct"], 0.0)
+        self.assertEqual(empty["std_profit_pct"], 0.0)
+
+        trades = [
+            {"profit_ratio": 0.08},
+            {"profit_ratio": -0.03},
+            {"profit_ratio": 0.02},
+            {"profit_ratio": -0.05},
+        ]
+        res = calculate_trade_expectancy(trades)
+        self.assertAlmostEqual(res["max_win_pct"], 8.0)
+        self.assertAlmostEqual(res["max_loss_pct"], 5.0)
+        self.assertGreater(res["std_profit_pct"], 0.0)
+
+        mock_res = {"StratA": {**res, "total_return_pct": 2.0, "max_drawdown_pct": 5.0}}
+
+        csv_out = export_quant_analysis_csv(mock_res)
+        self.assertIn("max_win_pct", csv_out)
+        self.assertIn("max_loss_pct", csv_out)
+        self.assertIn("std_profit_pct", csv_out)
+        self.assertIn("8.0", csv_out)
+        self.assertIn("5.0", csv_out)
+
+        md_out = generate_markdown_report(mock_res)
+        self.assertIn("최대 이익/손실", md_out)
+        self.assertIn("수익률 표준편차", md_out)
+        self.assertIn("+8.0%/-5.0%", md_out)
+
+        html_out = generate_html_report(mock_res)
+        self.assertIn("최대 단일 이익 / 손실", html_out)
+        self.assertIn("수익률 표준편차 (Std Dev)", html_out)
+        self.assertIn("+8.0% / -5.0%", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()
