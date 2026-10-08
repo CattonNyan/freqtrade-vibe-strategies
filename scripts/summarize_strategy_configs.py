@@ -85,6 +85,9 @@ def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, o
                     "process_only_new_candles": vals.get("process_only_new_candles", True),
                     "can_short": vals.get("can_short", False),
                     "use_exit_signal": vals.get("use_exit_signal", True),
+                    "exit_profit_only": vals.get("exit_profit_only", False),
+                    "position_adjustment_enable": vals.get("position_adjustment_enable", False),
+                    "ignore_roi_if_entry_signal": vals.get("ignore_roi_if_entry_signal", False),
                     "minimal_roi": vals.get("minimal_roi", {}),
                 })
 
@@ -108,6 +111,12 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
             "multi_timeframe_pct": 0.0,
             "exit_signal_count": 0,
             "exit_signal_pct": 0.0,
+            "exit_profit_only_count": 0,
+            "exit_profit_only_pct": 0.0,
+            "position_adjustment_count": 0,
+            "position_adjustment_pct": 0.0,
+            "ignore_roi_count": 0,
+            "ignore_roi_pct": 0.0,
             "avg_stoploss_pct": 0.0,
             "min_stoploss_pct": 0.0,
             "max_stoploss_pct": 0.0,
@@ -120,6 +129,9 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
     can_short_count = 0
     mtf_count = 0
     exit_signal_count = 0
+    exit_profit_only_count = 0
+    position_adjustment_count = 0
+    ignore_roi_count = 0
     stoplosses: list[float] = []
     initial_rois: list[float] = []
 
@@ -137,6 +149,12 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
             mtf_count += 1
         if c.get("use_exit_signal", True):
             exit_signal_count += 1
+        if c.get("exit_profit_only"):
+            exit_profit_only_count += 1
+        if c.get("position_adjustment_enable"):
+            position_adjustment_count += 1
+        if c.get("ignore_roi_if_entry_signal"):
+            ignore_roi_count += 1
         sl = c.get("stoploss")
         if isinstance(sl, (int, float)):
             stoplosses.append(float(sl) * 100.0)
@@ -162,6 +180,12 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
         "multi_timeframe_pct": round((mtf_count / total) * 100.0, 1),
         "exit_signal_count": exit_signal_count,
         "exit_signal_pct": round((exit_signal_count / total) * 100.0, 1),
+        "exit_profit_only_count": exit_profit_only_count,
+        "exit_profit_only_pct": round((exit_profit_only_count / total) * 100.0, 1),
+        "position_adjustment_count": position_adjustment_count,
+        "position_adjustment_pct": round((position_adjustment_count / total) * 100.0, 1),
+        "ignore_roi_count": ignore_roi_count,
+        "ignore_roi_pct": round((ignore_roi_count / total) * 100.0, 1),
         "avg_stoploss_pct": round(avg_sl, 2),
         "min_stoploss_pct": round(min_sl, 2),
         "max_stoploss_pct": round(max_sl, 2),
@@ -180,6 +204,9 @@ def format_config_summary_stats(stats: dict[str, object]) -> str:
         f"  Trailing Stop Enabled   : {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
         f"  Custom Stoploss Defined : {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
         f"  Exit Signal Enabled     : {stats.get('exit_signal_count', 0)} ({stats.get('exit_signal_pct', 0.0)}%)",
+        f"  Exit Profit Only Active : {stats.get('exit_profit_only_count', 0)} ({stats.get('exit_profit_only_pct', 0.0)}%)",
+        f"  Position Adjustment(DCA): {stats.get('position_adjustment_count', 0)} ({stats.get('position_adjustment_pct', 0.0)}%)",
+        f"  Ignore ROI on Entry     : {stats.get('ignore_roi_count', 0)} ({stats.get('ignore_roi_pct', 0.0)}%)",
         f"  Shorting Supported      : {stats['can_short_count']} ({stats['can_short_pct']}%)",
         f"  Fixed Stoploss Range    : {stats['avg_stoploss_pct']:+.1f}% avg (Min: {stats['min_stoploss_pct']:+.1f}%, Max: {stats['max_stoploss_pct']:+.1f}%)",
         f"  Avg Initial ROI Target  : {stats.get('avg_initial_roi_pct', 0.0):+.1f}%",
@@ -191,8 +218,8 @@ def format_config_summary_stats(stats: dict[str, object]) -> str:
 def format_config_table(configs: list[dict[str, object]]) -> str:
     """Format strategy configuration list into a readable table."""
     lines = [
-        f"{'Strategy Class':<26} | {'TF':<5} | {'Info TF':<7} | {'Startup':<8} | {'Stoploss':<9} | {'Trailing':<8} | {'Custom SL':<9} | {'Initial ROI'}",
-        "-" * 98,
+        f"{'Strategy Class':<26} | {'TF':<5} | {'Info TF':<7} | {'Startup':<8} | {'Stoploss':<9} | {'Trailing':<8} | {'Custom SL':<9} | {'Initial ROI':<11} | {'DCA':<5} | {'ExitProfit':<10}",
+        "-" * 120,
     ]
     for c in configs:
         cls_name = str(c.get("class", ""))
@@ -204,7 +231,9 @@ def format_config_table(configs: list[dict[str, object]]) -> str:
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
         init_roi = get_initial_roi(c.get("minimal_roi"))
         roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
-        lines.append(f"{cls_name:<26} | {tf:<5} | {info_tf:<7} | {startup:<8} | {sl:<9} | {ts:<8} | {csl:<9} | {roi_str}")
+        dca = "YES" if c.get("position_adjustment_enable") else "NO"
+        ep = "YES" if c.get("exit_profit_only") else "NO"
+        lines.append(f"{cls_name:<26} | {tf:<5} | {info_tf:<7} | {startup:<8} | {sl:<9} | {ts:<8} | {csl:<9} | {roi_str:<11} | {dca:<5} | {ep:<10}")
     return "\n".join(lines)
 
 
@@ -222,14 +251,17 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
             f"- **Trailing Stop Adoption**: {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
             f"- **Custom Stoploss Adoption**: {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
             f"- **Exit Signal Adoption**: {stats.get('exit_signal_count', 0)} ({stats.get('exit_signal_pct', 0.0)}%)",
+            f"- **Exit Profit Only Active**: {stats.get('exit_profit_only_count', 0)} ({stats.get('exit_profit_only_pct', 0.0)}%)",
+            f"- **Position Adjustment (DCA)**: {stats.get('position_adjustment_count', 0)} ({stats.get('position_adjustment_pct', 0.0)}%)",
+            f"- **Ignore ROI on Entry**: {stats.get('ignore_roi_count', 0)} ({stats.get('ignore_roi_pct', 0.0)}%)",
             f"- **Shorting Supported**: {stats['can_short_count']} ({stats['can_short_pct']}%)",
             f"- **Fixed Stoploss**: {stats['avg_stoploss_pct']:+.1f}% avg (Min: {stats['min_stoploss_pct']:+.1f}%, Max: {stats['max_stoploss_pct']:+.1f}%)",
             f"- **Avg Initial ROI**: {stats.get('avg_initial_roi_pct', 0.0):+.1f}%",
             "",
         ])
     lines.extend([
-        "| Strategy Class | Timeframe | Informative TF | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Exit Signal | Can Short | Process New Only | Initial ROI |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| Strategy Class | Timeframe | Informative TF | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Exit Signal | Profit Only | DCA Enabled | Ignore ROI on Entry | Can Short | Process New Only | Initial ROI |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
     for c in configs:
         cls_name = str(c.get("class", ""))
@@ -240,11 +272,14 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
         ts = "YES" if c.get("trailing_stop") else "NO"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
         es = "YES" if c.get("use_exit_signal", True) else "NO"
+        epo = "YES" if c.get("exit_profit_only") else "NO"
+        dca = "YES" if c.get("position_adjustment_enable") else "NO"
+        iroi = "YES" if c.get("ignore_roi_if_entry_signal") else "NO"
         cs = "YES" if c.get("can_short") else "NO"
         pno = "YES" if c.get("process_only_new_candles", True) else "NO"
         init_roi = get_initial_roi(c.get("minimal_roi"))
         roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
-        lines.append(f"| **{cls_name}** | {tf} | {info_tf} | {startup} | {sl} | {ts} | {csl} | {es} | {cs} | {pno} | {roi_str} |")
+        lines.append(f"| **{cls_name}** | {tf} | {info_tf} | {startup} | {sl} | {ts} | {csl} | {es} | {epo} | {dca} | {iroi} | {cs} | {pno} | {roi_str} |")
     return "\n".join(lines)
 
 
@@ -260,6 +295,9 @@ def format_config_csv(configs: list[dict[str, object]]) -> str:
         "trailing_stop",
         "use_custom_stoploss",
         "use_exit_signal",
+        "exit_profit_only",
+        "position_adjustment_enable",
+        "ignore_roi_if_entry_signal",
         "can_short",
         "process_only_new_candles",
         "initial_roi_pct",
@@ -271,6 +309,9 @@ def format_config_csv(configs: list[dict[str, object]]) -> str:
         row = dict(c)
         row["informative_timeframe"] = c.get("informative_timeframe", "-")
         row["use_exit_signal"] = c.get("use_exit_signal", True)
+        row["exit_profit_only"] = c.get("exit_profit_only", False)
+        row["position_adjustment_enable"] = c.get("position_adjustment_enable", False)
+        row["ignore_roi_if_entry_signal"] = c.get("ignore_roi_if_entry_signal", False)
         init_roi = get_initial_roi(c.get("minimal_roi"))
         row["initial_roi_pct"] = round(init_roi * 100.0, 2) if init_roi is not None else ""
         writer.writerow(row)
@@ -339,6 +380,9 @@ def filter_strategy_configs(
     can_short_only: bool = False,
     multi_timeframe_only: bool = False,
     exit_signal_only: bool = False,
+    position_adjustment_only: bool = False,
+    exit_profit_only: bool = False,
+    ignore_roi_if_entry_only: bool = False,
 ) -> list[dict[str, object]]:
     """Filter strategy configuration list based on criteria."""
     filtered = list(configs)
@@ -354,6 +398,12 @@ def filter_strategy_configs(
         filtered = [c for c in filtered if str(c.get("informative_timeframe", "-")).strip() not in ("-", "", "None")]
     if exit_signal_only:
         filtered = [c for c in filtered if bool(c.get("use_exit_signal", True))]
+    if position_adjustment_only:
+        filtered = [c for c in filtered if bool(c.get("position_adjustment_enable"))]
+    if exit_profit_only:
+        filtered = [c for c in filtered if bool(c.get("exit_profit_only"))]
+    if ignore_roi_if_entry_only:
+        filtered = [c for c in filtered if bool(c.get("ignore_roi_if_entry_signal"))]
     return filtered
 
 
@@ -401,6 +451,18 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                 <div class="stat-value">{stats.get('exit_signal_pct', 0.0)}% <span class="stat-sub">({stats.get('exit_signal_count', 0)}개)</span></div>
             </div>
             <div class="stat-card">
+                <div class="stat-label">수익 시만 청산 (Profit Only)</div>
+                <div class="stat-value">{stats.get('exit_profit_only_pct', 0.0)}% <span class="stat-sub">({stats.get('exit_profit_only_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">분할 진입(DCA) 지원</div>
+                <div class="stat-value">{stats.get('position_adjustment_pct', 0.0)}% <span class="stat-sub">({stats.get('position_adjustment_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">진입 시 ROI 무시</div>
+                <div class="stat-value">{stats.get('ignore_roi_pct', 0.0)}% <span class="stat-sub">({stats.get('ignore_roi_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-label">공매도(Short) 지원</div>
                 <div class="stat-value">{stats['can_short_pct']}% <span class="stat-sub">({stats['can_short_count']}개)</span></div>
             </div>
@@ -427,6 +489,9 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
         ts = "YES" if c.get("trailing_stop") else "NO"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
         es = "YES" if c.get("use_exit_signal", True) else "NO"
+        epo = "YES" if c.get("exit_profit_only") else "NO"
+        dca = "YES" if c.get("position_adjustment_enable") else "NO"
+        iroi = "YES" if c.get("ignore_roi_if_entry_signal") else "NO"
         cs = "YES" if c.get("can_short") else "NO"
         pno = "YES" if c.get("process_only_new_candles", True) else "NO"
 
@@ -437,6 +502,9 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
         ts_class = "badge-success" if ts == "YES" else "badge-muted"
         csl_class = "badge-success" if csl == "YES" else "badge-muted"
         es_class = "badge-success" if es == "YES" else "badge-muted"
+        epo_class = "badge-success" if epo == "YES" else "badge-muted"
+        dca_class = "badge-warning" if dca == "YES" else "badge-muted"
+        iroi_class = "badge-warning" if iroi == "YES" else "badge-muted"
         cs_class = "badge-warning" if cs == "YES" else "badge-muted"
         info_badge = f'<span class="badge badge-primary">{info_tf}</span>' if info_tf != "-" else '<span class="badge badge-muted">-</span>'
 
@@ -451,12 +519,15 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
             <td><span class="badge {ts_class}">{ts}</span></td>
             <td><span class="badge {csl_class}">{csl}</span></td>
             <td><span class="badge {es_class}">{es}</span></td>
+            <td><span class="badge {epo_class}">{epo}</span></td>
+            <td><span class="badge {dca_class}">{dca}</span></td>
+            <td><span class="badge {iroi_class}">{iroi}</span></td>
             <td><span class="badge {cs_class}">{cs}</span></td>
             <td>{pno}</td>
         </tr>
         """)
 
-    tbody = "".join(rows) if rows else '<tr><td colspan="11">전략 데이터 없음</td></tr>'
+    tbody = "".join(rows) if rows else '<tr><td colspan="14">전략 데이터 없음</td></tr>'
 
     return f"""<!DOCTYPE html>
 <html lang="ko">
@@ -558,6 +629,9 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                     <th>트레일링 스탑</th>
                     <th>커스텀 손절</th>
                     <th>청산 시그널</th>
+                    <th>수익시만 청산</th>
+                    <th>분할진입(DCA)</th>
+                    <th>진입시 ROI무시</th>
                     <th>공매도(Short)</th>
                     <th>신규 봉만 처리</th>
                 </tr>
@@ -610,6 +684,15 @@ def main():
         "--exit-signal-only", action="store_true", help="Show only strategies using exit signals"
     )
     parser.add_argument(
+        "--position-adjustment-only", "--dca-only", action="store_true", help="Show only strategies enabling position adjustments (DCA/pyramiding)"
+    )
+    parser.add_argument(
+        "--exit-profit-only", action="store_true", help="Show only strategies exiting only in profit"
+    )
+    parser.add_argument(
+        "--ignore-roi-if-entry-only", action="store_true", help="Show only strategies ignoring ROI table exits when entry signal is active"
+    )
+    parser.add_argument(
         "--filter-timeframe",
         type=str,
         default=None,
@@ -632,6 +715,12 @@ def main():
         configs = filter_strategy_configs(configs, multi_timeframe_only=True)
     if args.exit_signal_only:
         configs = filter_strategy_configs(configs, exit_signal_only=True)
+    if args.position_adjustment_only:
+        configs = filter_strategy_configs(configs, position_adjustment_only=True)
+    if args.exit_profit_only:
+        configs = filter_strategy_configs(configs, exit_profit_only=True)
+    if args.ignore_roi_if_entry_only:
+        configs = filter_strategy_configs(configs, ignore_roi_if_entry_only=True)
     if args.filter_timeframe:
         configs = filter_strategy_configs(configs, timeframe=args.filter_timeframe)
 

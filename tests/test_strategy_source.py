@@ -1735,7 +1735,7 @@ class StrategySourceTests(unittest.TestCase):
             self.assertIn("file,class,timeframe", content)
             self.assertIn("informative_timeframe", content)
             self.assertIn("initial_roi_pct", content)
-            self.assertIn("StratA.py,StratA,5m,1h,100,-0.05,True,True,True,False,True,5.0", content)
+            self.assertIn("StratA.py,StratA,5m,1h,100,-0.05,True,True,True,False,False,False,False,True,5.0", content)
 
     def test_trade_expectancy_skewness_and_kurtosis(self) -> None:
         import sys
@@ -2068,6 +2068,113 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("최대 단일 이익 / 손실", html_out)
         self.assertIn("수익률 표준편차 (Std Dev)", html_out)
         self.assertIn("+8.0% / -5.0%", html_out)
+
+    def test_summarize_strategy_configs_dca_and_exit_profit(self) -> None:
+        from scripts.summarize_strategy_configs import (
+            compute_config_summary_stats,
+            filter_strategy_configs,
+            format_config_html,
+            format_config_markdown,
+            format_config_summary_stats,
+            format_config_table,
+            get_strategy_configs,
+        )
+
+        configs = get_strategy_configs()
+        self.assertEqual(len(configs), 3)
+
+        for c in configs:
+            self.assertIn("position_adjustment_enable", c)
+            self.assertIn("exit_profit_only", c)
+            self.assertIn("ignore_roi_if_entry_signal", c)
+
+        stats = compute_config_summary_stats(configs)
+        self.assertIn("position_adjustment_count", stats)
+        self.assertIn("position_adjustment_pct", stats)
+        self.assertIn("exit_profit_only_count", stats)
+        self.assertIn("exit_profit_only_pct", stats)
+        self.assertIn("ignore_roi_count", stats)
+        self.assertIn("ignore_roi_pct", stats)
+        self.assertEqual(stats["position_adjustment_count"], 0)
+        self.assertEqual(stats["exit_profit_only_count"], 0)
+
+        custom_configs = [
+            {
+                "file": "DcaStrat.py",
+                "class": "DcaStrat",
+                "timeframe": "5m",
+                "informative_timeframe": "1h",
+                "startup_candle_count": 50,
+                "stoploss": -0.05,
+                "trailing_stop": False,
+                "use_custom_stoploss": False,
+                "use_exit_signal": True,
+                "position_adjustment_enable": True,
+                "exit_profit_only": True,
+                "ignore_roi_if_entry_signal": False,
+                "can_short": False,
+                "process_only_new_candles": True,
+                "minimal_roi": {"0": 0.05},
+            },
+            {
+                "file": "HoldStrat.py",
+                "class": "HoldStrat",
+                "timeframe": "15m",
+                "informative_timeframe": "-",
+                "startup_candle_count": 100,
+                "stoploss": -0.10,
+                "trailing_stop": True,
+                "use_custom_stoploss": True,
+                "use_exit_signal": True,
+                "position_adjustment_enable": False,
+                "exit_profit_only": False,
+                "ignore_roi_if_entry_signal": True,
+                "can_short": True,
+                "process_only_new_candles": True,
+                "minimal_roi": {"0": 0.02},
+            },
+        ]
+
+        custom_stats = compute_config_summary_stats(custom_configs)
+        self.assertEqual(custom_stats["position_adjustment_count"], 1)
+        self.assertEqual(custom_stats["position_adjustment_pct"], 50.0)
+        self.assertEqual(custom_stats["exit_profit_only_count"], 1)
+        self.assertEqual(custom_stats["exit_profit_only_pct"], 50.0)
+        self.assertEqual(custom_stats["ignore_roi_count"], 1)
+        self.assertEqual(custom_stats["ignore_roi_pct"], 50.0)
+
+        dca_filtered = filter_strategy_configs(custom_configs, position_adjustment_only=True)
+        self.assertEqual(len(dca_filtered), 1)
+        self.assertEqual(dca_filtered[0]["class"], "DcaStrat")
+
+        profit_filtered = filter_strategy_configs(custom_configs, exit_profit_only=True)
+        self.assertEqual(len(profit_filtered), 1)
+        self.assertEqual(profit_filtered[0]["class"], "DcaStrat")
+
+        roi_filtered = filter_strategy_configs(custom_configs, ignore_roi_if_entry_only=True)
+        self.assertEqual(len(roi_filtered), 1)
+        self.assertEqual(roi_filtered[0]["class"], "HoldStrat")
+
+        table_out = format_config_table(custom_configs)
+        self.assertIn("DCA", table_out)
+        self.assertIn("ExitProfit", table_out)
+
+        stat_block = format_config_summary_stats(custom_stats)
+        self.assertIn("Position Adjustment(DCA)", stat_block)
+        self.assertIn("Exit Profit Only Active", stat_block)
+        self.assertIn("Ignore ROI on Entry", stat_block)
+
+        md_out = format_config_markdown(custom_configs, include_stats=True)
+        self.assertIn("Position Adjustment (DCA)", md_out)
+        self.assertIn("Exit Profit Only Active", md_out)
+        self.assertIn("DCA Enabled", md_out)
+        self.assertIn("Profit Only", md_out)
+
+        html_out = format_config_html(custom_configs, include_stats=True)
+        self.assertIn("수익 시만 청산 (Profit Only)", html_out)
+        self.assertIn("분할 진입(DCA) 지원", html_out)
+        self.assertIn("진입 시 ROI 무시", html_out)
+        self.assertIn("분할진입(DCA)", html_out)
 
 
 if __name__ == "__main__":
