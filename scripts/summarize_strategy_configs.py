@@ -383,9 +383,32 @@ def filter_strategy_configs(
     position_adjustment_only: bool = False,
     exit_profit_only: bool = False,
     ignore_roi_if_entry_only: bool = False,
+    search: str | None = None,
+    min_roi: float | None = None,
+    max_stoploss: float | None = None,
 ) -> list[dict[str, object]]:
     """Filter strategy configuration list based on criteria."""
     filtered = list(configs)
+    if search:
+        q = search.strip().lower()
+        filtered = [
+            c for c in filtered
+            if q in str(c.get("class", "")).lower() or q in str(c.get("file", "")).lower()
+        ]
+    if min_roi is not None:
+        target_roi = min_roi / 100.0 if abs(min_roi) > 1.0 else min_roi
+        filtered = [
+            c for c in filtered
+            if (get_initial_roi(c.get("minimal_roi")) is not None and get_initial_roi(c.get("minimal_roi")) >= target_roi - 1e-6)
+        ]
+    if max_stoploss is not None:
+        target_sl = max_stoploss / 100.0 if abs(max_stoploss) > 1.0 else max_stoploss
+        if target_sl > 0:
+            target_sl = -target_sl
+        filtered = [
+            c for c in filtered
+            if isinstance(c.get("stoploss"), (int, float)) and float(c["stoploss"]) >= target_sl - 1e-6
+        ]
     if has_trailing is not None:
         filtered = [c for c in filtered if bool(c.get("trailing_stop")) == has_trailing]
     if custom_stoploss_only:
@@ -698,6 +721,24 @@ def main():
         default=None,
         help="Filter strategies matching a specific timeframe (e.g. 5m, 15m, 1h)",
     )
+    parser.add_argument(
+        "--search",
+        type=str,
+        default=None,
+        help="Filter strategies matching class or filename keyword (case-insensitive)",
+    )
+    parser.add_argument(
+        "--min-roi",
+        type=float,
+        default=None,
+        help="Filter strategies with initial ROI greater than or equal to threshold (e.g. 0.05 or 5 for 5%%)",
+    )
+    parser.add_argument(
+        "--max-stoploss",
+        type=float,
+        default=None,
+        help="Filter strategies with stoploss greater than or equal to threshold (e.g. -0.10 or -10 for -10%%)",
+    )
     parser.add_argument("--export-csv", type=str, default=None, help="Export strategy configurations directly to specified CSV file")
     parser.add_argument("--output", "-o", type=str, default=None, help="Path to write output report to")
     args = parser.parse_args()
@@ -705,6 +746,12 @@ def main():
     strategies_dir = Path(args.dir) if args.dir else None
     configs = get_strategy_configs(strategies_dir)
 
+    if args.search:
+        configs = filter_strategy_configs(configs, search=args.search)
+    if args.min_roi is not None:
+        configs = filter_strategy_configs(configs, min_roi=args.min_roi)
+    if args.max_stoploss is not None:
+        configs = filter_strategy_configs(configs, max_stoploss=args.max_stoploss)
     if args.has_trailing:
         configs = filter_strategy_configs(configs, has_trailing=True)
     if args.custom_stoploss_only:

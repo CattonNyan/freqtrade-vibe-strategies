@@ -2308,6 +2308,69 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("진입 시 ROI 무시", html_out)
         self.assertIn("분할진입(DCA)", html_out)
 
+    def test_summarize_strategy_configs_search_and_numeric_filters(self) -> None:
+        from scripts.summarize_strategy_configs import filter_strategy_configs, main
+
+        custom_configs = [
+            {
+                "file": "AlphaMomentum.py",
+                "class": "AlphaMomentumStrategy",
+                "timeframe": "5m",
+                "stoploss": -0.04,
+                "minimal_roi": {"0": 0.06},
+            },
+            {
+                "file": "BetaMeanReversion.py",
+                "class": "BetaMeanReversionStrategy",
+                "timeframe": "15m",
+                "stoploss": -0.12,
+                "minimal_roi": {"0": 0.02},
+            },
+        ]
+
+        # Keyword search
+        alpha_res = filter_strategy_configs(custom_configs, search="Alpha")
+        self.assertEqual(len(alpha_res), 1)
+        self.assertEqual(alpha_res[0]["class"], "AlphaMomentumStrategy")
+
+        beta_file_res = filter_strategy_configs(custom_configs, search="betamean")
+        self.assertEqual(len(beta_file_res), 1)
+        self.assertEqual(beta_file_res[0]["class"], "BetaMeanReversionStrategy")
+
+        none_res = filter_strategy_configs(custom_configs, search="NonexistentKeyword")
+        self.assertEqual(len(none_res), 0)
+
+        # min_roi filter
+        roi_res = filter_strategy_configs(custom_configs, min_roi=0.04)
+        self.assertEqual(len(roi_res), 1)
+        self.assertEqual(roi_res[0]["class"], "AlphaMomentumStrategy")
+
+        # min_roi as percentage (> 1.0)
+        roi_pct_res = filter_strategy_configs(custom_configs, min_roi=5.0)
+        self.assertEqual(len(roi_pct_res), 1)
+        self.assertEqual(roi_pct_res[0]["class"], "AlphaMomentumStrategy")
+
+        # max_stoploss filter (stoploss >= -0.05)
+        sl_res = filter_strategy_configs(custom_configs, max_stoploss=-0.05)
+        self.assertEqual(len(sl_res), 1)
+        self.assertEqual(sl_res[0]["class"], "AlphaMomentumStrategy")
+
+        # max_stoploss as percentage (8% -> -0.08)
+        sl_pct_res = filter_strategy_configs(custom_configs, max_stoploss=8.0)
+        self.assertEqual(len(sl_pct_res), 1)
+        self.assertEqual(sl_pct_res[0]["class"], "AlphaMomentumStrategy")
+
+        # Test CLI search filter
+        import io
+        from unittest.mock import patch
+
+        captured = io.StringIO()
+        with patch("sys.argv", ["summarize_strategy_configs.py", "--search", "vibe"]):
+            with patch("sys.stdout", captured):
+                main()
+        cli_out = captured.getvalue()
+        self.assertIn("VibeRsiStrategy", cli_out)
+
 
 if __name__ == "__main__":
     unittest.main()
