@@ -2459,6 +2459,71 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("CPC 지수 (Continuation Criterion)", html_out)
         self.assertIn("RoMaD (Return over Max DD)", html_out)
 
+    def test_monte_carlo_drawdown_simulation(self) -> None:
+        from scripts.analyze_backtest_results import (
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+            parse_freqtrade_backtest_json,
+            simulate_monte_carlo_drawdown,
+        )
+
+        # 1. Edge cases
+        res_empty = simulate_monte_carlo_drawdown([])
+        self.assertEqual(res_empty["mc_mdd_mean_pct"], 0.0)
+        self.assertEqual(res_empty["mc_mdd_95_pct"], 0.0)
+
+        res_single = simulate_monte_carlo_drawdown([0.05])
+        self.assertEqual(res_single["mc_mdd_mean_pct"], 0.0)
+
+        # 2. Reshuffle simulation on synthetic trades
+        sample_profits = [0.05, -0.03, 0.02, -0.04, 0.06, -0.02, 0.03, -0.05, 0.04, -0.01]
+        mc_res1 = simulate_monte_carlo_drawdown(sample_profits, iterations=200, threshold_mdd_pct=10.0, seed=42)
+        mc_res2 = simulate_monte_carlo_drawdown(sample_profits, iterations=200, threshold_mdd_pct=10.0, seed=42)
+
+        # Deterministic seed test
+        self.assertEqual(mc_res1, mc_res2)
+        self.assertEqual(mc_res1["mc_iterations"], 200)
+        self.assertGreater(mc_res1["mc_mdd_mean_pct"], 0.0)
+        self.assertGreaterEqual(mc_res1["mc_mdd_95_pct"], mc_res1["mc_mdd_median_pct"])
+        self.assertGreaterEqual(mc_res1["mc_mdd_99_pct"], mc_res1["mc_mdd_95_pct"])
+        self.assertGreaterEqual(mc_res1["mc_mdd_max_pct"], mc_res1["mc_mdd_99_pct"])
+        self.assertGreaterEqual(mc_res1["mc_prob_mdd_exceed_pct"], 0.0)
+
+        # 3. Acceptance from list of trade dicts
+        trade_dicts = [{"profit_ratio": p} for p in sample_profits]
+        mc_dict_res = simulate_monte_carlo_drawdown(trade_dicts, iterations=100, seed=42)
+        self.assertEqual(mc_dict_res["mc_iterations"], 100)
+        self.assertGreater(mc_dict_res["mc_mdd_95_pct"], 0.0)
+
+        # 4. JSON parser integration
+        mock_json = {
+            "strategy": {
+                "StratMC": {
+                    "trades": trade_dicts,
+                    "backtest_days": 30,
+                }
+            }
+        }
+        parsed = parse_freqtrade_backtest_json(mock_json, monte_carlo=True, mc_iterations=100, mc_threshold_pct=15.0)
+        strat_entry = parsed["StratMC"]
+        self.assertIn("mc_mdd_95_pct", strat_entry)
+        self.assertEqual(strat_entry["mc_iterations"], 100)
+        self.assertEqual(strat_entry["mc_ruin_threshold_pct"], 15.0)
+
+        # 5. Report formats
+        md_out = generate_markdown_report(parsed)
+        self.assertIn("몬테카를로 무작위 거래 순서 시뮬레이션", md_out)
+        self.assertIn("StratMC", md_out)
+
+        csv_out = export_quant_analysis_csv(parsed)
+        self.assertIn("mc_mdd_95_pct", csv_out)
+        self.assertIn("mc_prob_mdd_exceed_pct", csv_out)
+
+        html_out = generate_html_report(parsed)
+        self.assertIn("몬테카를로 95% 최악 MDD", html_out)
+        self.assertIn("몬테카를로 99% 스트레스 MDD", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()

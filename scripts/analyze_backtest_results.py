@@ -17,6 +17,7 @@ import io
 import json
 import math
 from pathlib import Path
+import random
 import sys
 from typing import Any
 import zipfile
@@ -393,6 +394,106 @@ def calculate_risk_of_ruin(
     units = loss_limit / bet_fraction
     ror = float(z ** units)
     return max(0.0, min(1.0, ror))
+
+
+def simulate_monte_carlo_drawdown(
+    trades: list[dict[str, Any]] | list[float],
+    iterations: int = 1000,
+    threshold_mdd_pct: float = 20.0,
+    seed: int | None = 42,
+) -> dict[str, Any]:
+    """Run Monte Carlo trade permutation simulation to evaluate sequence risk and stress drawdowns.
+
+    Parameters
+    ----------
+    trades : list[dict[str, Any]] | list[float]
+        List of trade dictionaries or float profit fractions.
+    iterations : int
+        Number of resampled permutations (default: 1000).
+    threshold_mdd_pct : float
+        Drawdown threshold to evaluate exceedance probability (default: 20.0%).
+    seed : int | None
+        Random seed for deterministic reproducibility.
+
+    Returns
+    -------
+    dict[str, Any]
+        Monte Carlo risk metrics including mean, median, 95% worst-case, 99% stress
+        max drawdowns, and ruin/exceedance probability.
+    """
+    if not trades or iterations < 1:
+        return {
+            "mc_iterations": max(0, iterations),
+            "mc_mdd_mean_pct": 0.0,
+            "mc_mdd_median_pct": 0.0,
+            "mc_mdd_95_pct": 0.0,
+            "mc_mdd_99_pct": 0.0,
+            "mc_mdd_max_pct": 0.0,
+            "mc_ruin_threshold_pct": round(float(threshold_mdd_pct), 1),
+            "mc_prob_mdd_exceed_pct": 0.0,
+        }
+
+    clean_profits: list[float] = []
+    for item in trades:
+        if isinstance(item, dict):
+            clean_profits.append(
+                _safe_float(item.get("profit_ratio", item.get("profit_pct", 0.0) / 100.0 if "profit_pct" in item else 0.0))
+            )
+        else:
+            clean_profits.append(_safe_float(item))
+
+    if len(clean_profits) < 2:
+        return {
+            "mc_iterations": iterations,
+            "mc_mdd_mean_pct": 0.0,
+            "mc_mdd_median_pct": 0.0,
+            "mc_mdd_95_pct": 0.0,
+            "mc_mdd_99_pct": 0.0,
+            "mc_mdd_max_pct": 0.0,
+            "mc_ruin_threshold_pct": round(float(threshold_mdd_pct), 1),
+            "mc_prob_mdd_exceed_pct": 0.0,
+        }
+
+    rng = random.Random(seed) if seed is not None else random.Random()
+    sim_mdds: list[float] = []
+    threshold_val = float(threshold_mdd_pct)
+    pool = list(clean_profits)
+
+    for _ in range(iterations):
+        shuffled = list(pool)
+        rng.shuffle(shuffled)
+        equity = 1.0
+        peak = 1.0
+        worst_dd = 0.0
+        for p in shuffled:
+            equity *= (1.0 + p)
+            if equity > peak:
+                peak = equity
+            dd = (equity - peak) / peak * 100.0
+            if dd < worst_dd:
+                worst_dd = dd
+        sim_mdds.append(abs(worst_dd))
+
+    sim_mdds.sort()
+    n = len(sim_mdds)
+    mc_mdd_mean = sum(sim_mdds) / n if n > 0 else 0.0
+    mc_mdd_median = _percentile(sim_mdds, 50.0) if n > 0 else 0.0
+    mc_mdd_95 = _percentile(sim_mdds, 95.0) if n > 0 else 0.0
+    mc_mdd_99 = _percentile(sim_mdds, 99.0) if n > 0 else 0.0
+    mc_mdd_max = max(sim_mdds) if sim_mdds else 0.0
+    exceed_count = sum(1 for m in sim_mdds if m >= threshold_val)
+    prob_exceed = (exceed_count / n * 100.0) if n > 0 else 0.0
+
+    return {
+        "mc_iterations": iterations,
+        "mc_mdd_mean_pct": round(mc_mdd_mean, 2),
+        "mc_mdd_median_pct": round(mc_mdd_median, 2),
+        "mc_mdd_95_pct": round(mc_mdd_95, 2),
+        "mc_mdd_99_pct": round(mc_mdd_99, 2),
+        "mc_mdd_max_pct": round(mc_mdd_max, 2),
+        "mc_ruin_threshold_pct": round(threshold_val, 1),
+        "mc_prob_mdd_exceed_pct": round(prob_exceed, 2),
+    }
 
 
 def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
@@ -807,6 +908,9 @@ def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
     min_trades: int = 1,
+    monte_carlo: bool = False,
+    mc_iterations: int = 1000,
+    mc_threshold_pct: float = 20.0,
 ) -> dict[str, Any]:
     """Parse strategy results dictionary from Freqtrade backtest JSON."""
     strategy_results = {}
@@ -829,6 +933,13 @@ def parse_freqtrade_backtest_json(
             backtest_start_ts=strat_data.get("backtest_start_ts"),
             backtest_end_ts=strat_data.get("backtest_end_ts"),
         )
+        mc_metrics = {}
+        if monte_carlo:
+            mc_metrics = simulate_monte_carlo_drawdown(
+                trades=trades,
+                iterations=mc_iterations,
+                threshold_mdd_pct=mc_threshold_pct,
+            )
         exit_breakdown = calculate_exit_reason_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
         pair_breakdown = calculate_pair_performance_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
 
@@ -837,6 +948,7 @@ def parse_freqtrade_backtest_json(
             **trade_metrics,
             **dd_metrics,
             **ann_metrics,
+            **mc_metrics,
             "exit_reasons": exit_breakdown,
             "pair_performance": pair_breakdown,
         }
@@ -925,6 +1037,23 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{s['profit_factor']:.2f} | {s['avg_duration_min']:.1f}분 |"
                 )
 
+    # Detailed Monte Carlo sequence risk tables
+    has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
+    if has_mc:
+        lines.append("")
+        lines.append("### 🎲 몬테카를로 무작위 거래 순서 시뮬레이션 (Sequence of Returns Risk)")
+        lines.append("| 전략명 | 시뮬레이션 | 평균 MDD | 50% 중위 MDD | 95% 최악 MDD | 99% 스트레스 MDD | 최대 관측 MDD | 위험 임계치 | 임계치 초과 확률 |")
+        lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+        for name, data in analysis_results.items():
+            if data.get("mc_iterations", 0) > 0:
+                lines.append(
+                    f"| **{name}** | {data.get('mc_iterations', 0):,}회 | "
+                    f"-{data.get('mc_mdd_mean_pct', 0.0):.2f}% | -{data.get('mc_mdd_median_pct', 0.0):.2f}% | "
+                    f"-{data.get('mc_mdd_95_pct', 0.0):.2f}% | -{data.get('mc_mdd_99_pct', 0.0):.2f}% | "
+                    f"-{data.get('mc_mdd_max_pct', 0.0):.2f}% | {data.get('mc_ruin_threshold_pct', 20.0):.1f}% | "
+                    f"{data.get('mc_prob_mdd_exceed_pct', 0.0):.2f}% |"
+                )
+
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
     lines.append("- **시스템 품질 지수 (System Quality Number / SQN, Van Tharp)**: sqrt(N) * (평균 수익률 / 수익률 표준편차). 거래 전략의 통계적 우수성을 종합 평가하는 지표로, 2.0 이상이면 평균, 3.0 이상이면 우수(Excellent), 5.0 이상이면 탁월(Superb), 7.0 이상이면 성배(Holy Grail) 등급으로 분류됩니다.")
@@ -960,6 +1089,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **런 검정 (Wald-Wolfowitz Runs Test Z-Score, Perry Kaufman)**: 연속된 거래 결과(승/패)의 계열 상관성을 검정하는 통계량으로, Z < -1.96이면 연승/연패 군집(Clustering) 현상을, Z > 1.96이면 승패 교번(Mean-reversion) 특성을, |Z| <= 1.96이면 거래 결과가 통계적으로 독립적임을 나타냅니다.")
     lines.append("- **CPC 지수 (Continuation Protection Criterion)**: 손익비 × 승률 × 손익비율(Win/Loss Ratio)의 복합 척도로, 전략의 장기적인 수익성 지속력을 검증합니다.")
     lines.append("- **RoMaD (Return over Maximum Drawdown)**: 총 누적 수익률을 최대 낙폭(MDD)으로 나눈 지표로, 헤지펀드 및 퀀트 자산배분에서 최대 감내 손실 대비 자본 수익 배수를 직관적으로 평가합니다.")
+    lines.append("- **몬테카를로 무작위 재배열 시뮬레이션 (Monte Carlo Trade Reshuffle)**: 과거 백테스트 거래들의 순서를 무작위로 수천 번 재배열(Permutation)하여 거래 순서 의존성(Sequence of Returns Risk)을 검증하고, 최악의 연패 구간이 겹쳤을 때 발생 가능한 95% 및 99% 신뢰구간의 잠재적 최대 낙폭(Worst Expected MDD)과 계좌 파산/위험 임계치 초과 확률을 도출합니다.")
     return "\n".join(lines)
 
 
@@ -1029,6 +1159,14 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "dar_95_pct",
         "cdar_95_pct",
         "cdar_ratio",
+        "mc_iterations",
+        "mc_mdd_mean_pct",
+        "mc_mdd_median_pct",
+        "mc_mdd_95_pct",
+        "mc_mdd_99_pct",
+        "mc_mdd_max_pct",
+        "mc_ruin_threshold_pct",
+        "mc_prob_mdd_exceed_pct",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -1084,6 +1222,27 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         runs_z = data.get("runs_test_zscore", 0.0)
         runs_rating = data.get("runs_test_rating", "N/A")
         romad = data.get("romad_ratio", 0.0)
+
+        mc_iter = data.get("mc_iterations", 0)
+        mc_95 = data.get("mc_mdd_95_pct", 0.0)
+        mc_99 = data.get("mc_mdd_99_pct", 0.0)
+        mc_prob = data.get("mc_prob_mdd_exceed_pct", 0.0)
+        mc_thresh = data.get("mc_ruin_threshold_pct", 20.0)
+        mc_cards = ""
+        if mc_iter > 0:
+            mc_cards = f"""
+            <div class="metric-card">
+                <div class="metric-label">몬테카를로 95% 최악 MDD</div>
+                <div class="metric-value negative">-{mc_95:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">몬테카를로 99% 스트레스 MDD</div>
+                <div class="metric-value negative">-{mc_99:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">낙폭 임계치({mc_thresh:.0f}%) 초과 확률</div>
+                <div class="metric-value {('negative' if mc_prob > 10.0 else 'positive')}">{mc_prob:.1f}%</div>
+            </div>"""
 
         if sqn >= 3.0:
             sqn_badge_cls = "badge-success"
@@ -1280,6 +1439,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
                 <div class="metric-label">RoMaD (Return over Max DD)</div>
                 <div class="metric-value">{romad:.2f}</div>
             </div>
+            {mc_cards}
         </div>
         """
 
@@ -1559,12 +1719,37 @@ def main():
         default=1,
         help="Minimum trade count threshold for exit reason and pair tables (default: 1)",
     )
+    parser.add_argument(
+        "--monte-carlo",
+        "-mc",
+        action="store_true",
+        help="Run Monte Carlo trade permutation simulation to test sequence risk and worst-case drawdowns",
+    )
+    parser.add_argument(
+        "--mc-iterations",
+        type=int,
+        default=1000,
+        help="Number of Monte Carlo reshuffle iterations (default: 1000)",
+    )
+    parser.add_argument(
+        "--mc-threshold",
+        type=float,
+        default=20.0,
+        help="Drawdown ruin threshold percentage to evaluate exceedance probability (default: 20.0)",
+    )
     args = parser.parse_args()
 
     data, file_path = load_backtest_data(args.file, latest=args.latest)
     print(f"[*] Analyzing backtest results from: {file_path}")
 
-    results = parse_freqtrade_backtest_json(data, sort_by=args.sort_by, min_trades=args.min_trades)
+    results = parse_freqtrade_backtest_json(
+        data,
+        sort_by=args.sort_by,
+        min_trades=args.min_trades,
+        monte_carlo=args.monte_carlo,
+        mc_iterations=args.mc_iterations,
+        mc_threshold_pct=args.mc_threshold,
+    )
     md_content = generate_markdown_report(results)
 
     if args.json:
