@@ -68,6 +68,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
             "martin_ratio": 0.0,
             "pain_ratio": 0.0,
             "calmar_ratio": 0.0,
+            "romad_ratio": 0.0,
             "recovery_factor": 0.0,
             "downside_deviation_pct": 0.0,
             "sortino_ratio": 0.0,
@@ -158,6 +159,9 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     # Calmar Ratio = Total Return / Max Drawdown
     calmar_ratio = (total_return_pct / mdd_pct) if mdd_pct > 1e-6 else (999.0 if total_return_pct > 0 else 0.0)
 
+    # Return over Maximum Drawdown (RoMaD)
+    romad_ratio = (total_return_pct / mdd_pct) if mdd_pct > 1e-6 else (999.0 if total_return_pct > 0 else 0.0)
+
     # Recovery Factor = Total Return / Max Drawdown
     recovery_factor = (total_return_pct / mdd_pct) if mdd_pct > 1e-6 else (999.0 if total_return_pct > 0 else 0.0)
 
@@ -240,6 +244,7 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "martin_ratio": round(martin_ratio, 3),
         "pain_ratio": round(pain_ratio, 3),
         "calmar_ratio": round(calmar_ratio, 3),
+        "romad_ratio": round(romad_ratio, 3),
         "recovery_factor": round(recovery_factor, 3),
         "downside_deviation_pct": round(downside_dev_pct, 2),
         "sortino_ratio": round(sortino_ratio, 3),
@@ -410,6 +415,10 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "win_loss_duration_ratio": 0.0,
             "max_consecutive_wins": 0,
             "max_consecutive_losses": 0,
+            "streak_ratio": 0.0,
+            "cpc_index": 0.0,
+            "runs_test_zscore": 0.0,
+            "runs_test_rating": "N/A",
             "full_kelly_pct": 0.0,
             "half_kelly_pct": 0.0,
             "risk_of_ruin_pct": 0.0,
@@ -435,6 +444,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     curr_loss_streak = 0
     max_win_streak = 0
     max_loss_streak = 0
+    outcomes: list[int] = []
 
     for t in trades:
         # Freqtrade trade profit percentage is typically in 'profit_ratio' (0.05 = 5%)
@@ -445,6 +455,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         if profit > 1e-6:
             wins.append(profit * 100.0)
             win_durations.append(duration_min)
+            outcomes.append(1)
             curr_win_streak += 1
             curr_loss_streak = 0
             if curr_win_streak > max_win_streak:
@@ -452,6 +463,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         elif profit < -1e-6:
             losses.append(abs(profit * 100.0))
             loss_durations.append(duration_min)
+            outcomes.append(-1)
             curr_loss_streak += 1
             curr_win_streak = 0
             if curr_loss_streak > max_loss_streak:
@@ -513,6 +525,43 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         risk_of_ruin_pct = 0.0
     else:
         risk_of_ruin_pct = 100.0 if total_trades > 0 else 0.0
+
+    # Streak Asymmetry Ratio = max_consecutive_wins / max_consecutive_losses
+    streak_ratio = (
+        (max_win_streak / max_loss_streak)
+        if max_loss_streak > 0
+        else (999.0 if max_win_streak > 0 else 0.0)
+    )
+
+    # CPC Index (Continuation Protection Criterion) = Profit Factor * (Win Rate / 100) * Win/Loss Ratio
+    p_w = win_rate / 100.0
+    cpc_index = (profit_factor * p_w * win_loss_ratio) if (profit_factor > 0 and win_loss_ratio > 0) else 0.0
+
+    # Wald-Wolfowitz Runs Test for Trade Serial Independence (Perry Kaufman)
+    runs = 1 if outcomes else 0
+    for i in range(1, len(outcomes)):
+        if outcomes[i] != outcomes[i - 1]:
+            runs += 1
+
+    n_w = len(wins)
+    n_l = len(losses)
+    n_total = n_w + n_l
+    if n_total >= 3 and n_w > 0 and n_l > 0:
+        expected_runs = (2.0 * n_w * n_l / n_total) + 1.0
+        var_runs = (2.0 * n_w * n_l * (2.0 * n_w * n_l - n_total)) / ((n_total ** 2) * (n_total - 1))
+        if var_runs > 1e-9:
+            runs_z = (runs - expected_runs) / math.sqrt(var_runs)
+        else:
+            runs_z = 0.0
+        if runs_z < -1.96:
+            runs_rating = "Clustering (Streaks)"
+        elif runs_z > 1.96:
+            runs_rating = "Alternating (Mean-Rev)"
+        else:
+            runs_rating = "Independent (Random)"
+    else:
+        runs_z = 0.0
+        runs_rating = "N/A"
 
     # Tail Ratio (p95 / |p05|) and Common Sense Ratio (CSR = Profit Factor * Tail Ratio)
     all_trade_profits_pct = [
@@ -594,6 +643,10 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "win_loss_duration_ratio": round(win_loss_dur_ratio, 2),
         "max_consecutive_wins": max_win_streak,
         "max_consecutive_losses": max_loss_streak,
+        "streak_ratio": round(streak_ratio, 2),
+        "cpc_index": round(cpc_index, 2),
+        "runs_test_zscore": round(runs_z, 2),
+        "runs_test_rating": runs_rating,
         "full_kelly_pct": round(full_k, 2),
         "half_kelly_pct": round(half_k, 2),
         "risk_of_ruin_pct": round(risk_of_ruin_pct, 2),
@@ -797,14 +850,20 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 파산 위험률(Ruin) | 최대 이익/손실 | 수익률 표준편차 | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 연환산 칼마 | 연환산 샤프 | CAGR | 기간(일) | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 연승/연패비 | 런 검정(Z) | 손익비(P.F.) | CPC 지수 | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 파산 위험률(Ruin) | 최대 이익/손실 | 수익률 표준편차 | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | RoMaD | 연환산 칼마 | 연환산 샤프 | CAGR | 기간(일) | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
         max_cw = data.get("max_consecutive_wins", 0)
         max_cl = data.get("max_consecutive_losses", 0)
         streak_str = f"{max_cw}승/{max_cl}패"
+        streak_ratio_str = f"{data.get('streak_ratio', 0.0):.2f}"
+        runs_z = data.get("runs_test_zscore", 0.0)
+        runs_r = data.get("runs_test_rating", "N/A")
+        runs_str = f"{runs_z:+.2f}" if runs_r != "N/A" else "N/A"
+        cpc_str = f"{data.get('cpc_index', 0.0):.2f}"
+        romad_str = f"{data.get('romad_ratio', 0.0):.2f}"
         full_k = data.get("full_kelly_pct", 0.0)
         half_k = data.get("half_kelly_pct", 0.0)
         kelly_str = f"{full_k:.1f}%/{half_k:.1f}%"
@@ -814,8 +873,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
         sqn_r = data.get("sqn_rating", "N/A")
         sqn_str = f"{sqn_val:.2f} ({sqn_r})"
         lines.append(
-            f"| **{name}** | {data.get('total_trades', 0)}회 | {data.get('win_rate_pct', 0.0):.1f}% | {streak_str} | "
-            f"{data.get('profit_factor', 0.0):.2f} | {sqn_str} | "
+            f"| **{name}** | {data.get('total_trades', 0)}회 | {data.get('win_rate_pct', 0.0):.1f}% | {streak_str} | {streak_ratio_str} | {runs_str} | "
+            f"{data.get('profit_factor', 0.0):.2f} | {cpc_str} | {sqn_str} | "
             f"{data.get('omega_ratio', 0.0):.2f} | "
             f"{data.get('skewness', 0.0):+.2f} | {data.get('kurtosis', 0.0):+.2f} | "
             f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
@@ -828,7 +887,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data.get('burke_ratio', 0.0):.2f} | "
             f"{data.get('sterling_ratio', 0.0):.2f} | "
             f"{data.get('gain_to_pain_ratio', 0.0):.2f} | "
-            f"{data.get('martin_ratio', 0.0):.2f} | {data.get('calmar_ratio', 0.0):.2f} | "
+            f"{data.get('martin_ratio', 0.0):.2f} | {data.get('calmar_ratio', 0.0):.2f} | {romad_str} | "
             f"{data.get('annualized_calmar', 0.0):.2f} | {data.get('annualized_sharpe', 0.0):.2f} | "
             f"{data.get('cagr_pct', 0.0):+.2f}% | {data.get('backtest_days', 0.0):.0f}일 | "
             f"{data.get('recovery_factor', 0.0):.2f} | "
@@ -897,6 +956,10 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **연평균 복리 성장률 (CAGR / Compound Annual Growth Rate)**: 백테스트 총 기간(일수)을 반영하여 연간 기준으로 환산한 복리 수익률입니다.")
     lines.append("- **연환산 샤프 비율 (Annualized Sharpe Ratio)**: 연간 거래 빈도(Trades/Year)의 제곱근을 적용하여 거래당 위험조정 수익률을 1년 기준으로 표준화한 기관 투자 지표입니다.")
     lines.append("- **연환산 칼마 비율 (Annualized Calmar Ratio)**: 연평균 복리 수익률(CAGR)을 최대 낙폭(MDD)으로 나눈 값으로, 연간 자본 성장률 대비 하방 위험을 정량 평가합니다.")
+    lines.append("- **연승/연패 비대칭도 (Streak Asymmetry Ratio)**: 최대 연속 수익 횟수를 최대 연속 손실 횟수로 나눈 비율로, 1.0 초과 시 연패 리스크 대비 연승 모멘텀 지속력이 우세함을 나타냅니다.")
+    lines.append("- **런 검정 (Wald-Wolfowitz Runs Test Z-Score, Perry Kaufman)**: 연속된 거래 결과(승/패)의 계열 상관성을 검정하는 통계량으로, Z < -1.96이면 연승/연패 군집(Clustering) 현상을, Z > 1.96이면 승패 교번(Mean-reversion) 특성을, |Z| <= 1.96이면 거래 결과가 통계적으로 독립적임을 나타냅니다.")
+    lines.append("- **CPC 지수 (Continuation Protection Criterion)**: 손익비 × 승률 × 손익비율(Win/Loss Ratio)의 복합 척도로, 전략의 장기적인 수익성 지속력을 검증합니다.")
+    lines.append("- **RoMaD (Return over Maximum Drawdown)**: 총 누적 수익률을 최대 낙폭(MDD)으로 나눈 지표로, 헤지펀드 및 퀀트 자산배분에서 최대 감내 손실 대비 자본 수익 배수를 직관적으로 평가합니다.")
     return "\n".join(lines)
 
 
@@ -911,7 +974,11 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "draws",
         "max_consecutive_wins",
         "max_consecutive_losses",
+        "streak_ratio",
+        "runs_test_zscore",
+        "runs_test_rating",
         "profit_factor",
+        "cpc_index",
         "sqn",
         "sqn_100",
         "sqn_rating",
@@ -945,6 +1012,7 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "omega_ratio",
         "martin_ratio",
         "calmar_ratio",
+        "romad_ratio",
         "annualized_calmar",
         "annualized_sharpe",
         "cagr_pct",
@@ -1011,6 +1079,11 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         max_win = data.get("max_win_pct", 0.0)
         max_loss = data.get("max_loss_pct", 0.0)
         std_profit = data.get("std_profit_pct", 0.0)
+        streak_ratio = data.get("streak_ratio", 0.0)
+        cpc_index = data.get("cpc_index", 0.0)
+        runs_z = data.get("runs_test_zscore", 0.0)
+        runs_rating = data.get("runs_test_rating", "N/A")
+        romad = data.get("romad_ratio", 0.0)
 
         if sqn >= 3.0:
             sqn_badge_cls = "badge-success"
@@ -1190,6 +1263,22 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">수익률 표준편차 (Std Dev)</div>
                 <div class="metric-value">{std_profit:.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">연승/연패 비대칭도 (Streak Ratio)</div>
+                <div class="metric-value">{streak_ratio:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">런 검정 (Runs Test Z)</div>
+                <div class="metric-value">{runs_z:+.2f} ({runs_rating})</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">CPC 지수 (Continuation Criterion)</div>
+                <div class="metric-value">{cpc_index:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">RoMaD (Return over Max DD)</div>
+                <div class="metric-value">{romad:.2f}</div>
             </div>
         </div>
         """

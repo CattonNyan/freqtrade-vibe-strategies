@@ -2371,6 +2371,94 @@ class StrategySourceTests(unittest.TestCase):
         cli_out = captured.getvalue()
         self.assertIn("VibeRsiStrategy", cli_out)
 
+    def test_streak_asymmetry_and_runs_test_metrics(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_trade_expectancy,
+            calculate_ulcer_and_drawdown_metrics,
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+        )
+
+        # 1. Empty trade handling
+        empty_res = calculate_trade_expectancy([])
+        self.assertEqual(empty_res["streak_ratio"], 0.0)
+        self.assertEqual(empty_res["cpc_index"], 0.0)
+        self.assertEqual(empty_res["runs_test_zscore"], 0.0)
+        self.assertEqual(empty_res["runs_test_rating"], "N/A")
+
+        # 2. Cluster / Streak sequence: 8 consecutive wins followed by 8 consecutive losses
+        cluster_trades = [{"profit_ratio": 0.05} for _ in range(8)] + [{"profit_ratio": -0.02} for _ in range(8)]
+        cluster_res = calculate_trade_expectancy(cluster_trades)
+        self.assertEqual(cluster_res["max_consecutive_wins"], 8)
+        self.assertEqual(cluster_res["max_consecutive_losses"], 8)
+        self.assertEqual(cluster_res["streak_ratio"], 1.0)
+        self.assertGreater(cluster_res["cpc_index"], 0.0)
+        self.assertLess(cluster_res["runs_test_zscore"], -1.96)
+        self.assertEqual(cluster_res["runs_test_rating"], "Clustering (Streaks)")
+
+        # 3. Alternating sequence: W, L, W, L, W, L, W, L, W, L, W, L, W, L (14 trades, 14 runs)
+        alt_trades = [{"profit_ratio": 0.04 if i % 2 == 0 else -0.02} for i in range(14)]
+        alt_res = calculate_trade_expectancy(alt_trades)
+        self.assertEqual(alt_res["max_consecutive_wins"], 1)
+        self.assertEqual(alt_res["max_consecutive_losses"], 1)
+        self.assertEqual(alt_res["streak_ratio"], 1.0)
+        self.assertGreater(alt_res["runs_test_zscore"], 1.96)
+        self.assertEqual(alt_res["runs_test_rating"], "Alternating (Mean-Rev)")
+
+        # 4. Asymmetric streaks: 6 wins, 2 losses -> streak_ratio = 3.0
+        asym_trades = [
+            {"profit_ratio": 0.02},
+            {"profit_ratio": 0.03},
+            {"profit_ratio": 0.01},
+            {"profit_ratio": 0.04},
+            {"profit_ratio": 0.02},
+            {"profit_ratio": 0.05},
+            {"profit_ratio": -0.01},
+            {"profit_ratio": -0.02},
+        ]
+        asym_res = calculate_trade_expectancy(asym_trades)
+        self.assertEqual(asym_res["max_consecutive_wins"], 6)
+        self.assertEqual(asym_res["max_consecutive_losses"], 2)
+        self.assertEqual(asym_res["streak_ratio"], 3.0)
+
+        # 5. Advanced metrics RoMaD
+        cluster_profits = [float(t["profit_ratio"]) for t in cluster_trades]
+        dd_metrics = calculate_ulcer_and_drawdown_metrics(cluster_profits)
+        self.assertIn("romad_ratio", dd_metrics)
+        self.assertGreater(dd_metrics["romad_ratio"], 0.0)
+
+        # 6. Report outputs
+        mock_data = {
+            "TestStrat": {
+                **asym_res,
+                **dd_metrics,
+                "strategy": "TestStrat",
+                "total_trades": 8,
+                "win_rate_pct": 75.0,
+                "profit_factor": 2.5,
+                "total_return_pct": 15.0,
+                "max_drawdown_pct": 3.0,
+            }
+        }
+        csv_out = export_quant_analysis_csv(mock_data)
+        self.assertIn("streak_ratio", csv_out)
+        self.assertIn("runs_test_zscore", csv_out)
+        self.assertIn("cpc_index", csv_out)
+        self.assertIn("romad_ratio", csv_out)
+
+        md_out = generate_markdown_report(mock_data)
+        self.assertIn("연승/연패비", md_out)
+        self.assertIn("런 검정(Z)", md_out)
+        self.assertIn("CPC 지수", md_out)
+        self.assertIn("RoMaD", md_out)
+
+        html_out = generate_html_report(mock_data)
+        self.assertIn("연승/연패 비대칭도 (Streak Ratio)", html_out)
+        self.assertIn("런 검정 (Runs Test Z)", html_out)
+        self.assertIn("CPC 지수 (Continuation Criterion)", html_out)
+        self.assertIn("RoMaD (Return over Max DD)", html_out)
+
 
 if __name__ == "__main__":
     unittest.main()
