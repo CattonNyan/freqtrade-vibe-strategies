@@ -2119,6 +2119,88 @@ class StrategySourceTests(unittest.TestCase):
         html_out = generate_html_report(mock_res)
         self.assertIn("파산 위험률 (Risk of Ruin)", html_out)
 
+    def test_annualized_metrics(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_annualized_metrics,
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+        )
+
+        trades = [
+            {"open_date": "2024-01-01 00:00:00+00:00", "close_date": "2024-01-02 00:00:00+00:00", "profit_ratio": 0.05},
+            {"open_date": "2025-01-01 00:00:00+00:00", "close_date": "2025-01-02 00:00:00+00:00", "profit_ratio": 0.03},
+        ]
+
+        # 1. Explicit backtest_days (730.5 days ~ 2 years, 44% total return -> ~20% CAGR)
+        res_days = calculate_annualized_metrics(
+            trades=trades,
+            total_return_pct=44.0,
+            max_drawdown_pct=10.0,
+            backtest_days=730.5,
+        )
+        self.assertEqual(res_days["backtest_days"], 730.5)
+        self.assertAlmostEqual(res_days["cagr_pct"], 20.0, places=1)
+        self.assertAlmostEqual(res_days["annualized_calmar"], 2.0, places=1)
+        self.assertGreater(res_days["annualized_sharpe"], 0.0)
+
+        # 2. Inferred from timestamps (1 year span from 2024-01-01 to 2025-01-02)
+        res_inferred = calculate_annualized_metrics(
+            trades=trades,
+            total_return_pct=10.0,
+            max_drawdown_pct=5.0,
+        )
+        self.assertGreater(res_inferred["backtest_days"], 360.0)
+        self.assertAlmostEqual(res_inferred["cagr_pct"], 10.0, delta=1.5)
+
+        # 3. Inferred from backtest_start_ts and backtest_end_ts
+        res_ts = calculate_annualized_metrics(
+            trades=[],
+            total_return_pct=15.0,
+            max_drawdown_pct=5.0,
+            backtest_start_ts=1704067200,  # 2024-01-01
+            backtest_end_ts=1735689600,    # 2025-01-01 (366 days)
+        )
+        self.assertAlmostEqual(res_ts["backtest_days"], 366.0, places=0)
+        self.assertAlmostEqual(res_ts["annualized_calmar"], 3.0, places=1)
+
+        # 4. Zero/indeterminate duration fallback
+        res_zero = calculate_annualized_metrics(
+            trades=[],
+            total_return_pct=5.0,
+            max_drawdown_pct=2.0,
+        )
+        self.assertEqual(res_zero["backtest_days"], 0.0)
+        self.assertEqual(res_zero["cagr_pct"], 5.0)
+
+        # 5. Report integrations
+        mock_data = {
+            "StratAnnual": {
+                **res_days,
+                "total_trades": 2,
+                "win_rate_pct": 100.0,
+                "profit_factor": 999.0,
+                "total_return_pct": 44.0,
+                "max_drawdown_pct": 10.0,
+            }
+        }
+
+        csv_out = export_quant_analysis_csv(mock_data)
+        self.assertIn("cagr_pct", csv_out)
+        self.assertIn("annualized_sharpe", csv_out)
+        self.assertIn("annualized_calmar", csv_out)
+        self.assertIn("backtest_days", csv_out)
+
+        md_out = generate_markdown_report(mock_data)
+        self.assertIn("CAGR", md_out)
+        self.assertIn("연환산 샤프", md_out)
+        self.assertIn("연환산 칼마", md_out)
+
+        html_out = generate_html_report(mock_data)
+        self.assertIn("연평균 복리 수익률 (CAGR)", html_out)
+        self.assertIn("연환산 샤프 (Ann. Sharpe)", html_out)
+        self.assertIn("연환산 칼마 (Ann. Calmar)", html_out)
+
     def test_summarize_strategy_configs_dca_and_exit_profit(self) -> None:
         from scripts.summarize_strategy_configs import (
             compute_config_summary_stats,

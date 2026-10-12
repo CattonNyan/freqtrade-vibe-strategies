@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from datetime import datetime, timezone
 import io
 import json
 import math
@@ -257,6 +258,104 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
         "dar_95_pct": round(dar_95_pct, 2),
         "cdar_95_pct": round(cdar_95_pct, 2),
         "cdar_ratio": round(cdar_ratio, 3),
+    }
+
+
+def calculate_annualized_metrics(
+    trades: list[dict[str, Any]],
+    total_return_pct: float,
+    max_drawdown_pct: float,
+    backtest_days: float | None = None,
+    backtest_start_ts: int | float | None = None,
+    backtest_end_ts: int | float | None = None,
+) -> dict[str, Any]:
+    """Calculate CAGR, Annualized Sharpe, and Annualized Calmar ratios.
+
+    Determines period length from backtest metadata or trade open/close timestamps.
+    """
+    days = 0.0
+    if backtest_days is not None and backtest_days > 0:
+        days = float(backtest_days)
+    elif (
+        backtest_start_ts is not None
+        and backtest_end_ts is not None
+        and backtest_end_ts > backtest_start_ts
+    ):
+        diff_s = float(backtest_end_ts - backtest_start_ts)
+        if diff_s > 1e11:
+            diff_s /= 1000.0
+        days = diff_s / 86400.0
+    elif trades:
+        timestamps: list[datetime] = []
+        for t in trades:
+            for key in ("open_date", "close_date"):
+                d_val = t.get(key)
+                if isinstance(d_val, str) and d_val.strip():
+                    try:
+                        clean_d = d_val.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(clean_d)
+                        timestamps.append(dt)
+                    except Exception:
+                        pass
+            for key in ("open_timestamp", "close_timestamp"):
+                ts_val = t.get(key)
+                if ts_val is not None and ts_val > 0:
+                    try:
+                        sec = ts_val / 1000.0 if ts_val > 1e11 else float(ts_val)
+                        dt = datetime.fromtimestamp(sec, timezone.utc)
+                        timestamps.append(dt)
+                    except Exception:
+                        pass
+        if len(timestamps) >= 2:
+            min_dt = min(timestamps)
+            max_dt = max(timestamps)
+            span_s = (max_dt - min_dt).total_seconds()
+            if span_s > 0:
+                days = span_s / 86400.0
+
+    if days <= 0.0:
+        return {
+            "backtest_days": 0.0,
+            "cagr_pct": round(total_return_pct, 2),
+            "annualized_sharpe": 0.0,
+            "annualized_calmar": 0.0,
+        }
+
+    years = days / 365.25
+    tot_ret_decimal = total_return_pct / 100.0
+    if 1.0 + tot_ret_decimal > 0:
+        cagr = ((1.0 + tot_ret_decimal) ** (1.0 / years) - 1.0) * 100.0
+    else:
+        cagr = -100.0
+
+    mdd = abs(max_drawdown_pct)
+    if mdd > 1e-6:
+        annualized_calmar = cagr / mdd
+    else:
+        annualized_calmar = 999.0 if cagr > 0 else 0.0
+
+    total_trades = len(trades)
+    if total_trades > 0 and years > 0:
+        trades_per_year = total_trades / years
+        profits = [
+            _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            for t in trades
+        ]
+        mean_p = sum(profits) / total_trades
+        variance = sum((p - mean_p) ** 2 for p in profits) / total_trades
+        std_p = math.sqrt(variance)
+        if std_p > 1e-9:
+            annualized_sharpe = (mean_p / std_p) * math.sqrt(trades_per_year)
+        else:
+            annualized_sharpe = 999.0 if mean_p > 0 else 0.0
+    else:
+        annualized_sharpe = 0.0
+
+    return {
+        "backtest_days": round(days, 1),
+        "cagr_pct": round(cagr, 2),
+        "annualized_sharpe": round(annualized_sharpe, 2),
+        "annualized_calmar": round(annualized_calmar, 2),
     }
 
 
@@ -669,6 +768,14 @@ def parse_freqtrade_backtest_json(
 
         dd_metrics = calculate_ulcer_and_drawdown_metrics(profit_ratios)
         trade_metrics = calculate_trade_expectancy(trades)
+        ann_metrics = calculate_annualized_metrics(
+            trades=trades,
+            total_return_pct=dd_metrics["total_return_pct"],
+            max_drawdown_pct=dd_metrics["max_drawdown_pct"],
+            backtest_days=strat_data.get("backtest_days"),
+            backtest_start_ts=strat_data.get("backtest_start_ts"),
+            backtest_end_ts=strat_data.get("backtest_end_ts"),
+        )
         exit_breakdown = calculate_exit_reason_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
         pair_breakdown = calculate_pair_performance_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
 
@@ -676,6 +783,7 @@ def parse_freqtrade_backtest_json(
             "strategy": strat_name,
             **trade_metrics,
             **dd_metrics,
+            **ann_metrics,
             "exit_reasons": exit_breakdown,
             "pair_performance": pair_breakdown,
         }
@@ -689,8 +797,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 파산 위험률(Ruin) | 최대 이익/손실 | 수익률 표준편차 | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 파산 위험률(Ruin) | 최대 이익/손실 | 수익률 표준편차 | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 연환산 칼마 | 연환산 샤프 | CAGR | 기간(일) | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -721,6 +829,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data.get('sterling_ratio', 0.0):.2f} | "
             f"{data.get('gain_to_pain_ratio', 0.0):.2f} | "
             f"{data.get('martin_ratio', 0.0):.2f} | {data.get('calmar_ratio', 0.0):.2f} | "
+            f"{data.get('annualized_calmar', 0.0):.2f} | {data.get('annualized_sharpe', 0.0):.2f} | "
+            f"{data.get('cagr_pct', 0.0):+.2f}% | {data.get('backtest_days', 0.0):.0f}일 | "
             f"{data.get('recovery_factor', 0.0):.2f} | "
             f"{data.get('time_underwater_pct', 0.0):.1f}% | "
             f"{data.get('max_drawdown_duration_trades', 0)}회 |"
@@ -784,6 +894,9 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **CDaR 비율 (CDaR Ratio)**: 총 수익률을 CDaR(95%)로 나눈 위험조정 수익률로, 전통적인 칼마 비율(Calmar Ratio)보다 극단치 왜곡이 적고 통계적 신뢰도가 높습니다.")
     lines.append("- **최대 단일 이익/손실 (Max Win / Max Loss %)**: 백테스트 기간 중 단일 거래에서 발생한 최대 수익률과 최대 손실률로, 극단치 거래에 대한 전략의 의존도를 식별합니다.")
     lines.append("- **수익률 표준편차 (Trade Return Std Dev)**: 개별 거래 손익률의 분산 정도로, 개별 거래 결과의 변동폭과 위험 노출도를 측정합니다.")
+    lines.append("- **연평균 복리 성장률 (CAGR / Compound Annual Growth Rate)**: 백테스트 총 기간(일수)을 반영하여 연간 기준으로 환산한 복리 수익률입니다.")
+    lines.append("- **연환산 샤프 비율 (Annualized Sharpe Ratio)**: 연간 거래 빈도(Trades/Year)의 제곱근을 적용하여 거래당 위험조정 수익률을 1년 기준으로 표준화한 기관 투자 지표입니다.")
+    lines.append("- **연환산 칼마 비율 (Annualized Calmar Ratio)**: 연평균 복리 수익률(CAGR)을 최대 낙폭(MDD)으로 나눈 값으로, 연간 자본 성장률 대비 하방 위험을 정량 평가합니다.")
     return "\n".join(lines)
 
 
@@ -832,6 +945,10 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "omega_ratio",
         "martin_ratio",
         "calmar_ratio",
+        "annualized_calmar",
+        "annualized_sharpe",
+        "cagr_pct",
+        "backtest_days",
         "recovery_factor",
         "downside_deviation_pct",
         "time_underwater_pct",
@@ -876,6 +993,10 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         full_kelly = data.get("full_kelly_pct", 0.0)
         half_kelly = data.get("half_kelly_pct", 0.0)
         risk_of_ruin = data.get("risk_of_ruin_pct", 0.0)
+        backtest_days = data.get("backtest_days", 0.0)
+        cagr = data.get("cagr_pct", 0.0)
+        ann_sharpe = data.get("annualized_sharpe", 0.0)
+        ann_calmar = data.get("annualized_calmar", 0.0)
         underwater = data.get("time_underwater_pct", 0.0)
         max_streak = f"{data.get('max_consecutive_wins', 0)}W / {data.get('max_consecutive_losses', 0)}L"
         sqn = data.get("sqn", 0.0)
@@ -1017,6 +1138,22 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">파산 위험률 (Risk of Ruin)</div>
                 <div class="metric-value {('negative' if risk_of_ruin > 10.0 else 'positive')}">{risk_of_ruin:.1f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">연평균 복리 수익률 (CAGR)</div>
+                <div class="metric-value {('positive' if cagr >= 0 else 'negative')}">{cagr:+.2f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">연환산 샤프 (Ann. Sharpe)</div>
+                <div class="metric-value">{ann_sharpe:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">연환산 칼마 (Ann. Calmar)</div>
+                <div class="metric-value">{ann_calmar:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">백테스트 기간 (Backtest Days)</div>
+                <div class="metric-value">{backtest_days:.0f}일</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">최대 연승/연패</div>
