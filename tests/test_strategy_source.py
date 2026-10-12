@@ -2524,6 +2524,78 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("몬테카를로 95% 최악 MDD", html_out)
         self.assertIn("몬테카를로 99% 스트레스 MDD", html_out)
 
+    def test_direction_breakdown_and_mar_ratio(self):
+        from scripts.analyze_backtest_results import (
+            calculate_direction_breakdown,
+            calculate_annualized_metrics,
+            calculate_trade_expectancy,
+            parse_freqtrade_backtest_json,
+            generate_markdown_report,
+            export_quant_analysis_csv,
+            generate_html_report,
+        )
+
+        # 1. Empty direction breakdown
+        self.assertEqual(calculate_direction_breakdown([]), {})
+
+        # 2. Mixed long and short trades
+        trades = [
+            {"pair": "BTC/USDT", "profit_ratio": 0.05, "trade_duration": 60, "is_short": False},
+            {"pair": "ETH/USDT", "profit_ratio": -0.02, "trade_duration": 40, "is_short": False},
+            {"pair": "SOL/USDT", "profit_ratio": 0.08, "trade_duration": 90, "trade_direction": "short"},
+            {"pair": "DOGE/USDT", "profit_ratio": -0.03, "trade_duration": 30, "direction": "short"},
+        ]
+        breakdown = calculate_direction_breakdown(trades)
+        self.assertIn("long", breakdown)
+        self.assertIn("short", breakdown)
+        self.assertEqual(breakdown["long"]["trades"], 2)
+        self.assertEqual(breakdown["long"]["wins"], 1)
+        self.assertEqual(breakdown["long"]["losses"], 1)
+        self.assertEqual(breakdown["long"]["win_rate_pct"], 50.0)
+        self.assertEqual(breakdown["short"]["trades"], 2)
+        self.assertEqual(breakdown["short"]["wins"], 1)
+        self.assertEqual(breakdown["short"]["losses"], 1)
+
+        # 3. MAR ratio in annualized metrics
+        ann_res = calculate_annualized_metrics(trades, total_return_pct=25.0, max_drawdown_pct=10.0, backtest_days=365.25)
+        self.assertIn("mar_ratio", ann_res)
+        self.assertAlmostEqual(ann_res["mar_ratio"], 2.5, places=1)
+
+        # 4. Expectancy in bps and win_loss_count_ratio
+        exp_res = calculate_trade_expectancy(trades)
+        self.assertIn("expectancy_bps", exp_res)
+        self.assertIn("win_loss_count_ratio", exp_res)
+        self.assertEqual(exp_res["win_loss_count_ratio"], 1.0)
+
+        # 5. Full json parsing and reports
+        mock_data = {
+            "strategy": {
+                "TestDirStrat": {
+                    "trades": trades,
+                    "backtest_days": 180,
+                }
+            }
+        }
+        parsed = parse_freqtrade_backtest_json(mock_data)
+        strat = parsed["TestDirStrat"]
+        self.assertIn("direction_performance", strat)
+        self.assertIn("mar_ratio", strat)
+        self.assertIn("expectancy_bps", strat)
+
+        md = generate_markdown_report(parsed)
+        self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
+        self.assertIn("🟢 롱 (Long)", md)
+        self.assertIn("🔴 숏 (Short)", md)
+
+        csv_str = export_quant_analysis_csv(parsed)
+        self.assertIn("mar_ratio", csv_str)
+        self.assertIn("expectancy_bps", csv_str)
+        self.assertIn("win_loss_count_ratio", csv_str)
+
+        html_str = generate_html_report(parsed)
+        self.assertIn("롱/숏 포지션 방향별 성과", html_str)
+        self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
+
 
 if __name__ == "__main__":
     unittest.main()

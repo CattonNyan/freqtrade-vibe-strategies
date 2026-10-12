@@ -325,6 +325,7 @@ def calculate_annualized_metrics(
             "cagr_pct": round(total_return_pct, 2),
             "annualized_sharpe": 0.0,
             "annualized_calmar": 0.0,
+            "mar_ratio": 0.0,
         }
 
     years = days / 365.25
@@ -337,8 +338,10 @@ def calculate_annualized_metrics(
     mdd = abs(max_drawdown_pct)
     if mdd > 1e-6:
         annualized_calmar = cagr / mdd
+        mar_ratio = cagr / mdd
     else:
         annualized_calmar = 999.0 if cagr > 0 else 0.0
+        mar_ratio = 999.0 if cagr > 0 else 0.0
 
     total_trades = len(trades)
     if total_trades > 0 and years > 0:
@@ -362,6 +365,7 @@ def calculate_annualized_metrics(
         "cagr_pct": round(cagr, 2),
         "annualized_sharpe": round(annualized_sharpe, 2),
         "annualized_calmar": round(annualized_calmar, 2),
+        "mar_ratio": round(mar_ratio, 2),
     }
 
 
@@ -510,6 +514,8 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "avg_win_pct": 0.0,
             "avg_loss_pct": 0.0,
             "win_loss_ratio": 0.0,
+            "win_loss_count_ratio": 0.0,
+            "expectancy_bps": 0.0,
             "avg_duration_min": 0.0,
             "avg_win_duration_min": 0.0,
             "avg_loss_duration_min": 0.0,
@@ -586,11 +592,13 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     avg_win = (sum_wins / win_count) if win_count > 0 else 0.0
     avg_loss = (sum_losses / loss_count) if loss_count > 0 else 0.0
     win_loss_ratio = (avg_win / avg_loss) if avg_loss > 0 else (999.0 if avg_win > 0 else 0.0)
+    win_loss_count_ratio = (win_count / loss_count) if loss_count > 0 else (999.0 if win_count > 0 else 0.0)
 
     # Expectancy = (Win Rate * Avg Win) - (Loss Rate * Avg Loss)
     p_win = win_count / total_trades if total_trades > 0 else 0.0
     p_loss = loss_count / total_trades if total_trades > 0 else 0.0
     expectancy = (p_win * avg_win) - (p_loss * avg_loss)
+    expectancy_bps = round(expectancy * 100.0, 1)
 
     avg_duration = sum(durations) / len(durations) if durations else 0.0
     avg_win_dur = (sum(win_durations) / len(win_durations)) if win_durations else 0.0
@@ -735,9 +743,11 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "win_rate_pct": round(win_rate, 2),
         "profit_factor": round(profit_factor, 2),
         "expectancy_pct": round(expectancy, 3),
+        "expectancy_bps": expectancy_bps,
         "avg_win_pct": round(avg_win, 2),
         "avg_loss_pct": round(avg_loss, 2),
         "win_loss_ratio": round(win_loss_ratio, 2),
+        "win_loss_count_ratio": round(win_loss_count_ratio, 2),
         "avg_duration_min": round(avg_duration, 1),
         "avg_win_duration_min": round(avg_win_dur, 1),
         "avg_loss_duration_min": round(avg_loss_dur, 1),
@@ -904,6 +914,65 @@ def calculate_pair_performance_breakdown(
     return breakdown
 
 
+def calculate_direction_breakdown(
+    trades: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Group trade performance metrics by direction (long vs short)."""
+    if not trades:
+        return {}
+
+    groups: dict[str, list[dict[str, Any]]] = {"long": [], "short": []}
+    for t in trades:
+        is_short = (
+            t.get("is_short") is True
+            or str(t.get("trade_direction", "")).lower() == "short"
+            or str(t.get("direction", "")).lower() == "short"
+        )
+        side = "short" if is_short else "long"
+        groups[side].append(t)
+
+    breakdown: dict[str, dict[str, Any]] = {}
+    for side, t_list in groups.items():
+        count = len(t_list)
+        if count == 0:
+            continue
+
+        wins = []
+        losses = []
+        durations = []
+        profits = []
+        for t in t_list:
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            profits.append(p)
+            durations.append(dur)
+            if p > 1e-6:
+                wins.append(p * 100.0)
+            elif p < -1e-6:
+                losses.append(abs(p * 100.0))
+
+        win_count = len(wins)
+        loss_count = len(losses)
+        win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
+        total_profit_pct = sum(profits) * 100.0
+        avg_profit_pct = (total_profit_pct / count) if count > 0 else 0.0
+        avg_dur = (sum(durations) / count) if count > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+
+        breakdown[side] = {
+            "trades": count,
+            "wins": win_count,
+            "losses": loss_count,
+            "win_rate_pct": round(win_rate, 2),
+            "total_profit_pct": round(total_profit_pct, 2),
+            "avg_profit_pct": round(avg_profit_pct, 2),
+            "avg_duration_min": round(avg_dur, 1),
+            "profit_factor": round(pf, 2),
+        }
+
+    return breakdown
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -942,6 +1011,7 @@ def parse_freqtrade_backtest_json(
             )
         exit_breakdown = calculate_exit_reason_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
         pair_breakdown = calculate_pair_performance_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
+        dir_breakdown = calculate_direction_breakdown(trades)
 
         combined = {
             "strategy": strat_name,
@@ -951,6 +1021,7 @@ def parse_freqtrade_backtest_json(
             **mc_metrics,
             "exit_reasons": exit_breakdown,
             "pair_performance": pair_breakdown,
+            "direction_performance": dir_breakdown,
         }
         strategy_results[strat_name] = combined
 
@@ -1037,6 +1108,22 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{s['profit_factor']:.2f} | {s['avg_duration_min']:.1f}분 |"
                 )
 
+    # Detailed direction breakdown (long vs short)
+    for name, data in analysis_results.items():
+        directions = data.get("direction_performance", {})
+        if directions:
+            lines.append("")
+            lines.append(f"### ↕️ 전략 `{name}` 롱/숏 포지션 방향별 성과 분석")
+            lines.append("| 포지션 방향 | 거래수 | 승률 | 총 수익률 | 평균 수익률 | 손익비(P.F.) | 평균 보유시간 |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for side, s in directions.items():
+                side_label = "🟢 롱 (Long)" if side == "long" else "🔴 숏 (Short)"
+                lines.append(
+                    f"| {side_label} | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                    f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
+                    f"{s['profit_factor']:.2f} | {s['avg_duration_min']:.1f}분 |"
+                )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -1072,6 +1159,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
     lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
+    lines.append("- **롱/숏 포지션 성과 분석 (Direction Breakdown)**: 롱(Long) 및 숏(Short) 포지션 진입 방향별 거래수, 승률, 누적 수익률, 손익비를 분리 평가하여 시장 방향성 의존도를 점검합니다.")
     lines.append("- **수익률 왜도 (Skewness)**: 거래별 손익률 분포의 비대칭성을 나타내며, 0보다 크면(양의 왜도) 이익 거래의 꼬리가 길어 손익비가 우수한 추세추종 전략의 특성을 보이고, 0보다 작으면(음의 왜도) 승률은 높으나 급락 위험(Left-tail risk)이 있는 역추세 전략의 특성을 나타냅니다.")
     lines.append("- **초과 첨도 (Excess Kurtosis)**: 정규분포(0.0) 대비 극단치(Fat-tail) 발생 가능성을 측정하며, 양수이면 이상치(대박 또는 대형 손실) 거래가 빈번하게 발생하는 팻 테일 분포임을 의미합니다.")
     lines.append("- **보유시간 비대칭도 (Win/Loss Duration Ratio)**: 수익 거래 평균 보유시간 / 손실 거래 평균 보유시간. 1.0 이상이면 손실을 빠르게 끊고 이익을 길게 가져가는(Let winners run, cut losers) 바람직한 추세추종 특성을 나타냅니다.")
@@ -1083,6 +1171,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **최대 단일 이익/손실 (Max Win / Max Loss %)**: 백테스트 기간 중 단일 거래에서 발생한 최대 수익률과 최대 손실률로, 극단치 거래에 대한 전략의 의존도를 식별합니다.")
     lines.append("- **수익률 표준편차 (Trade Return Std Dev)**: 개별 거래 손익률의 분산 정도로, 개별 거래 결과의 변동폭과 위험 노출도를 측정합니다.")
     lines.append("- **연평균 복리 성장률 (CAGR / Compound Annual Growth Rate)**: 백테스트 총 기간(일수)을 반영하여 연간 기준으로 환산한 복리 수익률입니다.")
+    lines.append("- **MAR 비율 (MAR Ratio)**: 연평균 복리 수익률(CAGR)을 최대 낙폭(MDD)으로 나눈 값으로, CTA 및 선물 헤지펀드에서 중장기 리스크 대비 성장성을 엄격히 평가하는 대표 지표입니다.")
     lines.append("- **연환산 샤프 비율 (Annualized Sharpe Ratio)**: 연간 거래 빈도(Trades/Year)의 제곱근을 적용하여 거래당 위험조정 수익률을 1년 기준으로 표준화한 기관 투자 지표입니다.")
     lines.append("- **연환산 칼마 비율 (Annualized Calmar Ratio)**: 연평균 복리 수익률(CAGR)을 최대 낙폭(MDD)으로 나눈 값으로, 연간 자본 성장률 대비 하방 위험을 정량 평가합니다.")
     lines.append("- **연승/연패 비대칭도 (Streak Asymmetry Ratio)**: 최대 연속 수익 횟수를 최대 연속 손실 횟수로 나눈 비율로, 1.0 초과 시 연패 리스크 대비 연승 모멘텀 지속력이 우세함을 나타냅니다.")
@@ -1117,12 +1206,14 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "tail_ratio",
         "common_sense_ratio",
         "expectancy_pct",
+        "expectancy_bps",
         "avg_win_pct",
         "avg_loss_pct",
         "max_win_pct",
         "max_loss_pct",
         "std_profit_pct",
         "win_loss_ratio",
+        "win_loss_count_ratio",
         "avg_duration_min",
         "avg_win_duration_min",
         "avg_loss_duration_min",
@@ -1144,6 +1235,7 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "calmar_ratio",
         "romad_ratio",
         "annualized_calmar",
+        "mar_ratio",
         "annualized_sharpe",
         "cagr_pct",
         "backtest_days",
@@ -1222,6 +1314,8 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         runs_z = data.get("runs_test_zscore", 0.0)
         runs_rating = data.get("runs_test_rating", "N/A")
         romad = data.get("romad_ratio", 0.0)
+        mar_val = data.get("mar_ratio", 0.0)
+        exp_bps = data.get("expectancy_bps", 0.0)
 
         mc_iter = data.get("mc_iterations", 0)
         mc_95 = data.get("mc_mdd_95_pct", 0.0)
@@ -1329,7 +1423,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             </div>
             <div class="metric-card">
                 <div class="metric-label">거래 기대값 (Expectancy)</div>
-                <div class="metric-value {('positive' if expectancy >= 0 else 'negative')}">{expectancy:+.3f}%</div>
+                <div class="metric-value {('positive' if expectancy >= 0 else 'negative')}">{expectancy:+.3f}% <span class="badge {('badge-success' if expectancy >= 0 else 'badge-danger')}">{exp_bps:+.1f} bps</span></div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">누적 수익률</div>
@@ -1382,6 +1476,10 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">연환산 칼마 (Ann. Calmar)</div>
                 <div class="metric-value">{ann_calmar:.2f}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">MAR 비율 (CAGR / MDD)</div>
+                <div class="metric-value">{mar_val:.2f}</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">백테스트 기간 (Backtest Days)</div>
@@ -1443,6 +1541,35 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </div>
         """
 
+        directions = data.get("direction_performance", {})
+        dir_rows = []
+        for side, s in directions.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            side_badge = '<span class="badge badge-success">롱 (Long)</span>' if side == 'long' else '<span class="badge badge-danger">숏 (Short)</span>'
+            dir_rows.append(f"""
+            <tr>
+                <td>{side_badge}</td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td>{s.get('avg_duration_min', 0.0):.1f}분</td>
+            </tr>
+            """)
+        dir_table_html = f"""
+        <h3>↕️ 롱/숏 포지션 방향별 성과</h3>
+        <table>
+            <thead>
+                <tr><th>포지션 방향</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>손익비</th><th>평균 보유시간</th></tr>
+            </thead>
+            <tbody>
+                {''.join(dir_rows) if dir_rows else '<tr><td colspan="7">방향 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if directions else ""
+
         exits = data.get("exit_reasons", {})
         exit_rows = []
         for tag, s in exits.items():
@@ -1503,6 +1630,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
             {cards_html}
+            {dir_table_html}
             {exit_table_html}
             {pair_table_html}
         </section>
