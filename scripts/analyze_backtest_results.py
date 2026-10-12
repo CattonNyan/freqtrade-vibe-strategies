@@ -260,6 +260,37 @@ def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str
     }
 
 
+def calculate_risk_of_ruin(
+    win_rate: float,
+    payoff_ratio: float,
+    bet_fraction: float = 0.02,
+    loss_limit: float = 0.5,
+) -> float:
+    """Calculate theoretical Risk of Ruin (Ralph Vince & Perry Kaufman formula).
+
+    Evaluates the probability of suffering an accumulated drawdown of loss_limit
+    (e.g., 0.5 for a 50% account drawdown) before reaching capital growth targets.
+    """
+    if not (0.0 < win_rate < 1.0) or payoff_ratio <= 0.0 or not (0.0 < bet_fraction <= 1.0) or not (0.0 < loss_limit <= 1.0):
+        return 1.0 if (win_rate <= 0.0 or payoff_ratio <= 0.0) else 0.0
+
+    loss_rate = 1.0 - win_rate
+    expected_payoff = win_rate * payoff_ratio - loss_rate
+    if expected_payoff <= 0.0:
+        return 1.0
+
+    denom = win_rate * payoff_ratio + loss_rate
+    if denom <= 1e-9:
+        return 1.0
+
+    edge = expected_payoff / denom
+    z = (1.0 - edge) / (1.0 + edge)
+
+    units = loss_limit / bet_fraction
+    ror = float(z ** units)
+    return max(0.0, min(1.0, ror))
+
+
 def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     """Calculate trade-level win/loss statistics, profit factor, and expectancy."""
     if not trades:
@@ -282,6 +313,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "max_consecutive_losses": 0,
             "full_kelly_pct": 0.0,
             "half_kelly_pct": 0.0,
+            "risk_of_ruin_pct": 0.0,
             "tail_ratio": 0.0,
             "common_sense_ratio": 0.0,
             "sqn": 0.0,
@@ -354,6 +386,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     win_loss_dur_ratio = (avg_win_dur / avg_loss_dur) if avg_loss_dur > 0 else (999.0 if avg_win_dur > 0 else 0.0)
 
     # Kelly Criterion calculation: f* = (p * b - q) / b = p - (1 - p) / b
+    b = 0.0
     if total_trades > 0 and loss_count > 0 and avg_loss > 0:
         b = avg_win / avg_loss
         p = win_count / total_trades
@@ -370,6 +403,17 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     else:
         full_k = 0.0
         half_k = 0.0
+
+    # Risk of Ruin (50% account drawdown barrier, Ralph Vince & Perry Kaufman)
+    if total_trades > 0 and loss_count > 0 and avg_loss > 0 and b > 1e-6:
+        p = win_count / total_trades
+        frac = (half_k / 100.0) if half_k > 0 else 0.02
+        ror = calculate_risk_of_ruin(win_rate=p, payoff_ratio=b, bet_fraction=frac, loss_limit=0.5)
+        risk_of_ruin_pct = ror * 100.0
+    elif total_trades > 0 and loss_count == 0 and win_count > 0:
+        risk_of_ruin_pct = 0.0
+    else:
+        risk_of_ruin_pct = 100.0 if total_trades > 0 else 0.0
 
     # Tail Ratio (p95 / |p05|) and Common Sense Ratio (CSR = Profit Factor * Tail Ratio)
     all_trade_profits_pct = [
@@ -453,6 +497,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "max_consecutive_losses": max_loss_streak,
         "full_kelly_pct": round(full_k, 2),
         "half_kelly_pct": round(half_k, 2),
+        "risk_of_ruin_pct": round(risk_of_ruin_pct, 2),
         "tail_ratio": round(tail_ratio, 2),
         "common_sense_ratio": round(common_sense_ratio, 2),
         "sqn": round(sqn, 2),
@@ -644,8 +689,8 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines = [
         "# 📊 Freqtrade 전략 심층 퀀트 리스크 및 하방 위험 분석 보고서",
         "",
-        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 최대 이익/손실 | 수익률 표준편차 | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| 전략명 | 총 거래 | 승률 | 최대 연승/연패 | 손익비(P.F.) | SQN(품질지수) | 오메가(Omega) | 왜도(Skew) | 첨도(Kurt) | 테일 비율(Tail) | 상식 비율(CSR) | 기대값(Trade Exp.) | 켈리 비율(Full/Half) | 파산 위험률(Ruin) | 최대 이익/손실 | 수익률 표준편차 | VaR(95%) | CVaR(95%) | 최대낙폭(MDD) | DaR(95%) | CDaR(95%) | CDaR 비율 | 궤양지수(Ulcer Index) | K-비율(K-Ratio) | 소르티노 비율 | 버크 비율(Burke) | 스털링 비율(Sterling) | 게인투페인(GPR) | 마틴 비율(UPI) | 칼마 비율 | 회복 계수 | 수중 기간(Underwater) | 최대 침체(거래) |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
 
     for name, data in analysis_results.items():
@@ -666,7 +711,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             f"{data.get('omega_ratio', 0.0):.2f} | "
             f"{data.get('skewness', 0.0):+.2f} | {data.get('kurtosis', 0.0):+.2f} | "
             f"{data.get('tail_ratio', 0.0):.2f} | {data.get('common_sense_ratio', 0.0):.2f} | "
-            f"{data.get('expectancy_pct', 0.0):+.3f}% | {kelly_str} | {extrema_str} | {std_str} | "
+            f"{data.get('expectancy_pct', 0.0):+.3f}% | {kelly_str} | {data.get('risk_of_ruin_pct', 0.0):.1f}% | {extrema_str} | {std_str} | "
             f"{data.get('var_95_pct', 0.0):+.2f}% | {data.get('cvar_95_pct', 0.0):+.2f}% | "
             f"-{data.get('max_drawdown_pct', 0.0):.2f}% | -{data.get('dar_95_pct', 0.0):.2f}% | -{data.get('cdar_95_pct', 0.0):.2f}% | {data.get('cdar_ratio', 0.0):.2f} | "
             f"{data.get('ulcer_index', 0.0):.2f}% | "
@@ -725,6 +770,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **게인 투 페인 비율 (Gain-to-Pain Ratio, Jack Schwager)**: 전체 거래 순손익률의 합을 손실 거래 손실률 절대값의 합으로 나눈 비율로, 감내한 하방 고통(손실액) 대비 누적 창출 수익의 효율성을 직관적으로 평가합니다.")
     lines.append("- **수중 기간 비율 (Time Underwater %)**: 전체 거래 중 최고점(High-Water Mark)을 탈환하지 못하고 손실 구간에 머무른 거래 수의 백분율입니다.")
     lines.append("- **켈리 비율 (Kelly Criterion, Full/Half)**: 승률과 손익비를 바탕으로 자본 성장을 극대화하는 이론적 최적 베팅 비중(f*) 및 암호화폐 시장의 꼬리 위험을 완화한 보수적 권장치인 하프 켈리(Half-Kelly, f*/2) 비율입니다.")
+    lines.append("- **파산 위험률 (Risk of Ruin, Ralph Vince & Perry Kaufman)**: 50% 자본 손실(계좌 반토막) 한계에 도달할 이론적 파산 확률을 측정하는 척도로, 승률, 손익비 및 하프 켈리 베팅 비중을 반영하여 장기 생존 가능성을 정량화합니다.")
     lines.append("- **거래 기대값 (Trade Expectancy)**: (승률 × 평균 수익률) - (패율 × 평균 손실률). 1회 거래당 기대되는 통계적 엣지(Edge)입니다.")
     lines.append("- **청산 사유 분석 (Exit Breakdown)**: 각 커스텀 청산 태그(RSI 과매수, 손절, 익절 등)의 개별 승률과 평균 보유 기간을 분리 집계하여 취약한 청산 로직을 진단합니다.")
     lines.append("- **페어별 성과 분석 (Pair Performance)**: 거래 코인 페어별 승률, 누적 수익률, 손익비 및 보유시간을 비교하여 전략에 유리하거나 불리한 자산을 식별합니다.")
@@ -773,6 +819,7 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "win_loss_duration_ratio",
         "full_kelly_pct",
         "half_kelly_pct",
+        "risk_of_ruin_pct",
         "total_return_pct",
         "max_drawdown_pct",
         "ulcer_index",
@@ -828,6 +875,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         gain_to_pain = data.get("gain_to_pain_ratio", 0.0)
         full_kelly = data.get("full_kelly_pct", 0.0)
         half_kelly = data.get("half_kelly_pct", 0.0)
+        risk_of_ruin = data.get("risk_of_ruin_pct", 0.0)
         underwater = data.get("time_underwater_pct", 0.0)
         max_streak = f"{data.get('max_consecutive_wins', 0)}W / {data.get('max_consecutive_losses', 0)}L"
         sqn = data.get("sqn", 0.0)
@@ -965,6 +1013,10 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             <div class="metric-card">
                 <div class="metric-label">켈리 비율 (Full / Half)</div>
                 <div class="metric-value">{full_kelly:.1f}% / {half_kelly:.1f}%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">파산 위험률 (Risk of Ruin)</div>
+                <div class="metric-value {('negative' if risk_of_ruin > 10.0 else 'positive')}">{risk_of_ruin:.1f}%</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">최대 연승/연패</div>

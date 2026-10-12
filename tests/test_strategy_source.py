@@ -2069,6 +2069,56 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("수익률 표준편차 (Std Dev)", html_out)
         self.assertIn("+8.0% / -5.0%", html_out)
 
+    def test_risk_of_ruin_metric(self) -> None:
+        from scripts.analyze_backtest_results import (
+            calculate_risk_of_ruin,
+            calculate_trade_expectancy,
+            export_quant_analysis_csv,
+            generate_html_report,
+            generate_markdown_report,
+        )
+
+        # Boundary and invalid conditions
+        self.assertEqual(calculate_risk_of_ruin(win_rate=0.0, payoff_ratio=1.5), 1.0)
+        self.assertEqual(calculate_risk_of_ruin(win_rate=0.5, payoff_ratio=0.0), 1.0)
+
+        # Negative edge: win_rate=40%, payoff=1.0 -> expected payoff = -0.2 -> Ruin 1.0 (100%)
+        self.assertEqual(calculate_risk_of_ruin(win_rate=0.4, payoff_ratio=1.0, bet_fraction=0.05), 1.0)
+
+        # Strong positive edge: win_rate=65%, payoff=2.0 -> Ruin near 0%
+        ror_strong = calculate_risk_of_ruin(win_rate=0.65, payoff_ratio=2.0, bet_fraction=0.05, loss_limit=0.5)
+        self.assertLess(ror_strong, 0.01)
+        self.assertGreaterEqual(ror_strong, 0.0)
+
+        # Empty trades
+        empty = calculate_trade_expectancy([])
+        self.assertEqual(empty["risk_of_ruin_pct"], 0.0)
+
+        # Profitable trades with edge
+        profitable_trades = [
+            {"profit_ratio": 0.05},
+            {"profit_ratio": 0.04},
+            {"profit_ratio": -0.02},
+            {"profit_ratio": 0.06},
+            {"profit_ratio": -0.01},
+        ]
+        res = calculate_trade_expectancy(profitable_trades)
+        self.assertIn("risk_of_ruin_pct", res)
+        self.assertGreaterEqual(res["risk_of_ruin_pct"], 0.0)
+        self.assertLessEqual(res["risk_of_ruin_pct"], 100.0)
+
+        mock_res = {"VibeStrategy": {**res, "total_return_pct": 12.0, "max_drawdown_pct": 3.0}}
+
+        csv_out = export_quant_analysis_csv(mock_res)
+        self.assertIn("risk_of_ruin_pct", csv_out)
+
+        md_out = generate_markdown_report(mock_res)
+        self.assertIn("파산 위험률(Ruin)", md_out)
+        self.assertIn("Risk of Ruin", md_out)
+
+        html_out = generate_html_report(mock_res)
+        self.assertIn("파산 위험률 (Risk of Ruin)", html_out)
+
     def test_summarize_strategy_configs_dca_and_exit_profit(self) -> None:
         from scripts.summarize_strategy_configs import (
             compute_config_summary_stats,
