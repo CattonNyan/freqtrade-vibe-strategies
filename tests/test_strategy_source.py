@@ -1734,8 +1734,10 @@ class StrategySourceTests(unittest.TestCase):
             content = out_file.read_text(encoding="utf-8")
             self.assertIn("file,class,timeframe", content)
             self.assertIn("informative_timeframe", content)
+            self.assertIn("stoploss_on_exchange", content)
+            self.assertIn("entry_order_type", content)
             self.assertIn("initial_roi_pct", content)
-            self.assertIn("StratA.py,StratA,5m,1h,100,-0.05,True,True,True,False,False,False,False,True,5.0", content)
+            self.assertIn("StratA.py,StratA,5m,1h,100,-0.05,False,limit,limit,True,,,False,True,True,False,,False,False,False,True,5.0", content)
 
     def test_trade_expectancy_skewness_and_kurtosis(self) -> None:
         import sys
@@ -2595,6 +2597,111 @@ class StrategySourceTests(unittest.TestCase):
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
+
+    def test_summarize_strategy_configs_execution_and_order_types(self) -> None:
+        from scripts.summarize_strategy_configs import (
+            compute_config_summary_stats,
+            filter_strategy_configs,
+            format_config_csv,
+            format_config_html,
+            format_config_markdown,
+            format_config_summary_stats,
+            format_config_table,
+            get_strategy_configs,
+        )
+
+        # 1. Test live configs extraction
+        live_configs = get_strategy_configs()
+        self.assertGreater(len(live_configs), 0)
+        for cfg in live_configs:
+            self.assertIn("stoploss_on_exchange", cfg)
+            self.assertIn("entry_order_type", cfg)
+            self.assertIn("exit_order_type", cfg)
+            self.assertIn("trailing_stop_positive_offset", cfg)
+            self.assertIn("trailing_only_offset_is_reached", cfg)
+
+        # 2. Test synthetic configs stats
+        synth_configs = [
+            {
+                "file": "ActiveRiskStrat.py",
+                "class": "ActiveRiskStrat",
+                "timeframe": "5m",
+                "stoploss": -0.05,
+                "trailing_stop": True,
+                "trailing_stop_positive_offset": 0.02,
+                "trailing_only_offset_is_reached": True,
+                "stoploss_on_exchange": True,
+                "entry_order_type": "market",
+                "exit_order_type": "limit",
+                "use_custom_stoploss": False,
+                "minimal_roi": {"0": 0.05},
+            },
+            {
+                "file": "PassiveLimitStrat.py",
+                "class": "PassiveLimitStrat",
+                "timeframe": "1h",
+                "stoploss": -0.08,
+                "trailing_stop": False,
+                "trailing_stop_positive_offset": None,
+                "trailing_only_offset_is_reached": False,
+                "stoploss_on_exchange": False,
+                "entry_order_type": "limit",
+                "exit_order_type": "limit",
+                "use_custom_stoploss": True,
+                "minimal_roi": {"0": 0.02},
+            },
+        ]
+
+        stats = compute_config_summary_stats(synth_configs)
+        self.assertEqual(stats["total_strategies"], 2)
+        self.assertEqual(stats["stoploss_on_exchange_count"], 1)
+        self.assertEqual(stats["stoploss_on_exchange_pct"], 50.0)
+        self.assertEqual(stats["trailing_offset_count"], 1)
+        self.assertEqual(stats["trailing_offset_pct"], 50.0)
+        self.assertEqual(stats["market_order_count"], 1)
+        self.assertEqual(stats["market_order_pct"], 50.0)
+
+        # 3. Test filtering
+        offset_res = filter_strategy_configs(synth_configs, trailing_offset_only=True)
+        self.assertEqual(len(offset_res), 1)
+        self.assertEqual(offset_res[0]["class"], "ActiveRiskStrat")
+
+        exch_res = filter_strategy_configs(synth_configs, stoploss_on_exchange_only=True)
+        self.assertEqual(len(exch_res), 1)
+        self.assertEqual(exch_res[0]["class"], "ActiveRiskStrat")
+
+        mkt_res = filter_strategy_configs(synth_configs, market_order_only=True)
+        self.assertEqual(len(mkt_res), 1)
+        self.assertEqual(mkt_res[0]["class"], "ActiveRiskStrat")
+
+        # 4. Formats
+        tbl_out = format_config_table(synth_configs)
+        self.assertIn("SL Exch", tbl_out)
+        self.assertIn("Orders", tbl_out)
+        self.assertIn("market/limit", tbl_out)
+
+        stat_block = format_config_summary_stats(stats)
+        self.assertIn("Stoploss on Exchange", stat_block)
+        self.assertIn("Trailing Offset Guard", stat_block)
+        self.assertIn("Market Order Execution", stat_block)
+
+        md_out = format_config_markdown(synth_configs, include_stats=True)
+        self.assertIn("SL on Exchange", md_out)
+        self.assertIn("Order Types", md_out)
+        self.assertIn("Trailing Offset Guard", md_out)
+
+        csv_out = format_config_csv(synth_configs)
+        self.assertIn("stoploss_on_exchange", csv_out)
+        self.assertIn("entry_order_type", csv_out)
+        self.assertIn("exit_order_type", csv_out)
+        self.assertIn("trailing_stop_positive_offset", csv_out)
+
+        html_out = format_config_html(synth_configs, include_stats=True)
+        self.assertIn("거래소 스탑로스 (Exchange SL)", html_out)
+        self.assertIn("트레일링 오프셋 보호", html_out)
+        self.assertIn("시장가 주문 채택", html_out)
+        self.assertIn("거래소 SL", html_out)
+        self.assertIn("주문 유형", html_out)
 
 
 if __name__ == "__main__":

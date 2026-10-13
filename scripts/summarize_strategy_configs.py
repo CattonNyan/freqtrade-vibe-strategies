@@ -73,6 +73,17 @@ def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, o
                         except Exception:
                             pass
 
+                order_types = vals.get("order_types", {})
+                if not isinstance(order_types, dict):
+                    order_types = {}
+                stoploss_on_exchange = bool(order_types.get("stoploss_on_exchange", False))
+                entry_order_type = str(order_types.get("entry", "limit"))
+                exit_order_type = str(order_types.get("exit", "limit"))
+                trailing_stop_positive = vals.get("trailing_stop_positive")
+                trailing_stop_positive_offset = vals.get("trailing_stop_positive_offset")
+                trailing_only_offset_is_reached = bool(vals.get("trailing_only_offset_is_reached", False))
+                exit_profit_offset = float(vals.get("exit_profit_offset", 0.0)) if isinstance(vals.get("exit_profit_offset"), (int, float)) else 0.0
+
                 configs.append({
                     "file": filename,
                     "class": node.name,
@@ -81,11 +92,18 @@ def get_strategy_configs(strategies_dir: Path | None = None) -> list[dict[str, o
                     "startup_candle_count": vals.get("startup_candle_count", "-"),
                     "stoploss": vals.get("stoploss", "-"),
                     "trailing_stop": vals.get("trailing_stop", False),
+                    "trailing_stop_positive": trailing_stop_positive,
+                    "trailing_stop_positive_offset": trailing_stop_positive_offset,
+                    "trailing_only_offset_is_reached": trailing_only_offset_is_reached,
+                    "stoploss_on_exchange": stoploss_on_exchange,
+                    "entry_order_type": entry_order_type,
+                    "exit_order_type": exit_order_type,
                     "use_custom_stoploss": vals.get("use_custom_stoploss", False),
                     "process_only_new_candles": vals.get("process_only_new_candles", True),
                     "can_short": vals.get("can_short", False),
                     "use_exit_signal": vals.get("use_exit_signal", True),
                     "exit_profit_only": vals.get("exit_profit_only", False),
+                    "exit_profit_offset": exit_profit_offset,
                     "position_adjustment_enable": vals.get("position_adjustment_enable", False),
                     "ignore_roi_if_entry_signal": vals.get("ignore_roi_if_entry_signal", False),
                     "minimal_roi": vals.get("minimal_roi", {}),
@@ -103,6 +121,12 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
             "timeframe_distribution": {},
             "trailing_stop_count": 0,
             "trailing_stop_pct": 0.0,
+            "trailing_offset_count": 0,
+            "trailing_offset_pct": 0.0,
+            "stoploss_on_exchange_count": 0,
+            "stoploss_on_exchange_pct": 0.0,
+            "market_order_count": 0,
+            "market_order_pct": 0.0,
             "custom_stoploss_count": 0,
             "custom_stoploss_pct": 0.0,
             "can_short_count": 0,
@@ -125,6 +149,9 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
 
     tf_counts: dict[str, int] = {}
     trailing_count = 0
+    trailing_offset_count = 0
+    stoploss_on_exchange_count = 0
+    market_order_count = 0
     custom_sl_count = 0
     can_short_count = 0
     mtf_count = 0
@@ -140,6 +167,18 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
         tf_counts[tf] = tf_counts.get(tf, 0) + 1
         if c.get("trailing_stop"):
             trailing_count += 1
+        if c.get("trailing_only_offset_is_reached") or (
+            isinstance(c.get("trailing_stop_positive_offset"), (int, float))
+            and float(c["trailing_stop_positive_offset"]) > 0
+        ):
+            trailing_offset_count += 1
+        if c.get("stoploss_on_exchange"):
+            stoploss_on_exchange_count += 1
+        if (
+            str(c.get("entry_order_type", "")).lower() == "market"
+            or str(c.get("exit_order_type", "")).lower() == "market"
+        ):
+            market_order_count += 1
         if c.get("use_custom_stoploss"):
             custom_sl_count += 1
         if c.get("can_short"):
@@ -172,6 +211,12 @@ def compute_config_summary_stats(configs: list[dict[str, object]]) -> dict[str, 
         "timeframe_distribution": tf_counts,
         "trailing_stop_count": trailing_count,
         "trailing_stop_pct": round((trailing_count / total) * 100.0, 1),
+        "trailing_offset_count": trailing_offset_count,
+        "trailing_offset_pct": round((trailing_offset_count / total) * 100.0, 1),
+        "stoploss_on_exchange_count": stoploss_on_exchange_count,
+        "stoploss_on_exchange_pct": round((stoploss_on_exchange_count / total) * 100.0, 1),
+        "market_order_count": market_order_count,
+        "market_order_pct": round((market_order_count / total) * 100.0, 1),
         "custom_stoploss_count": custom_sl_count,
         "custom_stoploss_pct": round((custom_sl_count / total) * 100.0, 1),
         "can_short_count": can_short_count,
@@ -202,6 +247,9 @@ def format_config_summary_stats(stats: dict[str, object]) -> str:
         f"  Timeframe Breakdown     : {tf_str}",
         f"  Multi-Timeframe Active  : {stats.get('multi_timeframe_count', 0)} ({stats.get('multi_timeframe_pct', 0.0)}%)",
         f"  Trailing Stop Enabled   : {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
+        f"  Trailing Offset Guard   : {stats.get('trailing_offset_count', 0)} ({stats.get('trailing_offset_pct', 0.0)}%)",
+        f"  Stoploss on Exchange    : {stats.get('stoploss_on_exchange_count', 0)} ({stats.get('stoploss_on_exchange_pct', 0.0)}%)",
+        f"  Market Order Execution  : {stats.get('market_order_count', 0)} ({stats.get('market_order_pct', 0.0)}%)",
         f"  Custom Stoploss Defined : {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
         f"  Exit Signal Enabled     : {stats.get('exit_signal_count', 0)} ({stats.get('exit_signal_pct', 0.0)}%)",
         f"  Exit Profit Only Active : {stats.get('exit_profit_only_count', 0)} ({stats.get('exit_profit_only_pct', 0.0)}%)",
@@ -218,8 +266,8 @@ def format_config_summary_stats(stats: dict[str, object]) -> str:
 def format_config_table(configs: list[dict[str, object]]) -> str:
     """Format strategy configuration list into a readable table."""
     lines = [
-        f"{'Strategy Class':<26} | {'TF':<5} | {'Info TF':<7} | {'Startup':<8} | {'Stoploss':<9} | {'Trailing':<8} | {'Custom SL':<9} | {'Initial ROI':<11} | {'DCA':<5} | {'ExitProfit':<10}",
-        "-" * 120,
+        f"{'Strategy Class':<24} | {'TF':<5} | {'Info TF':<7} | {'Startup':<8} | {'Stoploss':<9} | {'Trailing':<8} | {'SL Exch':<7} | {'Orders':<11} | {'Custom SL':<9} | {'Initial ROI':<11} | {'DCA':<5} | {'ExitProfit':<10}",
+        "-" * 135,
     ]
     for c in configs:
         cls_name = str(c.get("class", ""))
@@ -228,12 +276,16 @@ def format_config_table(configs: list[dict[str, object]]) -> str:
         startup = str(c.get("startup_candle_count", "-"))
         sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c.get("stoploss"), (int, float)) else str(c.get("stoploss", "-"))
         ts = "YES" if c.get("trailing_stop") else "NO"
+        sl_exch = "YES" if c.get("stoploss_on_exchange") else "NO"
+        entry_ord = str(c.get("entry_order_type", "limit"))
+        exit_ord = str(c.get("exit_order_type", "limit"))
+        orders = f"{entry_ord}/{exit_ord}"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
         init_roi = get_initial_roi(c.get("minimal_roi"))
         roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
         dca = "YES" if c.get("position_adjustment_enable") else "NO"
         ep = "YES" if c.get("exit_profit_only") else "NO"
-        lines.append(f"{cls_name:<26} | {tf:<5} | {info_tf:<7} | {startup:<8} | {sl:<9} | {ts:<8} | {csl:<9} | {roi_str:<11} | {dca:<5} | {ep:<10}")
+        lines.append(f"{cls_name:<24} | {tf:<5} | {info_tf:<7} | {startup:<8} | {sl:<9} | {ts:<8} | {sl_exch:<7} | {orders:<11} | {csl:<9} | {roi_str:<11} | {dca:<5} | {ep:<10}")
     return "\n".join(lines)
 
 
@@ -249,6 +301,9 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
             f"- **Timeframe Distribution**: {tf_str}",
             f"- **Multi-Timeframe Adoption**: {stats.get('multi_timeframe_count', 0)} ({stats.get('multi_timeframe_pct', 0.0)}%)",
             f"- **Trailing Stop Adoption**: {stats['trailing_stop_count']} ({stats['trailing_stop_pct']}%)",
+            f"- **Trailing Offset Guard**: {stats.get('trailing_offset_count', 0)} ({stats.get('trailing_offset_pct', 0.0)}%)",
+            f"- **Stoploss on Exchange**: {stats.get('stoploss_on_exchange_count', 0)} ({stats.get('stoploss_on_exchange_pct', 0.0)}%)",
+            f"- **Market Order Adoption**: {stats.get('market_order_count', 0)} ({stats.get('market_order_pct', 0.0)}%)",
             f"- **Custom Stoploss Adoption**: {stats['custom_stoploss_count']} ({stats['custom_stoploss_pct']}%)",
             f"- **Exit Signal Adoption**: {stats.get('exit_signal_count', 0)} ({stats.get('exit_signal_pct', 0.0)}%)",
             f"- **Exit Profit Only Active**: {stats.get('exit_profit_only_count', 0)} ({stats.get('exit_profit_only_pct', 0.0)}%)",
@@ -260,8 +315,8 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
             "",
         ])
     lines.extend([
-        "| Strategy Class | Timeframe | Informative TF | Startup Candles | Stoploss | Trailing Stop | Custom Stoploss | Exit Signal | Profit Only | DCA Enabled | Ignore ROI on Entry | Can Short | Process New Only | Initial ROI |",
-        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| Strategy Class | Timeframe | Informative TF | Startup Candles | Stoploss | SL on Exchange | Trailing Stop | Trailing Offset | Order Types | Custom Stoploss | Exit Signal | Profit Only | DCA Enabled | Ignore ROI on Entry | Can Short | Process New Only | Initial ROI |",
+        "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
     for c in configs:
         cls_name = str(c.get("class", ""))
@@ -269,7 +324,10 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
         info_tf = str(c.get("informative_timeframe", "-"))
         startup = str(c.get("startup_candle_count", "-"))
         sl = f"{float(c['stoploss']) * 100:.1f}%" if isinstance(c.get("stoploss"), (int, float)) else str(c.get("stoploss", "-"))
+        sl_exch = "YES" if c.get("stoploss_on_exchange") else "NO"
         ts = "YES" if c.get("trailing_stop") else "NO"
+        ts_offset = f"{float(c['trailing_stop_positive_offset']) * 100:.1f}%" if isinstance(c.get("trailing_stop_positive_offset"), (int, float)) else ("YES" if c.get("trailing_only_offset_is_reached") else "NO")
+        orders = f"{c.get('entry_order_type', 'limit')}/{c.get('exit_order_type', 'limit')}"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
         es = "YES" if c.get("use_exit_signal", True) else "NO"
         epo = "YES" if c.get("exit_profit_only") else "NO"
@@ -279,7 +337,7 @@ def format_config_markdown(configs: list[dict[str, object]], include_stats: bool
         pno = "YES" if c.get("process_only_new_candles", True) else "NO"
         init_roi = get_initial_roi(c.get("minimal_roi"))
         roi_str = f"+{init_roi * 100:.1f}%" if init_roi is not None else "-"
-        lines.append(f"| **{cls_name}** | {tf} | {info_tf} | {startup} | {sl} | {ts} | {csl} | {es} | {epo} | {dca} | {iroi} | {cs} | {pno} | {roi_str} |")
+        lines.append(f"| **{cls_name}** | {tf} | {info_tf} | {startup} | {sl} | {sl_exch} | {ts} | {ts_offset} | {orders} | {csl} | {es} | {epo} | {dca} | {iroi} | {cs} | {pno} | {roi_str} |")
     return "\n".join(lines)
 
 
@@ -292,10 +350,17 @@ def format_config_csv(configs: list[dict[str, object]]) -> str:
         "informative_timeframe",
         "startup_candle_count",
         "stoploss",
+        "stoploss_on_exchange",
+        "entry_order_type",
+        "exit_order_type",
         "trailing_stop",
+        "trailing_stop_positive",
+        "trailing_stop_positive_offset",
+        "trailing_only_offset_is_reached",
         "use_custom_stoploss",
         "use_exit_signal",
         "exit_profit_only",
+        "exit_profit_offset",
         "position_adjustment_enable",
         "ignore_roi_if_entry_signal",
         "can_short",
@@ -308,6 +373,13 @@ def format_config_csv(configs: list[dict[str, object]]) -> str:
     for c in configs:
         row = dict(c)
         row["informative_timeframe"] = c.get("informative_timeframe", "-")
+        row["stoploss_on_exchange"] = c.get("stoploss_on_exchange", False)
+        row["entry_order_type"] = c.get("entry_order_type", "limit")
+        row["exit_order_type"] = c.get("exit_order_type", "limit")
+        row["trailing_stop_positive"] = c.get("trailing_stop_positive", "")
+        row["trailing_stop_positive_offset"] = c.get("trailing_stop_positive_offset", "")
+        row["trailing_only_offset_is_reached"] = c.get("trailing_only_offset_is_reached", False)
+        row["exit_profit_offset"] = c.get("exit_profit_offset", "")
         row["use_exit_signal"] = c.get("use_exit_signal", True)
         row["exit_profit_only"] = c.get("exit_profit_only", False)
         row["position_adjustment_enable"] = c.get("position_adjustment_enable", False)
@@ -375,6 +447,9 @@ def sort_strategy_configs(
 def filter_strategy_configs(
     configs: list[dict[str, object]],
     has_trailing: bool | None = None,
+    trailing_offset_only: bool = False,
+    stoploss_on_exchange_only: bool = False,
+    market_order_only: bool = False,
     custom_stoploss_only: bool = False,
     timeframe: str | None = None,
     can_short_only: bool = False,
@@ -411,6 +486,22 @@ def filter_strategy_configs(
         ]
     if has_trailing is not None:
         filtered = [c for c in filtered if bool(c.get("trailing_stop")) == has_trailing]
+    if trailing_offset_only:
+        filtered = [
+            c for c in filtered
+            if bool(c.get("trailing_only_offset_is_reached")) or (
+                isinstance(c.get("trailing_stop_positive_offset"), (int, float))
+                and float(c["trailing_stop_positive_offset"]) > 0
+            )
+        ]
+    if stoploss_on_exchange_only:
+        filtered = [c for c in filtered if bool(c.get("stoploss_on_exchange"))]
+    if market_order_only:
+        filtered = [
+            c for c in filtered
+            if str(c.get("entry_order_type", "")).lower() == "market"
+            or str(c.get("exit_order_type", "")).lower() == "market"
+        ]
     if custom_stoploss_only:
         filtered = [c for c in filtered if bool(c.get("use_custom_stoploss"))]
     if timeframe:
@@ -466,6 +557,18 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                 <div class="stat-value">{stats['trailing_stop_pct']}% <span class="stat-sub">({stats['trailing_stop_count']}개)</span></div>
             </div>
             <div class="stat-card">
+                <div class="stat-label">거래소 스탑로스 (Exchange SL)</div>
+                <div class="stat-value">{stats.get('stoploss_on_exchange_pct', 0.0)}% <span class="stat-sub">({stats.get('stoploss_on_exchange_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">트레일링 오프셋 보호</div>
+                <div class="stat-value">{stats.get('trailing_offset_pct', 0.0)}% <span class="stat-sub">({stats.get('trailing_offset_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">시장가 주문 채택</div>
+                <div class="stat-value">{stats.get('market_order_pct', 0.0)}% <span class="stat-sub">({stats.get('market_order_count', 0)}개)</span></div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-label">커스텀 스톱로스</div>
                 <div class="stat-value">{stats['custom_stoploss_pct']}% <span class="stat-sub">({stats['custom_stoploss_count']}개)</span></div>
             </div>
@@ -509,6 +612,9 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
         startup = str(c.get("startup_candle_count", "-"))
         sl_raw = c.get("stoploss", "-")
         sl_str = f"{float(sl_raw) * 100:.1f}%" if isinstance(sl_raw, (int, float)) else str(sl_raw)
+        sl_exch = "YES" if c.get("stoploss_on_exchange") else "NO"
+        sl_exch_class = "badge-success" if sl_exch == "YES" else "badge-muted"
+        orders = f"{c.get('entry_order_type', 'limit')}/{c.get('exit_order_type', 'limit')}"
         ts = "YES" if c.get("trailing_stop") else "NO"
         csl = "YES" if c.get("use_custom_stoploss") else "NO"
         es = "YES" if c.get("use_exit_signal", True) else "NO"
@@ -538,6 +644,8 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
             <td>{info_badge}</td>
             <td>{startup}</td>
             <td style="color:#f85149; font-weight:600;">{sl_str}</td>
+            <td><span class="badge {sl_exch_class}">{sl_exch}</span></td>
+            <td><span class="badge badge-muted">{orders}</span></td>
             <td style="color:{roi_color}; font-weight:600;">{roi_str}</td>
             <td><span class="badge {ts_class}">{ts}</span></td>
             <td><span class="badge {csl_class}">{csl}</span></td>
@@ -550,7 +658,7 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
         </tr>
         """)
 
-    tbody = "".join(rows) if rows else '<tr><td colspan="14">전략 데이터 없음</td></tr>'
+    tbody = "".join(rows) if rows else '<tr><td colspan="16">전략 데이터 없음</td></tr>'
 
     return f"""<!DOCTYPE html>
 <html lang="ko">
@@ -648,6 +756,8 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                     <th>보조 TF</th>
                     <th>초기 캔들</th>
                     <th>기본 손절폭</th>
+                    <th>거래소 SL</th>
+                    <th>주문 유형</th>
                     <th>초기 ROI</th>
                     <th>트레일링 스탑</th>
                     <th>커스텀 손절</th>
@@ -694,6 +804,15 @@ def main():
     )
     parser.add_argument("--reverse", action="store_true", help="Sort in descending order")
     parser.add_argument("--has-trailing", action="store_true", help="Show only strategies with trailing stop enabled")
+    parser.add_argument(
+        "--trailing-offset-only", action="store_true", help="Show only strategies requiring trailing stop offset to be reached"
+    )
+    parser.add_argument(
+        "--stoploss-on-exchange-only", action="store_true", help="Show only strategies with stoploss placed directly on exchange"
+    )
+    parser.add_argument(
+        "--market-order-only", action="store_true", help="Show only strategies using market orders for entry or exit"
+    )
     parser.add_argument(
         "--custom-stoploss-only", action="store_true", help="Show only strategies that define custom stoploss"
     )
@@ -754,6 +873,12 @@ def main():
         configs = filter_strategy_configs(configs, max_stoploss=args.max_stoploss)
     if args.has_trailing:
         configs = filter_strategy_configs(configs, has_trailing=True)
+    if args.trailing_offset_only:
+        configs = filter_strategy_configs(configs, trailing_offset_only=True)
+    if args.stoploss_on_exchange_only:
+        configs = filter_strategy_configs(configs, stoploss_on_exchange_only=True)
+    if args.market_order_only:
+        configs = filter_strategy_configs(configs, market_order_only=True)
     if args.custom_stoploss_only:
         configs = filter_strategy_configs(configs, custom_stoploss_only=True)
     if args.can_short_only:
