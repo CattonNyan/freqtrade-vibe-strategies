@@ -139,7 +139,7 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -QuantCsv `
   -QuantHtml
 
-# 독립 퀀트 리스크 분석기 실행 (.zip 압축 아카이브, .json 파일 및 --latest 최신 결과 자동 탐색 지원)
+# 독립 퀀트 리스크 분석기 실행 (포지션 방향별/요일별 성과 분석, .zip 압축 아카이브, .json 파일 및 --latest 최신 결과 자동 탐색 지원)
 python .\scripts\analyze_backtest_results.py --latest --output report.md --json report.json --csv report.csv --html report.html --sort-by profit --min-trades 3
 python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\ --html report.html
 python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.zip --csv report.csv
