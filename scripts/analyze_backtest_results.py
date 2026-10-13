@@ -1442,6 +1442,109 @@ def calculate_monthly_breakdown(
     return breakdown
 
 
+def calculate_drawdown_episodes(
+    trades: list[dict[str, Any]],
+    top_n: int = 5,
+) -> dict[str, Any]:
+    """Identify distinct drawdown episodes, peak-to-trough decline, and recovery duration."""
+    if not trades:
+        return {
+            "total_episodes": 0,
+            "avg_recovery_trades": 0.0,
+            "max_recovery_trades": 0,
+            "avg_drawdown_trades": 0.0,
+            "worst_dd_depth_pct": 0.0,
+            "worst_dd_trades": 0,
+            "current_is_recovered": True,
+            "top_episodes": [],
+        }
+
+    equity = 1.0
+    peak = 1.0
+    peak_idx = -1
+    peak_date = str(trades[0].get("open_date", "-"))
+
+    trough = 1.0
+    trough_idx = -1
+    trough_date = str(trades[0].get("close_date", trades[0].get("open_date", "-")))
+
+    episodes = []
+
+    for i, t in enumerate(trades):
+        p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        c_date = str(t.get("close_date", t.get("open_date", f"Trade-{i+1}")))
+        equity *= (1.0 + p)
+
+        if equity >= peak * (1.0 - 1e-9):
+            if trough < peak * (1.0 - 1e-6):
+                dd_pct = (peak - trough) / peak * 100.0
+                dd_trades = max(1, trough_idx - peak_idx)
+                rec_trades = max(1, i - trough_idx)
+                episodes.append({
+                    "peak_date": peak_date,
+                    "trough_date": trough_date,
+                    "recovery_date": c_date,
+                    "depth_pct": round(dd_pct, 2),
+                    "drawdown_trades": dd_trades,
+                    "recovery_trades": rec_trades,
+                    "total_trades": dd_trades + rec_trades,
+                    "is_recovered": True,
+                })
+            peak = equity
+            peak_idx = i
+            peak_date = c_date
+            trough = equity
+            trough_idx = i
+            trough_date = c_date
+        else:
+            if equity < trough:
+                trough = equity
+                trough_idx = i
+                trough_date = c_date
+
+    if trough < peak * (1.0 - 1e-6):
+        dd_pct = (peak - trough) / peak * 100.0
+        dd_trades = max(1, trough_idx - peak_idx)
+        rec_trades = max(0, len(trades) - 1 - trough_idx)
+        episodes.append({
+            "peak_date": peak_date,
+            "trough_date": trough_date,
+            "recovery_date": "진행중 (Active)",
+            "depth_pct": round(dd_pct, 2),
+            "drawdown_trades": dd_trades,
+            "recovery_trades": rec_trades,
+            "total_trades": max(1, len(trades) - 1 - peak_idx),
+            "is_recovered": False,
+        })
+
+    recovered = [e for e in episodes if e["is_recovered"]]
+    avg_rec = round(sum(e["recovery_trades"] for e in recovered) / len(recovered), 1) if recovered else 0.0
+    max_rec = max((e["recovery_trades"] for e in recovered), default=0)
+    avg_dd = round(sum(e["drawdown_trades"] for e in episodes) / len(episodes), 1) if episodes else 0.0
+
+    sorted_episodes = sorted(episodes, key=lambda x: x["depth_pct"], reverse=True)
+    worst_depth = sorted_episodes[0]["depth_pct"] if sorted_episodes else 0.0
+    worst_trades = sorted_episodes[0]["total_trades"] if sorted_episodes else 0
+
+    top_episodes = []
+    for rank, ep in enumerate(sorted_episodes[:top_n], start=1):
+        top_episodes.append({
+            "rank": rank,
+            **ep,
+        })
+
+    return {
+        "total_episodes": len(episodes),
+        "avg_recovery_trades": avg_rec,
+        "max_recovery_trades": max_rec,
+        "avg_drawdown_trades": avg_dd,
+        "worst_dd_depth_pct": worst_depth,
+        "worst_dd_trades": worst_trades,
+        "current_is_recovered": (len(episodes) == 0 or episodes[-1]["is_recovered"]),
+        "top_episodes": top_episodes,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1485,6 +1588,7 @@ def parse_freqtrade_backtest_json(
         hourly_breakdown = calculate_hourly_breakdown(trades, sort_by=sort_by)
         duration_breakdown = calculate_duration_tier_breakdown(trades, sort_by=sort_by)
         monthly_breakdown = calculate_monthly_breakdown(trades, sort_by=sort_by)
+        dd_episodes = calculate_drawdown_episodes(trades)
 
         combined = {
             "strategy": strat_name,
@@ -1492,6 +1596,12 @@ def parse_freqtrade_backtest_json(
             **dd_metrics,
             **ann_metrics,
             **mc_metrics,
+            "drawdown_episodes": dd_episodes,
+            "avg_recovery_trades": dd_episodes["avg_recovery_trades"],
+            "max_recovery_trades": dd_episodes["max_recovery_trades"],
+            "total_drawdown_episodes": dd_episodes["total_episodes"],
+            "worst_dd_depth_pct": dd_episodes["worst_dd_depth_pct"],
+            "worst_dd_trades": dd_episodes["worst_dd_trades"],
             "exit_reasons": exit_breakdown,
             "pair_performance": pair_breakdown,
             "direction_performance": dir_breakdown,
@@ -1682,6 +1792,24 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{s.get('win_loss_ratio', 0.0):.2f} | {extrema_str} | {s['avg_duration_min']:.1f}분 |"
                 )
 
+    # Detailed Drawdown Episodes table
+    for name, data in analysis_results.items():
+        episodes_info = data.get("drawdown_episodes", {})
+        top_eps = episodes_info.get("top_episodes", [])
+        if top_eps:
+            lines.append("")
+            lines.append(f"### 📉 전략 `{name}` 주요 낙폭 에피소드(Drawdown Episodes) TOP 5")
+            lines.append("| 순위 | 고점 시점 | 저점 시점 | 회복 시점 | 낙폭(Depth) | 하락 거래수 | 회복 거래수 | 총 침체 거래수 | 회복 상태 |")
+            lines.append("| :---: | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |")
+            for ep in top_eps:
+                status_str = "✅ 회복완료" if ep.get("is_recovered") else "⏳ 침체진행중"
+                lines.append(
+                    f"| {ep['rank']}위 | `{ep['peak_date']}` | `{ep['trough_date']}` | "
+                    f"`{ep['recovery_date']}` | -{ep['depth_pct']:.2f}% | "
+                    f"{ep['drawdown_trades']}회 | {ep['recovery_trades']}회 | "
+                    f"{ep['total_trades']}회 | {status_str} |"
+                )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -1806,6 +1934,11 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "time_underwater_pct",
         "avg_drawdown_pct",
         "max_drawdown_duration_trades",
+        "avg_recovery_trades",
+        "max_recovery_trades",
+        "total_drawdown_episodes",
+        "worst_dd_depth_pct",
+        "worst_dd_trades",
         "var_95_pct",
         "cvar_95_pct",
         "var_99_pct",
@@ -2285,6 +2418,37 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if exits else ""
 
+        episodes_info = data.get("drawdown_episodes", {})
+        top_eps = episodes_info.get("top_episodes", [])
+        ep_rows = []
+        for ep in top_eps:
+            status_cls = "positive" if ep.get("is_recovered") else "negative"
+            status_txt = "✅ 회복완료" if ep.get("is_recovered") else "⏳ 침체진행중"
+            ep_rows.append(f"""
+            <tr>
+                <td><strong>{ep.get('rank')}위</strong></td>
+                <td>{ep.get('peak_date')}</td>
+                <td>{ep.get('trough_date')}</td>
+                <td>{ep.get('recovery_date')}</td>
+                <td class="negative">-{ep.get('depth_pct', 0.0):.2f}%</td>
+                <td>{ep.get('drawdown_trades')}회</td>
+                <td>{ep.get('recovery_trades')}회</td>
+                <td>{ep.get('total_trades')}회</td>
+                <td class="{status_cls}">{status_txt}</td>
+            </tr>
+            """)
+        dd_episodes_html = f"""
+        <h3>📉 주요 낙폭 에피소드(Drawdown Episodes) TOP 5</h3>
+        <table>
+            <thead>
+                <tr><th>순위</th><th>고점 시점</th><th>저점 시점</th><th>회복 시점</th><th>낙폭(Depth)</th><th>하락 거래수</th><th>회복 거래수</th><th>총 침체 거래수</th><th>회복 상태</th></tr>
+            </thead>
+            <tbody>
+                {''.join(ep_rows) if ep_rows else '<tr><td colspan="9">낙폭 에피소드 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if top_eps else ""
+
         pairs = data.get("pair_performance", {})
         pair_rows = []
         for pair, s in pairs.items():
@@ -2322,6 +2486,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {tier_table_html}
             {hourly_table_html}
             {monthly_table_html}
+            {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}
         </section>
