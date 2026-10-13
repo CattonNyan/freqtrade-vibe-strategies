@@ -1108,6 +1108,197 @@ def calculate_day_of_week_breakdown(
     return breakdown
 
 
+def calculate_hourly_breakdown(
+    trades: list[dict[str, Any]],
+    sort_by: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Group trade performance metrics by entry hour in UTC (00:00 to 23:00)."""
+    if not trades:
+        return {}
+
+    groups: dict[str, list[dict[str, Any]]] = {f"{h:02d}:00 UTC": [] for h in range(24)}
+
+    for t in trades:
+        dt: datetime | None = None
+        for key in ("open_date", "close_date"):
+            val = t.get(key)
+            if isinstance(val, str) and val.strip():
+                try:
+                    clean = val.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(clean)
+                    break
+                except Exception:
+                    pass
+        if dt is None:
+            for key in ("open_timestamp", "close_timestamp"):
+                ts = t.get(key)
+                if isinstance(ts, (int, float)) and ts > 0:
+                    try:
+                        sec = ts / 1000.0 if ts > 1e11 else float(ts)
+                        dt = datetime.fromtimestamp(sec, timezone.utc)
+                        break
+                    except Exception:
+                        pass
+        if dt is not None:
+            hour_key = f"{dt.hour:02d}:00 UTC"
+            groups[hour_key].append(t)
+
+    breakdown: dict[str, dict[str, Any]] = {}
+    for hour_key, t_list in groups.items():
+        count = len(t_list)
+        if count == 0:
+            continue
+
+        wins = []
+        losses = []
+        durations = []
+        profits = []
+        for t in t_list:
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            profits.append(p)
+            durations.append(dur)
+            if p > 1e-6:
+                wins.append(p * 100.0)
+            elif p < -1e-6:
+                losses.append(abs(p * 100.0))
+
+        win_count = len(wins)
+        loss_count = len(losses)
+        win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
+        total_profit_pct = sum(profits) * 100.0
+        avg_profit_pct = (total_profit_pct / count) if count > 0 else 0.0
+        avg_dur = (sum(durations) / count) if count > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+        avg_win = (sum(wins) / win_count) if win_count > 0 else 0.0
+        avg_loss = (sum(losses) / loss_count) if loss_count > 0 else 0.0
+        p_win = win_count / count if count > 0 else 0.0
+        p_loss = loss_count / count if count > 0 else 0.0
+        exp_pct = (p_win * avg_win) - (p_loss * avg_loss)
+        wl_ratio = (avg_win / avg_loss) if avg_loss > 0 else (999.0 if avg_win > 0 else 0.0)
+
+        breakdown[hour_key] = {
+            "trades": count,
+            "wins": win_count,
+            "losses": loss_count,
+            "win_rate_pct": round(win_rate, 2),
+            "total_profit_pct": round(total_profit_pct, 2),
+            "avg_profit_pct": round(avg_profit_pct, 2),
+            "avg_duration_min": round(avg_dur, 1),
+            "profit_factor": round(pf, 2),
+            "win_loss_ratio": round(wl_ratio, 2),
+            "expectancy_bps": round(exp_pct * 100.0, 1),
+            "max_win_pct": round(max(wins), 2) if wins else 0.0,
+            "max_loss_pct": round(max(losses), 2) if losses else 0.0,
+        }
+
+    sort_map = {
+        "trades": "trades",
+        "profit": "total_profit_pct",
+        "total_profit_pct": "total_profit_pct",
+        "win_rate": "win_rate_pct",
+        "win_rate_pct": "win_rate_pct",
+        "pf": "profit_factor",
+        "profit_factor": "profit_factor",
+    }
+    actual_sort = sort_map.get(sort_by, sort_by) if sort_by else None
+    if actual_sort and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(actual_sort, 0), reverse=True))
+
+    return breakdown
+
+
+def calculate_duration_tier_breakdown(
+    trades: list[dict[str, Any]],
+    sort_by: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Group trade performance metrics by position holding duration tiers."""
+    if not trades:
+        return {}
+
+    TIER_DEFINITIONS = [
+        ("< 15m (Scalp)", 0.0, 15.0),
+        ("15m - 1h (Short)", 15.0, 60.0),
+        ("1h - 4h (Intraday)", 60.0, 240.0),
+        ("4h - 24h (Swing)", 240.0, 1440.0),
+        ("> 24h (Position)", 1440.0, float("inf")),
+    ]
+
+    groups: dict[str, list[dict[str, Any]]] = {tier[0]: [] for tier in TIER_DEFINITIONS}
+
+    for t in trades:
+        dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+        for tier_name, min_d, max_d in TIER_DEFINITIONS:
+            if min_d <= dur < max_d:
+                groups[tier_name].append(t)
+                break
+
+    breakdown: dict[str, dict[str, Any]] = {}
+    for tier_name, _, _ in TIER_DEFINITIONS:
+        t_list = groups[tier_name]
+        count = len(t_list)
+        if count == 0:
+            continue
+
+        wins = []
+        losses = []
+        durations = []
+        profits = []
+        for t in t_list:
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            profits.append(p)
+            durations.append(dur)
+            if p > 1e-6:
+                wins.append(p * 100.0)
+            elif p < -1e-6:
+                losses.append(abs(p * 100.0))
+
+        win_count = len(wins)
+        loss_count = len(losses)
+        win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
+        total_profit_pct = sum(profits) * 100.0
+        avg_profit_pct = (total_profit_pct / count) if count > 0 else 0.0
+        avg_dur = (sum(durations) / count) if count > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+        avg_win = (sum(wins) / win_count) if win_count > 0 else 0.0
+        avg_loss = (sum(losses) / loss_count) if loss_count > 0 else 0.0
+        p_win = win_count / count if count > 0 else 0.0
+        p_loss = loss_count / count if count > 0 else 0.0
+        exp_pct = (p_win * avg_win) - (p_loss * avg_loss)
+        wl_ratio = (avg_win / avg_loss) if avg_loss > 0 else (999.0 if avg_win > 0 else 0.0)
+
+        breakdown[tier_name] = {
+            "trades": count,
+            "wins": win_count,
+            "losses": loss_count,
+            "win_rate_pct": round(win_rate, 2),
+            "total_profit_pct": round(total_profit_pct, 2),
+            "avg_profit_pct": round(avg_profit_pct, 2),
+            "avg_duration_min": round(avg_dur, 1),
+            "profit_factor": round(pf, 2),
+            "win_loss_ratio": round(wl_ratio, 2),
+            "expectancy_bps": round(exp_pct * 100.0, 1),
+            "max_win_pct": round(max(wins), 2) if wins else 0.0,
+            "max_loss_pct": round(max(losses), 2) if losses else 0.0,
+        }
+
+    sort_map = {
+        "trades": "trades",
+        "profit": "total_profit_pct",
+        "total_profit_pct": "total_profit_pct",
+        "win_rate": "win_rate_pct",
+        "win_rate_pct": "win_rate_pct",
+        "pf": "profit_factor",
+        "profit_factor": "profit_factor",
+    }
+    actual_sort = sort_map.get(sort_by, sort_by) if sort_by else None
+    if actual_sort and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(actual_sort, 0), reverse=True))
+
+    return breakdown
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1148,6 +1339,8 @@ def parse_freqtrade_backtest_json(
         pair_breakdown = calculate_pair_performance_breakdown(trades, sort_by=sort_by, min_trades=min_trades)
         dir_breakdown = calculate_direction_breakdown(trades)
         dow_breakdown = calculate_day_of_week_breakdown(trades, sort_by=sort_by)
+        hourly_breakdown = calculate_hourly_breakdown(trades, sort_by=sort_by)
+        duration_breakdown = calculate_duration_tier_breakdown(trades, sort_by=sort_by)
 
         combined = {
             "strategy": strat_name,
@@ -1159,6 +1352,8 @@ def parse_freqtrade_backtest_json(
             "pair_performance": pair_breakdown,
             "direction_performance": dir_breakdown,
             "day_of_week_performance": dow_breakdown,
+            "hourly_performance": hourly_breakdown,
+            "duration_tier_performance": duration_breakdown,
         }
         strategy_results[strat_name] = combined
 
@@ -1279,6 +1474,44 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                 extrema_str = f"+{max_w:.1f}%/-{max_l:.1f}%"
                 lines.append(
                     f"| `{day}` | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                    f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
+                    f"{s['profit_factor']:.2f} | {s.get('expectancy_bps', 0.0):+.1f}bp | "
+                    f"{extrema_str} | {s['avg_duration_min']:.1f}분 |"
+                )
+
+    # Detailed Duration Tier performance tables
+    for name, data in analysis_results.items():
+        tiers = data.get("duration_tier_performance", {})
+        if tiers:
+            lines.append("")
+            lines.append(f"### ⏱️ 전략 `{name}` 포지션 보유 기간 구간별(Duration Tiers) 거래 성과")
+            lines.append("| 보유 기간 구간 | 거래수 | 승률 | 총 수익률 | 평균 수익률 | 손익비(P.F.) | 기대값(bps) | 손익비율 | 최대 이익/손실 | 평균 보유시간 |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for tier, s in tiers.items():
+                max_w = s.get("max_win_pct", 0.0)
+                max_l = s.get("max_loss_pct", 0.0)
+                extrema_str = f"+{max_w:.1f}%/-{max_l:.1f}%"
+                lines.append(
+                    f"| `{tier}` | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                    f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
+                    f"{s['profit_factor']:.2f} | {s.get('expectancy_bps', 0.0):+.1f}bp | "
+                    f"{s.get('win_loss_ratio', 0.0):.2f} | {extrema_str} | {s['avg_duration_min']:.1f}분 |"
+                )
+
+    # Detailed Hourly UTC performance tables
+    for name, data in analysis_results.items():
+        hours = data.get("hourly_performance", {})
+        if hours:
+            lines.append("")
+            lines.append(f"### 🕒 전략 `{name}` 시간대별(Hourly UTC) 거래 성과 분석")
+            lines.append("| 시간대 (UTC) | 거래수 | 승률 | 총 수익률 | 평균 수익률 | 손익비(P.F.) | 기대값(bps) | 최대 이익/손실 | 평균 보유시간 |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for hour, s in hours.items():
+                max_w = s.get("max_win_pct", 0.0)
+                max_l = s.get("max_loss_pct", 0.0)
+                extrema_str = f"+{max_w:.1f}%/-{max_l:.1f}%"
+                lines.append(
+                    f"| `{hour}` | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
                     f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
                     f"{s['profit_factor']:.2f} | {s.get('expectancy_bps', 0.0):+.1f}bp | "
                     f"{extrema_str} | {s['avg_duration_min']:.1f}분 |"
@@ -1764,6 +1997,66 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if dows else ""
 
+        tiers = data.get("duration_tier_performance", {})
+        tier_rows = []
+        for tier, s in tiers.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            exp_bps = s.get('expectancy_bps', 0.0)
+            tier_rows.append(f"""
+            <tr>
+                <td><strong>{tier}</strong></td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td class="{('positive' if exp_bps >= 0 else 'negative')}">{exp_bps:+.1f}bp</td>
+                <td>{s.get('avg_duration_min', 0.0):.1f}분</td>
+            </tr>
+            """)
+        tier_table_html = f"""
+        <h3>⏱️ 포지션 보유 기간 구간별(Duration Tiers) 거래 성과</h3>
+        <table>
+            <thead>
+                <tr><th>보유 기간 구간</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>손익비</th><th>기대값</th><th>평균 보유시간</th></tr>
+            </thead>
+            <tbody>
+                {''.join(tier_rows) if tier_rows else '<tr><td colspan="8">구간 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if tiers else ""
+
+        hours = data.get("hourly_performance", {})
+        hour_rows = []
+        for hour, s in hours.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            exp_bps = s.get('expectancy_bps', 0.0)
+            hour_rows.append(f"""
+            <tr>
+                <td><strong>{hour}</strong></td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td class="{('positive' if exp_bps >= 0 else 'negative')}">{exp_bps:+.1f}bp</td>
+                <td>{s.get('avg_duration_min', 0.0):.1f}분</td>
+            </tr>
+            """)
+        hourly_table_html = f"""
+        <h3>🕒 시간대별(Hourly UTC) 거래 성과</h3>
+        <table>
+            <thead>
+                <tr><th>시간대 (UTC)</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>손익비</th><th>기대값</th><th>평균 보유시간</th></tr>
+            </thead>
+            <tbody>
+                {''.join(hour_rows) if hour_rows else '<tr><td colspan="8">시간대 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if hours else ""
+
         exits = data.get("exit_reasons", {})
         exit_rows = []
         for tag, s in exits.items():
@@ -1826,6 +2119,8 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {cards_html}
             {dir_table_html}
             {dow_table_html}
+            {tier_table_html}
+            {hourly_table_html}
             {exit_table_html}
             {pair_table_html}
         </section>

@@ -2530,6 +2530,8 @@ class StrategySourceTests(unittest.TestCase):
         from scripts.analyze_backtest_results import (
             calculate_direction_breakdown,
             calculate_day_of_week_breakdown,
+            calculate_hourly_breakdown,
+            calculate_duration_tier_breakdown,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2541,13 +2543,15 @@ class StrategySourceTests(unittest.TestCase):
         # 1. Empty breakdowns
         self.assertEqual(calculate_direction_breakdown([]), {})
         self.assertEqual(calculate_day_of_week_breakdown([]), {})
+        self.assertEqual(calculate_hourly_breakdown([]), {})
+        self.assertEqual(calculate_duration_tier_breakdown([]), {})
 
         # 2. Mixed long and short trades
         trades = [
-            {"pair": "BTC/USDT", "profit_ratio": 0.05, "trade_duration": 60, "is_short": False, "open_date": "2026-01-05 10:00:00+00:00"},  # Monday
-            {"pair": "ETH/USDT", "profit_ratio": -0.02, "trade_duration": 40, "is_short": False, "open_date": "2026-01-05 14:00:00+00:00"},  # Monday
-            {"pair": "SOL/USDT", "profit_ratio": 0.08, "trade_duration": 90, "trade_direction": "short", "open_date": "2026-01-09 08:00:00+00:00"},  # Friday
-            {"pair": "DOGE/USDT", "profit_ratio": -0.03, "trade_duration": 30, "direction": "short", "open_date": "2026-01-10 12:00:00+00:00"},  # Saturday
+            {"pair": "BTC/USDT", "profit_ratio": 0.05, "trade_duration": 10, "is_short": False, "open_date": "2026-01-05 10:00:00+00:00"},  # Monday, 10:00, < 15m
+            {"pair": "ETH/USDT", "profit_ratio": -0.02, "trade_duration": 40, "is_short": False, "open_date": "2026-01-05 14:00:00+00:00"},  # Monday, 14:00, 15m-1h
+            {"pair": "SOL/USDT", "profit_ratio": 0.08, "trade_duration": 120, "trade_direction": "short", "open_date": "2026-01-09 08:00:00+00:00"},  # Friday, 08:00, 1h-4h
+            {"pair": "DOGE/USDT", "profit_ratio": -0.03, "trade_duration": 300, "direction": "short", "open_date": "2026-01-10 12:00:00+00:00"},  # Saturday, 12:00, 4h-24h
         ]
         breakdown = calculate_direction_breakdown(trades)
         self.assertIn("long", breakdown)
@@ -2576,18 +2580,42 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(dow["Saturday"]["trades"], 1)
         self.assertEqual(dow["Saturday"]["losses"], 1)
 
-        # 4. MAR ratio in annualized metrics
+        # 4. Hourly UTC breakdown
+        hourly = calculate_hourly_breakdown(trades)
+        self.assertIn("10:00 UTC", hourly)
+        self.assertIn("14:00 UTC", hourly)
+        self.assertIn("08:00 UTC", hourly)
+        self.assertIn("12:00 UTC", hourly)
+        self.assertEqual(hourly["10:00 UTC"]["trades"], 1)
+        self.assertEqual(hourly["10:00 UTC"]["wins"], 1)
+        self.assertEqual(hourly["10:00 UTC"]["win_rate_pct"], 100.0)
+        self.assertEqual(hourly["14:00 UTC"]["losses"], 1)
+        self.assertEqual(hourly["08:00 UTC"]["total_profit_pct"], 8.0)
+
+        # 5. Duration tier breakdown
+        dur_tiers = calculate_duration_tier_breakdown(trades)
+        self.assertIn("< 15m (Scalp)", dur_tiers)
+        self.assertIn("15m - 1h (Short)", dur_tiers)
+        self.assertIn("1h - 4h (Intraday)", dur_tiers)
+        self.assertIn("4h - 24h (Swing)", dur_tiers)
+        self.assertEqual(dur_tiers["< 15m (Scalp)"]["trades"], 1)
+        self.assertEqual(dur_tiers["< 15m (Scalp)"]["wins"], 1)
+        self.assertEqual(dur_tiers["15m - 1h (Short)"]["losses"], 1)
+        self.assertEqual(dur_tiers["1h - 4h (Intraday)"]["wins"], 1)
+        self.assertEqual(dur_tiers["4h - 24h (Swing)"]["losses"], 1)
+
+        # 6. MAR ratio in annualized metrics
         ann_res = calculate_annualized_metrics(trades, total_return_pct=25.0, max_drawdown_pct=10.0, backtest_days=365.25)
         self.assertIn("mar_ratio", ann_res)
         self.assertAlmostEqual(ann_res["mar_ratio"], 2.5, places=1)
 
-        # 5. Expectancy in bps and win_loss_count_ratio
+        # 7. Expectancy in bps and win_loss_count_ratio
         exp_res = calculate_trade_expectancy(trades)
         self.assertIn("expectancy_bps", exp_res)
         self.assertIn("win_loss_count_ratio", exp_res)
         self.assertEqual(exp_res["win_loss_count_ratio"], 1.0)
 
-        # 6. Full json parsing and reports
+        # 8. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2600,12 +2628,16 @@ class StrategySourceTests(unittest.TestCase):
         strat = parsed["TestDirStrat"]
         self.assertIn("direction_performance", strat)
         self.assertIn("day_of_week_performance", strat)
+        self.assertIn("hourly_performance", strat)
+        self.assertIn("duration_tier_performance", strat)
         self.assertIn("mar_ratio", strat)
         self.assertIn("expectancy_bps", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
         self.assertIn("요일별(Day of Week) 거래 성과 분석", md)
+        self.assertIn("포지션 보유 기간 구간별(Duration Tiers) 거래 성과", md)
+        self.assertIn("시간대별(Hourly UTC) 거래 성과 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2617,6 +2649,8 @@ class StrategySourceTests(unittest.TestCase):
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
         self.assertIn("요일별(Day of Week) 거래 성과", html_str)
+        self.assertIn("포지션 보유 기간 구간별(Duration Tiers) 거래 성과", html_str)
+        self.assertIn("시간대별(Hourly UTC) 거래 성과", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:
