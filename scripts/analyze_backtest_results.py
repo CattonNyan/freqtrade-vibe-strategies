@@ -539,6 +539,10 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
             "max_win_pct": 0.0,
             "max_loss_pct": 0.0,
             "std_profit_pct": 0.0,
+            "median_profit_pct": 0.0,
+            "p25_profit_pct": 0.0,
+            "p75_profit_pct": 0.0,
+            "iqr_profit_pct": 0.0,
         }
 
     wins = []
@@ -735,6 +739,22 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     max_loss = max(losses) if losses else 0.0
     std_profit = std_pnl if N >= 2 else 0.0
 
+    if len(all_trade_profits_pct) >= 2:
+        median_pnl = _percentile(all_trade_profits_pct, 50.0)
+        p25_pnl = _percentile(all_trade_profits_pct, 25.0)
+        p75_pnl = _percentile(all_trade_profits_pct, 75.0)
+        iqr_pnl = p75_pnl - p25_pnl
+    elif len(all_trade_profits_pct) == 1:
+        median_pnl = all_trade_profits_pct[0]
+        p25_pnl = median_pnl
+        p75_pnl = median_pnl
+        iqr_pnl = 0.0
+    else:
+        median_pnl = 0.0
+        p25_pnl = 0.0
+        p75_pnl = 0.0
+        iqr_pnl = 0.0
+
     return {
         "total_trades": total_trades,
         "wins": win_count,
@@ -771,6 +791,10 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "max_win_pct": round(max_win, 2),
         "max_loss_pct": round(max_loss, 2),
         "std_profit_pct": round(std_profit, 2),
+        "median_profit_pct": round(median_pnl, 2),
+        "p25_profit_pct": round(p25_pnl, 2),
+        "p75_profit_pct": round(p75_pnl, 2),
+        "iqr_profit_pct": round(iqr_pnl, 2),
     }
 
 
@@ -1299,6 +1323,125 @@ def calculate_duration_tier_breakdown(
     return breakdown
 
 
+def calculate_monthly_breakdown(
+    trades: list[dict[str, Any]],
+    sort_by: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Group trade performance metrics chronologically by calendar month (YYYY-MM)."""
+    if not trades:
+        return {}
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+
+    for t in trades:
+        dt: datetime | None = None
+        for key in ("open_date", "close_date"):
+            val = t.get(key)
+            if isinstance(val, str) and val.strip():
+                try:
+                    clean = val.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(clean)
+                    break
+                except Exception:
+                    pass
+        if dt is None:
+            for key in ("open_timestamp", "close_timestamp"):
+                ts = t.get(key)
+                if isinstance(ts, (int, float)) and ts > 0:
+                    try:
+                        sec = ts / 1000.0 if ts > 1e11 else float(ts)
+                        dt = datetime.fromtimestamp(sec, timezone.utc)
+                        break
+                    except Exception:
+                        pass
+        if dt is not None:
+            month_key = dt.strftime("%Y-%m")
+            if month_key not in groups:
+                groups[month_key] = []
+            groups[month_key].append(t)
+
+    sorted_months = sorted(groups.keys())
+    breakdown: dict[str, dict[str, Any]] = {}
+
+    for month_key in sorted_months:
+        t_list = groups[month_key]
+        count = len(t_list)
+        if count == 0:
+            continue
+
+        wins = []
+        losses = []
+        durations = []
+        profits = []
+        for t in t_list:
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            profits.append(p)
+            durations.append(dur)
+            if p > 1e-6:
+                wins.append(p * 100.0)
+            elif p < -1e-6:
+                losses.append(abs(p * 100.0))
+
+        win_count = len(wins)
+        loss_count = len(losses)
+        win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
+        total_profit_pct = sum(profits) * 100.0
+        avg_profit_pct = (total_profit_pct / count) if count > 0 else 0.0
+        avg_dur = (sum(durations) / count) if count > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+        avg_win = (sum(wins) / win_count) if win_count > 0 else 0.0
+        avg_loss = (sum(losses) / loss_count) if loss_count > 0 else 0.0
+        p_win = win_count / count if count > 0 else 0.0
+        p_loss = loss_count / count if count > 0 else 0.0
+        exp_pct = (p_win * avg_win) - (p_loss * avg_loss)
+        wl_ratio = (avg_win / avg_loss) if avg_loss > 0 else (999.0 if avg_win > 0 else 0.0)
+
+        # Intra-month peak-to-trough max drawdown
+        eq = [1.0]
+        for p in profits:
+            eq.append(eq[-1] * (1.0 + p))
+        peak = eq[0]
+        max_dd = 0.0
+        for val in eq:
+            if val > peak:
+                peak = val
+            dd = (peak - val) / peak if peak > 0 else 0.0
+            if dd > max_dd:
+                max_dd = dd
+
+        breakdown[month_key] = {
+            "trades": count,
+            "wins": win_count,
+            "losses": loss_count,
+            "win_rate_pct": round(win_rate, 2),
+            "total_profit_pct": round(total_profit_pct, 2),
+            "avg_profit_pct": round(avg_profit_pct, 2),
+            "avg_duration_min": round(avg_dur, 1),
+            "profit_factor": round(pf, 2),
+            "win_loss_ratio": round(wl_ratio, 2),
+            "expectancy_bps": round(exp_pct * 100.0, 1),
+            "max_drawdown_pct": round(max_dd * 100.0, 2),
+            "max_win_pct": round(max(wins), 2) if wins else 0.0,
+            "max_loss_pct": round(max(losses), 2) if losses else 0.0,
+        }
+
+    sort_map = {
+        "trades": "trades",
+        "profit": "total_profit_pct",
+        "total_profit_pct": "total_profit_pct",
+        "win_rate": "win_rate_pct",
+        "win_rate_pct": "win_rate_pct",
+        "pf": "profit_factor",
+        "profit_factor": "profit_factor",
+    }
+    actual_sort = sort_map.get(sort_by, sort_by) if sort_by else None
+    if actual_sort and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(actual_sort, 0), reverse=True))
+
+    return breakdown
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1341,6 +1484,7 @@ def parse_freqtrade_backtest_json(
         dow_breakdown = calculate_day_of_week_breakdown(trades, sort_by=sort_by)
         hourly_breakdown = calculate_hourly_breakdown(trades, sort_by=sort_by)
         duration_breakdown = calculate_duration_tier_breakdown(trades, sort_by=sort_by)
+        monthly_breakdown = calculate_monthly_breakdown(trades, sort_by=sort_by)
 
         combined = {
             "strategy": strat_name,
@@ -1354,6 +1498,7 @@ def parse_freqtrade_backtest_json(
             "day_of_week_performance": dow_breakdown,
             "hourly_performance": hourly_breakdown,
             "duration_tier_performance": duration_breakdown,
+            "monthly_performance": monthly_breakdown,
         }
         strategy_results[strat_name] = combined
 
@@ -1517,6 +1662,26 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{extrema_str} | {s['avg_duration_min']:.1f}분 |"
                 )
 
+    # Detailed Monthly calendar performance tables
+    for name, data in analysis_results.items():
+        months = data.get("monthly_performance", {})
+        if months:
+            lines.append("")
+            lines.append(f"### 📆 전략 `{name}` 월별(Monthly Calendar) 거래 성과 분석")
+            lines.append("| 월 (Year-Month) | 거래수 | 승률 | 총 수익률 | 평균 수익률 | 월간 최대낙폭 | 손익비(P.F.) | 기대값(bps) | 손익비율 | 최대 이익/손실 | 평균 보유시간 |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for m_key, s in months.items():
+                max_w = s.get("max_win_pct", 0.0)
+                max_l = s.get("max_loss_pct", 0.0)
+                extrema_str = f"+{max_w:.1f}%/-{max_l:.1f}%"
+                lines.append(
+                    f"| `{m_key}` | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                    f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
+                    f"-{s.get('max_drawdown_pct', 0.0):.2f}% | "
+                    f"{s['profit_factor']:.2f} | {s.get('expectancy_bps', 0.0):+.1f}bp | "
+                    f"{s.get('win_loss_ratio', 0.0):.2f} | {extrema_str} | {s['avg_duration_min']:.1f}분 |"
+                )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -1605,6 +1770,10 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "max_win_pct",
         "max_loss_pct",
         "std_profit_pct",
+        "median_profit_pct",
+        "p25_profit_pct",
+        "p75_profit_pct",
+        "iqr_profit_pct",
         "win_loss_ratio",
         "win_loss_count_ratio",
         "avg_duration_min",
@@ -2057,6 +2226,37 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if hours else ""
 
+        months = data.get("monthly_performance", {})
+        month_rows = []
+        for m_key, s in months.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            exp_bps = s.get('expectancy_bps', 0.0)
+            month_rows.append(f"""
+            <tr>
+                <td><strong>{m_key}</strong></td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td class="negative">-{s.get('max_drawdown_pct', 0.0):.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td class="{('positive' if exp_bps >= 0 else 'negative')}">{exp_bps:+.1f}bp</td>
+                <td>{s.get('avg_duration_min', 0.0):.1f}분</td>
+            </tr>
+            """)
+        monthly_table_html = f"""
+        <h3>📆 월별(Monthly Calendar) 거래 성과</h3>
+        <table>
+            <thead>
+                <tr><th>월 (Year-Month)</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>월간 최대낙폭</th><th>손익비</th><th>기대값</th><th>평균 보유시간</th></tr>
+            </thead>
+            <tbody>
+                {''.join(month_rows) if month_rows else '<tr><td colspan="9">월별 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if months else ""
+
         exits = data.get("exit_reasons", {})
         exit_rows = []
         for tag, s in exits.items():
@@ -2121,6 +2321,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {dow_table_html}
             {tier_table_html}
             {hourly_table_html}
+            {monthly_table_html}
             {exit_table_html}
             {pair_table_html}
         </section>

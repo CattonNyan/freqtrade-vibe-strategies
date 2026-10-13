@@ -2532,6 +2532,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_day_of_week_breakdown,
             calculate_hourly_breakdown,
             calculate_duration_tier_breakdown,
+            calculate_monthly_breakdown,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2545,6 +2546,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_day_of_week_breakdown([]), {})
         self.assertEqual(calculate_hourly_breakdown([]), {})
         self.assertEqual(calculate_duration_tier_breakdown([]), {})
+        self.assertEqual(calculate_monthly_breakdown([]), {})
 
         # 2. Mixed long and short trades
         trades = [
@@ -2604,18 +2606,31 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(dur_tiers["1h - 4h (Intraday)"]["wins"], 1)
         self.assertEqual(dur_tiers["4h - 24h (Swing)"]["losses"], 1)
 
-        # 6. MAR ratio in annualized metrics
+        # 6. Monthly calendar breakdown
+        monthly = calculate_monthly_breakdown(trades)
+        self.assertIn("2026-01", monthly)
+        self.assertEqual(monthly["2026-01"]["trades"], 4)
+        self.assertEqual(monthly["2026-01"]["wins"], 2)
+        self.assertEqual(monthly["2026-01"]["losses"], 2)
+        self.assertEqual(monthly["2026-01"]["win_rate_pct"], 50.0)
+        self.assertIn("max_drawdown_pct", monthly["2026-01"])
+
+        # 7. MAR ratio in annualized metrics
         ann_res = calculate_annualized_metrics(trades, total_return_pct=25.0, max_drawdown_pct=10.0, backtest_days=365.25)
         self.assertIn("mar_ratio", ann_res)
         self.assertAlmostEqual(ann_res["mar_ratio"], 2.5, places=1)
 
-        # 7. Expectancy in bps and win_loss_count_ratio
+        # 8. Expectancy in bps, quantiles, and win_loss_count_ratio
         exp_res = calculate_trade_expectancy(trades)
         self.assertIn("expectancy_bps", exp_res)
         self.assertIn("win_loss_count_ratio", exp_res)
         self.assertEqual(exp_res["win_loss_count_ratio"], 1.0)
+        self.assertIn("median_profit_pct", exp_res)
+        self.assertIn("p25_profit_pct", exp_res)
+        self.assertIn("p75_profit_pct", exp_res)
+        self.assertIn("iqr_profit_pct", exp_res)
 
-        # 8. Full json parsing and reports
+        # 9. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2630,6 +2645,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("day_of_week_performance", strat)
         self.assertIn("hourly_performance", strat)
         self.assertIn("duration_tier_performance", strat)
+        self.assertIn("monthly_performance", strat)
         self.assertIn("mar_ratio", strat)
         self.assertIn("expectancy_bps", strat)
 
@@ -2638,6 +2654,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("요일별(Day of Week) 거래 성과 분석", md)
         self.assertIn("포지션 보유 기간 구간별(Duration Tiers) 거래 성과", md)
         self.assertIn("시간대별(Hourly UTC) 거래 성과 분석", md)
+        self.assertIn("월별(Monthly Calendar) 거래 성과 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2645,12 +2662,15 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("mar_ratio", csv_str)
         self.assertIn("expectancy_bps", csv_str)
         self.assertIn("win_loss_count_ratio", csv_str)
+        self.assertIn("median_profit_pct", csv_str)
+        self.assertIn("iqr_profit_pct", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
         self.assertIn("요일별(Day of Week) 거래 성과", html_str)
         self.assertIn("포지션 보유 기간 구간별(Duration Tiers) 거래 성과", html_str)
         self.assertIn("시간대별(Hourly UTC) 거래 성과", html_str)
+        self.assertIn("월별(Monthly Calendar) 거래 성과", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:
