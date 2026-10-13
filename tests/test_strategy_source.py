@@ -2534,6 +2534,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_duration_tier_breakdown,
             calculate_monthly_breakdown,
             calculate_drawdown_episodes,
+            calculate_rolling_window_metrics,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2549,6 +2550,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_duration_tier_breakdown([]), {})
         self.assertEqual(calculate_monthly_breakdown([]), {})
         self.assertEqual(calculate_drawdown_episodes([])["total_episodes"], 0)
+        self.assertEqual(calculate_rolling_window_metrics([])["rolling_windows_count"], 0)
 
         # 2. Mixed long and short trades
         trades = [
@@ -2624,12 +2626,18 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("total_episodes", dd_eps)
         self.assertGreaterEqual(dd_eps["total_episodes"], 1)
 
-        # 8. MAR ratio in annualized metrics
+        # 8. Rolling window stability metrics
+        rolling_res = calculate_rolling_window_metrics(trades, window_size=2)
+        self.assertIn("rolling_sharpe_median", rolling_res)
+        self.assertIn("consistency_score_pct", rolling_res)
+        self.assertEqual(rolling_res["rolling_windows_count"], 3)
+
+        # 9. MAR ratio in annualized metrics
         ann_res = calculate_annualized_metrics(trades, total_return_pct=25.0, max_drawdown_pct=10.0, backtest_days=365.25)
         self.assertIn("mar_ratio", ann_res)
         self.assertAlmostEqual(ann_res["mar_ratio"], 2.5, places=1)
 
-        # 9. Expectancy in bps, quantiles, and win_loss_count_ratio
+        # 10. Expectancy in bps, quantiles, and win_loss_count_ratio
         exp_res = calculate_trade_expectancy(trades)
         self.assertIn("expectancy_bps", exp_res)
         self.assertIn("win_loss_count_ratio", exp_res)
@@ -2639,7 +2647,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("p75_profit_pct", exp_res)
         self.assertIn("iqr_profit_pct", exp_res)
 
-        # 10. Full json parsing and reports
+        # 11. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2658,6 +2666,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("drawdown_episodes", strat)
         self.assertIn("avg_recovery_trades", strat)
         self.assertIn("total_drawdown_episodes", strat)
+        self.assertIn("rolling_sharpe_median", strat)
+        self.assertIn("consistency_score_pct", strat)
         self.assertIn("mar_ratio", strat)
         self.assertIn("expectancy_bps", strat)
 
@@ -2668,6 +2678,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("시간대별(Hourly UTC) 거래 성과 분석", md)
         self.assertIn("월별(Monthly Calendar) 거래 성과 분석", md)
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", md)
+        self.assertIn("롤링 윈도우(Rolling Window) 성과 안정성 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2679,6 +2690,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("iqr_profit_pct", csv_str)
         self.assertIn("avg_recovery_trades", csv_str)
         self.assertIn("total_drawdown_episodes", csv_str)
+        self.assertIn("rolling_sharpe_median", csv_str)
+        self.assertIn("consistency_score_pct", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2687,6 +2700,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("시간대별(Hourly UTC) 거래 성과", html_str)
         self.assertIn("월별(Monthly Calendar) 거래 성과", html_str)
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", html_str)
+        self.assertIn("롤링 윈도우(Rolling Window) 샤프 및 성과 안정성", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:

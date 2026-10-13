@@ -1545,6 +1545,110 @@ def calculate_drawdown_episodes(
     }
 
 
+def calculate_rolling_window_metrics(
+    trades: list[dict[str, Any]],
+    window_size: int = 30,
+) -> dict[str, Any]:
+    """Calculate rolling window Sharpe, win rate, return, and stability metrics."""
+    if not trades or len(trades) < 3:
+        return {
+            "rolling_window_size": window_size,
+            "rolling_windows_count": 0,
+            "rolling_sharpe_min": 0.0,
+            "rolling_sharpe_median": 0.0,
+            "rolling_sharpe_max": 0.0,
+            "rolling_sharpe_std": 0.0,
+            "rolling_win_rate_min_pct": 0.0,
+            "rolling_win_rate_max_pct": 0.0,
+            "rolling_mdd_worst_pct": 0.0,
+            "pct_negative_sharpe_windows": 0.0,
+            "consistency_score_pct": 0.0,
+        }
+
+    actual_window = min(window_size, len(trades))
+    profits = [
+        _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        for t in trades
+    ]
+
+    sharpes = []
+    win_rates = []
+    returns = []
+    mdds = []
+
+    for i in range(len(profits) - actual_window + 1):
+        win_slice = profits[i : i + actual_window]
+        n_w = len(win_slice)
+        wins = sum(1 for p in win_slice if p > 1e-6)
+        wr = (wins / n_w) * 100.0
+        tot_ret = sum(win_slice) * 100.0
+
+        mean_p = sum(win_slice) / n_w if n_w > 0 else 0.0
+        if n_w > 1:
+            var_p = sum((x - mean_p) ** 2 for x in win_slice) / (n_w - 1)
+            std_p = math.sqrt(var_p) if var_p > 0 else 0.0
+        else:
+            std_p = 0.0
+
+        if std_p > 1e-9:
+            sh = mean_p / std_p
+        else:
+            sh = 999.0 if mean_p > 0 else (-999.0 if mean_p < 0 else 0.0)
+
+        eq = [1.0]
+        for p in win_slice:
+            eq.append(eq[-1] * (1.0 + p))
+        peak = eq[0]
+        max_dd = 0.0
+        for v in eq:
+            if v > peak:
+                peak = v
+            dd = (peak - v) / peak if peak > 0 else 0.0
+            if dd > max_dd:
+                max_dd = dd
+
+        sharpes.append(sh)
+        win_rates.append(wr)
+        returns.append(tot_ret)
+        mdds.append(max_dd * 100.0)
+
+    num_windows = len(sharpes)
+    finite_sharpes = [s for s in sharpes if math.isfinite(s) and abs(s) < 900.0]
+    neg_sharpes = sum(1 for s in sharpes if s < 0.0)
+    pos_returns = sum(1 for r in returns if r > 0.0)
+
+    sh_min = round(float(min(finite_sharpes)), 2) if finite_sharpes else 0.0
+    sh_med = round(_percentile(finite_sharpes, 50.0), 2) if finite_sharpes else 0.0
+    sh_max = round(float(max(finite_sharpes)), 2) if finite_sharpes else 0.0
+    if len(finite_sharpes) > 1:
+        mean_sh = sum(finite_sharpes) / len(finite_sharpes)
+        var_sh = sum((s - mean_sh) ** 2 for s in finite_sharpes) / (len(finite_sharpes) - 1)
+        sh_std = round(math.sqrt(var_sh), 2) if var_sh > 0 else 0.0
+    else:
+        sh_std = 0.0
+
+    wr_min = round(float(min(win_rates)), 1) if win_rates else 0.0
+    wr_max = round(float(max(win_rates)), 1) if win_rates else 0.0
+    mdd_worst = round(float(max(mdds)), 2) if mdds else 0.0
+
+    pct_neg_sh = round((neg_sharpes / num_windows) * 100.0, 1) if num_windows > 0 else 0.0
+    consistency = round((pos_returns / num_windows) * 100.0, 1) if num_windows > 0 else 0.0
+
+    return {
+        "rolling_window_size": actual_window,
+        "rolling_windows_count": num_windows,
+        "rolling_sharpe_min": sh_min,
+        "rolling_sharpe_median": sh_med,
+        "rolling_sharpe_max": sh_max,
+        "rolling_sharpe_std": sh_std,
+        "rolling_win_rate_min_pct": wr_min,
+        "rolling_win_rate_max_pct": wr_max,
+        "rolling_mdd_worst_pct": mdd_worst,
+        "pct_negative_sharpe_windows": pct_neg_sh,
+        "consistency_score_pct": consistency,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1589,6 +1693,7 @@ def parse_freqtrade_backtest_json(
         duration_breakdown = calculate_duration_tier_breakdown(trades, sort_by=sort_by)
         monthly_breakdown = calculate_monthly_breakdown(trades, sort_by=sort_by)
         dd_episodes = calculate_drawdown_episodes(trades)
+        rolling_metrics = calculate_rolling_window_metrics(trades, window_size=30)
 
         combined = {
             "strategy": strat_name,
@@ -1596,6 +1701,7 @@ def parse_freqtrade_backtest_json(
             **dd_metrics,
             **ann_metrics,
             **mc_metrics,
+            **rolling_metrics,
             "drawdown_episodes": dd_episodes,
             "avg_recovery_trades": dd_episodes["avg_recovery_trades"],
             "max_recovery_trades": dd_episodes["max_recovery_trades"],
@@ -1810,6 +1916,25 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{ep['total_trades']}회 | {status_str} |"
                 )
 
+    # Detailed Rolling Window performance stability tables
+    has_rolling = any(data.get("rolling_windows_count", 0) > 0 for data in analysis_results.values())
+    if has_rolling:
+        lines.append("")
+        lines.append("### 🔄 전략별 롤링 윈도우(Rolling Window) 성과 안정성 분석")
+        lines.append("| 전략명 | 윈도우 크기 | 윈도우 수 | 중위 샤프 | 샤프 범위(Min~Max) | 샤프 표준편차 | 수익 일관성 | 역성장 윈도우 비율 | 롤링 승률 범위 | 최악 롤링 MDD |")
+        lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+        for name, data in analysis_results.items():
+            if data.get("rolling_windows_count", 0) > 0:
+                lines.append(
+                    f"| **{name}** | {data.get('rolling_window_size', 30)}거래 | "
+                    f"{data.get('rolling_windows_count', 0)}회 | {data.get('rolling_sharpe_median', 0.0):.2f} | "
+                    f"{data.get('rolling_sharpe_min', 0.0):.2f} ~ {data.get('rolling_sharpe_max', 0.0):.2f} | "
+                    f"{data.get('rolling_sharpe_std', 0.0):.2f} | {data.get('consistency_score_pct', 0.0):.1f}% | "
+                    f"{data.get('pct_negative_sharpe_windows', 0.0):.1f}% | "
+                    f"{data.get('rolling_win_rate_min_pct', 0.0):.1f}% ~ {data.get('rolling_win_rate_max_pct', 0.0):.1f}% | "
+                    f"-{data.get('rolling_mdd_worst_pct', 0.0):.2f}% |"
+                )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -1939,6 +2064,17 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "total_drawdown_episodes",
         "worst_dd_depth_pct",
         "worst_dd_trades",
+        "rolling_window_size",
+        "rolling_windows_count",
+        "rolling_sharpe_median",
+        "rolling_sharpe_std",
+        "rolling_sharpe_min",
+        "rolling_sharpe_max",
+        "rolling_win_rate_min_pct",
+        "rolling_win_rate_max_pct",
+        "rolling_mdd_worst_pct",
+        "pct_negative_sharpe_windows",
+        "consistency_score_pct",
         "var_95_pct",
         "cvar_95_pct",
         "var_99_pct",
@@ -2477,6 +2613,28 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if pairs else ""
 
+        rolling_count = data.get("rolling_windows_count", 0)
+        rolling_table_html = f"""
+        <h3>🔄 롤링 윈도우(Rolling Window) 샤프 및 성과 안정성 ({data.get('rolling_window_size', 30)}거래)</h3>
+        <table>
+            <thead>
+                <tr><th>윈도우 수</th><th>중위 샤프</th><th>샤프 범위</th><th>샤프 변동성(Std)</th><th>수익 일관성</th><th>역성장 윈도우</th><th>롤링 승률</th><th>최악 롤링 MDD</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{rolling_count}회</td>
+                    <td><strong>{data.get('rolling_sharpe_median', 0.0):.2f}</strong></td>
+                    <td>{data.get('rolling_sharpe_min', 0.0):.2f} ~ {data.get('rolling_sharpe_max', 0.0):.2f}</td>
+                    <td>{data.get('rolling_sharpe_std', 0.0):.2f}</td>
+                    <td class="{'positive' if data.get('consistency_score_pct', 0.0) >= 50 else 'negative'}">{data.get('consistency_score_pct', 0.0):.1f}%</td>
+                    <td class="{'negative' if data.get('pct_negative_sharpe_windows', 0.0) > 30 else 'positive'}">{data.get('pct_negative_sharpe_windows', 0.0):.1f}%</td>
+                    <td>{data.get('rolling_win_rate_min_pct', 0.0):.1f}% ~ {data.get('rolling_win_rate_max_pct', 0.0):.1f}%</td>
+                    <td class="negative">-{data.get('rolling_mdd_worst_pct', 0.0):.2f}%</td>
+                </tr>
+            </tbody>
+        </table>
+        """ if rolling_count > 0 else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -2486,6 +2644,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {tier_table_html}
             {hourly_table_html}
             {monthly_table_html}
+            {rolling_table_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}
