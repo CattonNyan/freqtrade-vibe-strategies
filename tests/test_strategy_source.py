@@ -2532,6 +2532,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_day_of_week_breakdown,
             calculate_hourly_breakdown,
             calculate_duration_tier_breakdown,
+            calculate_stake_amount_tier_breakdown,
             calculate_monthly_breakdown,
             calculate_drawdown_episodes,
             calculate_rolling_window_metrics,
@@ -2548,16 +2549,18 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_day_of_week_breakdown([]), {})
         self.assertEqual(calculate_hourly_breakdown([]), {})
         self.assertEqual(calculate_duration_tier_breakdown([]), {})
+        self.assertEqual(calculate_stake_amount_tier_breakdown([]), {})
+        self.assertEqual(calculate_stake_amount_tier_breakdown([{"profit_ratio": 0.01}]), {})
         self.assertEqual(calculate_monthly_breakdown([]), {})
         self.assertEqual(calculate_drawdown_episodes([])["total_episodes"], 0)
         self.assertEqual(calculate_rolling_window_metrics([])["rolling_windows_count"], 0)
 
         # 2. Mixed long and short trades
         trades = [
-            {"pair": "BTC/USDT", "profit_ratio": 0.05, "trade_duration": 10, "is_short": False, "open_date": "2026-01-05 10:00:00+00:00"},  # Monday, 10:00, < 15m
-            {"pair": "ETH/USDT", "profit_ratio": -0.02, "trade_duration": 40, "is_short": False, "open_date": "2026-01-05 14:00:00+00:00"},  # Monday, 14:00, 15m-1h
-            {"pair": "SOL/USDT", "profit_ratio": 0.08, "trade_duration": 120, "trade_direction": "short", "open_date": "2026-01-09 08:00:00+00:00"},  # Friday, 08:00, 1h-4h
-            {"pair": "DOGE/USDT", "profit_ratio": -0.03, "trade_duration": 300, "direction": "short", "open_date": "2026-01-10 12:00:00+00:00"},  # Saturday, 12:00, 4h-24h
+            {"pair": "BTC/USDT", "profit_ratio": 0.05, "trade_duration": 10, "is_short": False, "open_date": "2026-01-05 10:00:00+00:00", "stake_amount": 100.0},  # Monday, 10:00, < 15m
+            {"pair": "ETH/USDT", "profit_ratio": -0.02, "trade_duration": 40, "is_short": False, "open_date": "2026-01-05 14:00:00+00:00", "stake_amount": 250.0},  # Monday, 14:00, 15m-1h
+            {"pair": "SOL/USDT", "profit_ratio": 0.08, "trade_duration": 120, "trade_direction": "short", "open_date": "2026-01-09 08:00:00+00:00", "stake_amount": 500.0},  # Friday, 08:00, 1h-4h
+            {"pair": "DOGE/USDT", "profit_ratio": -0.03, "trade_duration": 300, "direction": "short", "open_date": "2026-01-10 12:00:00+00:00", "stake_amount": 1000.0},  # Saturday, 12:00, 4h-24h
         ]
         breakdown = calculate_direction_breakdown(trades)
         self.assertIn("long", breakdown)
@@ -2647,7 +2650,23 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("p75_profit_pct", exp_res)
         self.assertIn("iqr_profit_pct", exp_res)
 
-        # 11. Full json parsing and reports
+        # 11. Stake amount tier breakdown
+        fixed_stk = calculate_stake_amount_tier_breakdown([
+            {"profit_ratio": 0.05, "stake_amount": 100.0},
+            {"profit_ratio": -0.02, "stake_amount": 100.0},
+        ])
+        self.assertIn("Fixed ($100)", fixed_stk)
+        self.assertEqual(fixed_stk["Fixed ($100)"]["trades"], 2)
+        self.assertEqual(fixed_stk["Fixed ($100)"]["win_rate_pct"], 50.0)
+        self.assertEqual(fixed_stk["Fixed ($100)"]["total_stake"], 200.0)
+        self.assertEqual(fixed_stk["Fixed ($100)"]["volume_share_pct"], 100.0)
+
+        stk_tiers = calculate_stake_amount_tier_breakdown(trades)
+        self.assertGreaterEqual(len(stk_tiers), 1)
+        tot_vol_share = sum(s["volume_share_pct"] for s in stk_tiers.values())
+        self.assertAlmostEqual(tot_vol_share, 100.0, places=0)
+
+        # 12. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2662,6 +2681,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("day_of_week_performance", strat)
         self.assertIn("hourly_performance", strat)
         self.assertIn("duration_tier_performance", strat)
+        self.assertIn("stake_tier_performance", strat)
         self.assertIn("monthly_performance", strat)
         self.assertIn("drawdown_episodes", strat)
         self.assertIn("avg_recovery_trades", strat)
@@ -2675,6 +2695,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
         self.assertIn("요일별(Day of Week) 거래 성과 분석", md)
         self.assertIn("포지션 보유 기간 구간별(Duration Tiers) 거래 성과", md)
+        self.assertIn("포지션 진입 규모별(Stake Amount Tiers) 거래 성과", md)
         self.assertIn("시간대별(Hourly UTC) 거래 성과 분석", md)
         self.assertIn("월별(Monthly Calendar) 거래 성과 분석", md)
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", md)
@@ -2697,6 +2718,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
         self.assertIn("요일별(Day of Week) 거래 성과", html_str)
         self.assertIn("포지션 보유 기간 구간별(Duration Tiers) 거래 성과", html_str)
+        self.assertIn("포지션 진입 규모별(Stake Amount Tiers) 거래 성과", html_str)
         self.assertIn("시간대별(Hourly UTC) 거래 성과", html_str)
         self.assertIn("월별(Monthly Calendar) 거래 성과", html_str)
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", html_str)

@@ -1649,6 +1649,168 @@ def calculate_rolling_window_metrics(
     }
 
 
+def calculate_stake_amount_tier_breakdown(
+    trades: list[dict[str, Any]],
+    sort_by: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Segment trade performance by position stake amount (capital size) tiers.
+
+    Extracts stake amount per trade using keys: 'stake_amount', 'cost', 'stake',
+    'position_size', or ('open_rate' * 'amount').
+    Groups trades into size categories (e.g., Micro, Low, Mid, Large) based on
+    quantiles or distinct values.
+
+    Computes win rate, total profit %, average profit %, total stake volume,
+    profit factor, win/loss ratio, trade expectancy in bps, max win %, max loss %,
+    and share of total volume (%).
+    """
+    if not trades:
+        return {}
+
+    def _extract_stake(t: dict[str, Any]) -> float:
+        for k in ("stake_amount", "cost", "stake", "position_size"):
+            if k in t and t[k] is not None:
+                val = _safe_float(t[k], -1.0)
+                if val > 0:
+                    return val
+        open_r = _safe_float(t.get("open_rate", 0.0))
+        amt = _safe_float(t.get("amount", 0.0))
+        if open_r > 0 and amt > 0:
+            return open_r * amt
+        return 0.0
+
+    parsed_trades: list[tuple[float, dict[str, Any]]] = []
+    for t in trades:
+        s = _extract_stake(t)
+        if s > 0:
+            parsed_trades.append((s, t))
+
+    if not parsed_trades:
+        return {}
+
+    stakes = [item[0] for item in parsed_trades]
+    grand_total_stake = sum(stakes)
+    unique_stakes = sorted(list(set(stakes)))
+
+    groups: dict[str, list[tuple[float, dict[str, Any]]]] = {}
+
+    if len(unique_stakes) == 1:
+        tier_label = f"Fixed (${unique_stakes[0]:g})"
+        groups[tier_label] = parsed_trades
+    elif len(unique_stakes) <= 3:
+        for s_val in unique_stakes:
+            lbl = f"Tier (${s_val:g})"
+            groups[lbl] = [item for item in parsed_trades if item[0] == s_val]
+    else:
+        q25 = _percentile(stakes, 25.0)
+        q50 = _percentile(stakes, 50.0)
+        q75 = _percentile(stakes, 75.0)
+
+        raw_cutoffs = sorted(list(set([min(stakes), q25, q50, q75, max(stakes)])))
+        if len(raw_cutoffs) == 5:
+            tier_names = [
+                f"Tier 1 Micro (<= ${q25:g})",
+                f"Tier 2 Low (${q25:g} - ${q50:g})",
+                f"Tier 3 Mid (${q50:g} - ${q75:g})",
+                f"Tier 4 Large (> ${q75:g})",
+            ]
+            for name in tier_names:
+                groups[name] = []
+            for s, t in parsed_trades:
+                if s <= q25:
+                    groups[tier_names[0]].append((s, t))
+                elif s <= q50:
+                    groups[tier_names[1]].append((s, t))
+                elif s <= q75:
+                    groups[tier_names[2]].append((s, t))
+                else:
+                    groups[tier_names[3]].append((s, t))
+        else:
+            for i in range(len(raw_cutoffs) - 1):
+                low, high = raw_cutoffs[i], raw_cutoffs[i + 1]
+                if i == 0:
+                    lbl = f"Tier {i+1} (<= ${high:g})"
+                    bin_trades = [item for item in parsed_trades if item[0] <= high]
+                elif i == len(raw_cutoffs) - 2:
+                    lbl = f"Tier {i+1} (> ${low:g})"
+                    bin_trades = [item for item in parsed_trades if item[0] > low]
+                else:
+                    lbl = f"Tier {i+1} (${low:g} - ${high:g})"
+                    bin_trades = [item for item in parsed_trades if low < item[0] <= high]
+                groups[lbl] = bin_trades
+
+    breakdown: dict[str, dict[str, Any]] = {}
+    for tier_label, item_list in groups.items():
+        count = len(item_list)
+        if count == 0:
+            continue
+
+        wins: list[float] = []
+        losses: list[float] = []
+        profits: list[float] = []
+        tier_stakes = [item[0] for item in item_list]
+
+        for s, t in item_list:
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            profits.append(p)
+            if p > 1e-6:
+                wins.append(p * 100.0)
+            elif p < -1e-6:
+                losses.append(abs(p * 100.0))
+
+        win_count = len(wins)
+        loss_count = len(losses)
+        win_rate = (win_count / count) * 100.0 if count > 0 else 0.0
+        total_profit_pct = sum(profits) * 100.0
+        avg_profit_pct = (total_profit_pct / count) if count > 0 else 0.0
+        tot_stake = sum(tier_stakes)
+        avg_stake = tot_stake / count if count > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+        avg_win = (sum(wins) / win_count) if win_count > 0 else 0.0
+        avg_loss = (sum(losses) / loss_count) if loss_count > 0 else 0.0
+        p_win = win_count / count if count > 0 else 0.0
+        p_loss = loss_count / count if count > 0 else 0.0
+        exp_pct = (p_win * avg_win) - (p_loss * avg_loss)
+        wl_ratio = (avg_win / avg_loss) if avg_loss > 0 else (999.0 if avg_win > 0 else 0.0)
+        vol_share = (tot_stake / grand_total_stake) * 100.0 if grand_total_stake > 0 else 0.0
+
+        breakdown[tier_label] = {
+            "trades": count,
+            "wins": win_count,
+            "losses": loss_count,
+            "win_rate_pct": round(win_rate, 2),
+            "total_profit_pct": round(total_profit_pct, 2),
+            "avg_profit_pct": round(avg_profit_pct, 2),
+            "total_stake": round(tot_stake, 2),
+            "avg_stake": round(avg_stake, 2),
+            "min_stake": round(min(tier_stakes), 2) if tier_stakes else 0.0,
+            "max_stake": round(max(tier_stakes), 2) if tier_stakes else 0.0,
+            "profit_factor": round(pf, 2),
+            "win_loss_ratio": round(wl_ratio, 2),
+            "expectancy_bps": round(exp_pct * 100.0, 1),
+            "max_win_pct": round(max(wins), 2) if wins else 0.0,
+            "max_loss_pct": round(max(losses), 2) if losses else 0.0,
+            "volume_share_pct": round(vol_share, 1),
+        }
+
+    sort_map = {
+        "trades": "trades",
+        "profit": "total_profit_pct",
+        "total_profit_pct": "total_profit_pct",
+        "win_rate": "win_rate_pct",
+        "win_rate_pct": "win_rate_pct",
+        "pf": "profit_factor",
+        "profit_factor": "profit_factor",
+        "stake": "total_stake",
+        "total_stake": "total_stake",
+    }
+    actual_sort = sort_map.get(sort_by, sort_by) if sort_by else None
+    if actual_sort and breakdown:
+        breakdown = dict(sorted(breakdown.items(), key=lambda item: item[1].get(actual_sort, 0), reverse=True))
+
+    return breakdown
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1691,6 +1853,7 @@ def parse_freqtrade_backtest_json(
         dow_breakdown = calculate_day_of_week_breakdown(trades, sort_by=sort_by)
         hourly_breakdown = calculate_hourly_breakdown(trades, sort_by=sort_by)
         duration_breakdown = calculate_duration_tier_breakdown(trades, sort_by=sort_by)
+        stake_tier_breakdown = calculate_stake_amount_tier_breakdown(trades, sort_by=sort_by)
         monthly_breakdown = calculate_monthly_breakdown(trades, sort_by=sort_by)
         dd_episodes = calculate_drawdown_episodes(trades)
         rolling_metrics = calculate_rolling_window_metrics(trades, window_size=30)
@@ -1714,6 +1877,7 @@ def parse_freqtrade_backtest_json(
             "day_of_week_performance": dow_breakdown,
             "hourly_performance": hourly_breakdown,
             "duration_tier_performance": duration_breakdown,
+            "stake_tier_performance": stake_tier_breakdown,
             "monthly_performance": monthly_breakdown,
         }
         strategy_results[strat_name] = combined
@@ -1857,6 +2021,25 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
                     f"{s['profit_factor']:.2f} | {s.get('expectancy_bps', 0.0):+.1f}bp | "
                     f"{s.get('win_loss_ratio', 0.0):.2f} | {extrema_str} | {s['avg_duration_min']:.1f}분 |"
+                )
+
+    # Detailed Stake Amount Tier performance tables
+    for name, data in analysis_results.items():
+        stake_tiers = data.get("stake_tier_performance", {})
+        if stake_tiers:
+            lines.append("")
+            lines.append(f"### 💰 전략 `{name}` 포지션 진입 규모별(Stake Amount Tiers) 거래 성과")
+            lines.append("| 베팅 규모 구간 | 거래수 | 승률 | 총 수익률 | 평균 수익률 | 손익비(P.F.) | 기대값(bps) | 총 투입 자본 | 자본 비중(%) | 최대 이익/손실 |")
+            lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+            for tier, s in stake_tiers.items():
+                max_w = s.get("max_win_pct", 0.0)
+                max_l = s.get("max_loss_pct", 0.0)
+                extrema_str = f"+{max_w:.1f}%/-{max_l:.1f}%"
+                lines.append(
+                    f"| `{tier}` | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                    f"{s['total_profit_pct']:+.2f}% | {s['avg_profit_pct']:+.2f}% | "
+                    f"{s['profit_factor']:.2f} | {s.get('expectancy_bps', 0.0):+.1f}bp | "
+                    f"${s.get('total_stake', 0.0):,.2f} | {s.get('volume_share_pct', 0.0):.1f}% | {extrema_str} |"
                 )
 
     # Detailed Hourly UTC performance tables
@@ -2465,6 +2648,37 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if tiers else ""
 
+        stake_tiers = data.get("stake_tier_performance", {})
+        stake_rows = []
+        for tier, s in stake_tiers.items():
+            tot_p = s.get('total_profit_pct', 0.0)
+            avg_p = s.get('avg_profit_pct', 0.0)
+            exp_bps = s.get('expectancy_bps', 0.0)
+            stake_rows.append(f"""
+            <tr>
+                <td><strong>{tier}</strong></td>
+                <td>{s.get('trades', 0)}</td>
+                <td>{s.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td class="{('positive' if avg_p >= 0 else 'negative')}">{avg_p:+.2f}%</td>
+                <td>{s.get('profit_factor', 0.0):.2f}</td>
+                <td class="{('positive' if exp_bps >= 0 else 'negative')}">{exp_bps:+.1f}bp</td>
+                <td>${s.get('total_stake', 0.0):,.2f}</td>
+                <td>{s.get('volume_share_pct', 0.0):.1f}%</td>
+            </tr>
+            """)
+        stake_table_html = f"""
+        <h3>💰 포지션 진입 규모별(Stake Amount Tiers) 거래 성과</h3>
+        <table>
+            <thead>
+                <tr><th>베팅 규모 구간</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>평균 수익률</th><th>손익비</th><th>기대값</th><th>총 투입 자본</th><th>자본 비중</th></tr>
+            </thead>
+            <tbody>
+                {''.join(stake_rows) if stake_rows else '<tr><td colspan="9">베팅 규모 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if stake_tiers else ""
+
         hours = data.get("hourly_performance", {})
         hour_rows = []
         for hour, s in hours.items():
@@ -2642,6 +2856,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {dir_table_html}
             {dow_table_html}
             {tier_table_html}
+            {stake_table_html}
             {hourly_table_html}
             {monthly_table_html}
             {rolling_table_html}
