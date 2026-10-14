@@ -1898,6 +1898,123 @@ def simulate_slippage_fee_sensitivity(
     }
 
 
+def calculate_trade_profit_concentration(
+    trades: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Analyze trade profit concentration, Herfindahl index (HHI), Gini inequality, and outlier overfitting.
+
+    Evaluates whether strategy alpha is robustly and organically distributed across many trades
+    or deceptively driven by a few lucky outlier mega-winners.
+    """
+    if not trades:
+        return {
+            "top_1_profit_share_pct": 0.0,
+            "top_3_profit_share_pct": 0.0,
+            "top_5_profit_share_pct": 0.0,
+            "top_10pct_profit_share_pct": 0.0,
+            "herfindahl_index": 0.0,
+            "gini_coefficient": 0.0,
+            "profit_without_top_1_pct": 0.0,
+            "profit_without_top_3_pct": 0.0,
+            "pf_without_top_3": 0.0,
+            "is_profitable_without_top_3": False,
+            "trimmed_profit_decay_pct": 0.0,
+            "robustness_rating": "N/A",
+        }
+
+    profits = [
+        _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        for t in trades
+    ]
+    if not profits:
+        return {
+            "top_1_profit_share_pct": 0.0,
+            "top_3_profit_share_pct": 0.0,
+            "top_5_profit_share_pct": 0.0,
+            "top_10pct_profit_share_pct": 0.0,
+            "herfindahl_index": 0.0,
+            "gini_coefficient": 0.0,
+            "profit_without_top_1_pct": 0.0,
+            "profit_without_top_3_pct": 0.0,
+            "pf_without_top_3": 0.0,
+            "is_profitable_without_top_3": False,
+            "trimmed_profit_decay_pct": 0.0,
+            "robustness_rating": "N/A",
+        }
+
+    total_net_return = sum(profits) * 100.0
+    winning_profits = sorted([p for p in profits if p > 1e-6], reverse=True)
+    losing_profits = [abs(p) for p in profits if p < -1e-6]
+    total_win_profit = sum(winning_profits)
+
+    if total_win_profit > 1e-9:
+        top_1_share = (winning_profits[0] / total_win_profit) * 100.0
+        top_3_share = (sum(winning_profits[:3]) / total_win_profit) * 100.0
+        top_5_share = (sum(winning_profits[:5]) / total_win_profit) * 100.0
+        k_10pct = max(1, math.ceil(len(winning_profits) * 0.10))
+        top_10pct_share = (sum(winning_profits[:k_10pct]) / total_win_profit) * 100.0
+        hhi = sum(((p / total_win_profit) ** 2) for p in winning_profits) * 10000.0
+
+        # Gini coefficient of winning trades (0.0 = uniform, 1.0 = single trade)
+        m = len(winning_profits)
+        if m > 1:
+            sorted_asc = sorted(winning_profits)
+            cum_rank_sum = sum((i + 1) * w for i, w in enumerate(sorted_asc))
+            gini = (2.0 * cum_rank_sum) / (m * total_win_profit) - ((m + 1.0) / m)
+            gini = max(0.0, min(1.0, gini))
+        else:
+            gini = 1.0 if m == 1 else 0.0
+    else:
+        top_1_share = 0.0
+        top_3_share = 0.0
+        top_5_share = 0.0
+        top_10pct_share = 0.0
+        hhi = 0.0
+        gini = 0.0
+
+    sorted_desc = sorted(profits, reverse=True)
+    without_top_1 = sorted_desc[1:] if len(sorted_desc) > 1 else []
+    without_top_3 = sorted_desc[3:] if len(sorted_desc) > 3 else []
+
+    profit_no_top_1 = sum(without_top_1) * 100.0
+    profit_no_top_3 = sum(without_top_3) * 100.0
+    wins_no_top_3 = sum(p for p in without_top_3 if p > 1e-6)
+    loss_no_top_3 = sum(abs(p) for p in without_top_3 if p < -1e-6)
+    pf_no_top_3 = (wins_no_top_3 / loss_no_top_3) if loss_no_top_3 > 0 else (999.0 if wins_no_top_3 > 0 else 0.0)
+    is_profitable_no_top_3 = profit_no_top_3 > 0.0
+
+    if total_net_return > 1e-6:
+        decay_pct = max(0.0, ((total_net_return - profit_no_top_3) / total_net_return) * 100.0)
+    else:
+        decay_pct = 100.0 if profit_no_top_3 <= 0 else 0.0
+
+    if total_win_profit <= 1e-6 or total_net_return <= 0.0:
+        rating = "Unprofitable (No Positive Edge)"
+    elif not is_profitable_no_top_3:
+        rating = "Severe Outlier Overfitting (Fragile)"
+    elif top_3_share > 60.0 or pf_no_top_3 < 1.10 or hhi > 2500.0:
+        rating = "High Concentration Risk (Outlier Dependent)"
+    elif top_3_share > 35.0 or pf_no_top_3 < 1.25:
+        rating = "Moderate Concentration (Acceptable)"
+    else:
+        rating = "Robust Distribution (Institutional Grade)"
+
+    return {
+        "top_1_profit_share_pct": round(top_1_share, 2),
+        "top_3_profit_share_pct": round(top_3_share, 2),
+        "top_5_profit_share_pct": round(top_5_share, 2),
+        "top_10pct_profit_share_pct": round(top_10pct_share, 2),
+        "herfindahl_index": round(hhi, 1),
+        "gini_coefficient": round(gini, 3),
+        "profit_without_top_1_pct": round(profit_no_top_1, 2),
+        "profit_without_top_3_pct": round(profit_no_top_3, 2),
+        "pf_without_top_3": round(pf_no_top_3, 2),
+        "is_profitable_without_top_3": is_profitable_no_top_3,
+        "trimmed_profit_decay_pct": round(decay_pct, 1),
+        "robustness_rating": rating,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1945,6 +2062,7 @@ def parse_freqtrade_backtest_json(
         dd_episodes = calculate_drawdown_episodes(trades)
         rolling_metrics = calculate_rolling_window_metrics(trades, window_size=30)
         slippage_sensitivity = simulate_slippage_fee_sensitivity(trades)
+        profit_concentration = calculate_trade_profit_concentration(trades)
 
         combined = {
             "strategy": strat_name,
@@ -1970,6 +2088,19 @@ def parse_freqtrade_backtest_json(
             "slippage_sensitivity": slippage_sensitivity,
             "breakeven_friction_bps": slippage_sensitivity["breakeven_friction_bps"],
             "slippage_resilience_rating": slippage_sensitivity["resilience_rating"],
+            "profit_concentration": profit_concentration,
+            "top_1_profit_share_pct": profit_concentration["top_1_profit_share_pct"],
+            "top_3_profit_share_pct": profit_concentration["top_3_profit_share_pct"],
+            "top_5_profit_share_pct": profit_concentration["top_5_profit_share_pct"],
+            "top_10pct_profit_share_pct": profit_concentration["top_10pct_profit_share_pct"],
+            "herfindahl_index": profit_concentration["herfindahl_index"],
+            "gini_coefficient": profit_concentration["gini_coefficient"],
+            "profit_without_top_1_pct": profit_concentration["profit_without_top_1_pct"],
+            "profit_without_top_3_pct": profit_concentration["profit_without_top_3_pct"],
+            "pf_without_top_3": profit_concentration["pf_without_top_3"],
+            "is_profitable_without_top_3": profit_concentration["is_profitable_without_top_3"],
+            "trimmed_profit_decay_pct": profit_concentration["trimmed_profit_decay_pct"],
+            "concentration_robustness_rating": profit_concentration["robustness_rating"],
         }
         strategy_results[strat_name] = combined
 
@@ -2228,6 +2359,28 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"{row['expectancy_bps']:+.1f}bp | -{row['return_decay_pct']:.1f}% |"
                 )
 
+    # Detailed Profit concentration and outlier overfitting tables
+    for name, data in analysis_results.items():
+        conc = data.get("profit_concentration", {})
+        if conc and conc.get("robustness_rating") != "N/A":
+            rating = conc.get("robustness_rating", "N/A")
+            is_prof_str = "✅ 유지" if conc.get("is_profitable_without_top_3") else "❌ 적자 전락"
+            lines.append("")
+            lines.append(f"### 🎯 전략 `{name}` 수익 집중도 및 이상치 의존성(Outlier Robustness) 분석")
+            lines.append(f"- **이상치 견고성 등급**: `{rating}` (상위 3개 거래 제외 시: {is_prof_str})")
+            lines.append("| 지표 항목 | 산출값 | 평가 및 의미 |")
+            lines.append("| :--- | :---: | :--- |")
+            lines.append(f"| **최대 단일 거래 수익 비중 (Top 1)** | `{conc.get('top_1_profit_share_pct', 0.0):.1f}%` | 1위 거래가 총 수익에 기여한 비중 |")
+            lines.append(f"| **상위 3개 거래 수익 비중 (Top 3)** | `{conc.get('top_3_profit_share_pct', 0.0):.1f}%` | 상위 3개 거래의 누적 수익 점유율 |")
+            lines.append(f"| **상위 5개 거래 수익 비중 (Top 5)** | `{conc.get('top_5_profit_share_pct', 0.0):.1f}%` | 상위 5개 거래의 누적 수익 점유율 |")
+            lines.append(f"| **상위 10% 거래 수익 비중 (Top 10%)** | `{conc.get('top_10pct_profit_share_pct', 0.0):.1f}%` | 상위 10% 거래들의 수익 집중도 |")
+            lines.append(f"| **수익 허핀달 지수 (HHI)** | `{conc.get('herfindahl_index', 0.0):.1f}` | 수익 집중도 (HHI < 2500: 정상 분산) |")
+            lines.append(f"| **지니 계수 (Gini Coefficient)** | `{conc.get('gini_coefficient', 0.0):.3f}` | 거래 간 수익 불평등도 (0.0: 완전 균등 ~ 1.0: 독점) |")
+            lines.append(f"| **1위 거래 제외 수익률** | `{conc.get('profit_without_top_1_pct', 0.0):+.2f}%` | 최고 대박 거래를 놓쳤을 때의 순수익률 |")
+            lines.append(f"| **상위 3개 제외 수익률 (Trimmed)** | `{conc.get('profit_without_top_3_pct', 0.0):+.2f}%` | 상위 3개 극단치 제외 시 실질 순수익률 |")
+            lines.append(f"| **상위 3개 제외 손익비 (Trimmed P.F.)** | `{conc.get('pf_without_top_3', 0.0):.2f}` | 상위 3개 극단치 제외 시 기초 체력 손익비 |")
+            lines.append(f"| **상위 3개 제거 수익 감쇄율** | `-{conc.get('trimmed_profit_decay_pct', 0.0):.1f}%` | 상위 3개 이상치 제거 시 수익 감소 비율 |")
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -2247,6 +2400,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
+    lines.append("- **수익 집중도 및 이상치 의존성 (Profit Concentration & Outlier Robustness)**: 소수의 대박(Outlier) 거래가 전체 성과를 왜곡했는지 검증하는 분석입니다. 상위 3개 거래를 완전히 제거했을 때도 전략이 여전히 흑자를 유지하는지(Trimmed Net Profit & PF), 그리고 수익 허핀달 지수(HHI)와 지니 계수(Gini)를 측정하여 지속 가능한 유기적 알파인지 과최적화된 요행인지를 엄격히 판별합니다.")
     lines.append("- **시스템 품질 지수 (System Quality Number / SQN, Van Tharp)**: sqrt(N) * (평균 수익률 / 수익률 표준편차). 거래 전략의 통계적 우수성을 종합 평가하는 지표로, 2.0 이상이면 평균, 3.0 이상이면 우수(Excellent), 5.0 이상이면 탁월(Superb), 7.0 이상이면 성배(Holy Grail) 등급으로 분류됩니다.")
     lines.append("- **K-비율 (K-Ratio, Lars Kestner)**: 누적 수익 곡선의 선형 추세 기울기를 표준오차와 sqrt(T)로 정규화한 지표로, 수익 곡선이 노이즈 없이 얼마나 일관되게 우상향하는지 측정합니다.")
     lines.append("- **테일 비율 (Tail Ratio)**: 95분위수 수익률 / 5분위수 손실률 절대값 (p95 / |p05|). 1.0 초과 시 우측 꼬리(수익)가 좌측 꼬리(손실)보다 비대칭적으로 우세함을 의미합니다.")
@@ -2385,6 +2539,18 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "mc_prob_mdd_exceed_pct",
         "breakeven_friction_bps",
         "slippage_resilience_rating",
+        "top_1_profit_share_pct",
+        "top_3_profit_share_pct",
+        "top_5_profit_share_pct",
+        "top_10pct_profit_share_pct",
+        "herfindahl_index",
+        "gini_coefficient",
+        "profit_without_top_1_pct",
+        "profit_without_top_3_pct",
+        "pf_without_top_3",
+        "is_profitable_without_top_3",
+        "trimmed_profit_decay_pct",
+        "concentration_robustness_rating",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -2991,6 +3157,27 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if curve else ""
 
+        conc = data.get("profit_concentration", {})
+        conc_table_html = f"""
+        <h3>🎯 수익 집중도 및 이상치 의존성 (Outlier Robustness & Concentration)</h3>
+        <p><strong>견고성 등급:</strong> <span class="badge {('badge-green' if 'Robust' in conc.get('robustness_rating', '') else ('badge-yellow' if 'Moderate' in conc.get('robustness_rating', '') else 'badge-red'))}">{conc.get('robustness_rating', 'N/A')}</span> | <strong>상위 3개 제외 유지 여부:</strong> {('✅ 흑자 유지' if conc.get('is_profitable_without_top_3') else '❌ 적자 전락')}</p>
+        <table>
+            <thead>
+                <tr><th>지표 항목</th><th>산출값</th><th>평가 및 해석</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Top 1 거래 수익 비중</strong></td><td>{conc.get('top_1_profit_share_pct', 0.0):.1f}%</td><td>최대 단일 대박 거래 점유율</td></tr>
+                <tr><td><strong>Top 3 거래 수익 비중</strong></td><td>{conc.get('top_3_profit_share_pct', 0.0):.1f}%</td><td>상위 3개 극단치 수익 점유율</td></tr>
+                <tr><td><strong>Top 10% 거래 수익 비중</strong></td><td>{conc.get('top_10pct_profit_share_pct', 0.0):.1f}%</td><td>상위 10% 거래들의 수익 집중도</td></tr>
+                <tr><td><strong>수익 허핀달 지수 (HHI)</strong></td><td>{conc.get('herfindahl_index', 0.0):.1f}</td><td>수익 집중 지수 (&lt; 2500 분산 우수)</td></tr>
+                <tr><td><strong>지니 계수 (Gini)</strong></td><td>{conc.get('gini_coefficient', 0.0):.3f}</td><td>수익 불평등도 (0.0: 균등 ~ 1.0: 독점)</td></tr>
+                <tr><td><strong>상위 3개 제외 순수익률 (Trimmed)</strong></td><td class="{('positive' if conc.get('profit_without_top_3_pct', 0.0) >= 0 else 'negative')}">{conc.get('profit_without_top_3_pct', 0.0):+.2f}%</td><td>상위 3개 제외 시 잔여 순수익률</td></tr>
+                <tr><td><strong>상위 3개 제외 손익비 (Trimmed PF)</strong></td><td>{conc.get('pf_without_top_3', 0.0):.2f}</td><td>상위 3개 제외 시 기초 손익비</td></tr>
+                <tr><td><strong>상위 3개 제거 수익 감쇄율</strong></td><td class="negative">-{conc.get('trimmed_profit_decay_pct', 0.0):.1f}%</td><td>극단치 제거 시 수익 감소폭</td></tr>
+            </tbody>
+        </table>
+        """ if conc and conc.get("robustness_rating") != "N/A" else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -3003,6 +3190,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {monthly_table_html}
             {rolling_table_html}
             {sens_table_html}
+            {conc_table_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}

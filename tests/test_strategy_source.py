@@ -2537,6 +2537,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_drawdown_episodes,
             calculate_rolling_window_metrics,
             simulate_slippage_fee_sensitivity,
+            calculate_trade_profit_concentration,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2556,6 +2557,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_drawdown_episodes([])["total_episodes"], 0)
         self.assertEqual(calculate_rolling_window_metrics([])["rolling_windows_count"], 0)
         self.assertEqual(simulate_slippage_fee_sensitivity([])["breakeven_friction_bps"], 0.0)
+        self.assertEqual(calculate_trade_profit_concentration([])["robustness_rating"], "N/A")
 
         # 2. Mixed long and short trades
         trades = [
@@ -2678,7 +2680,32 @@ class StrategySourceTests(unittest.TestCase):
         curve = sens_res["sensitivity_curve"]
         self.assertGreaterEqual(curve[0]["total_return_pct"], curve[-1]["total_return_pct"])
 
-        # 13. Full json parsing and reports
+        # 13. Trade profit concentration & outlier robustness
+        conc_res = calculate_trade_profit_concentration(trades)
+        self.assertIn("top_1_profit_share_pct", conc_res)
+        self.assertIn("top_3_profit_share_pct", conc_res)
+        self.assertIn("herfindahl_index", conc_res)
+        self.assertIn("gini_coefficient", conc_res)
+        self.assertIn("profit_without_top_3_pct", conc_res)
+        self.assertIn("pf_without_top_3", conc_res)
+        self.assertIn("is_profitable_without_top_3", conc_res)
+        self.assertIn("robustness_rating", conc_res)
+        self.assertGreater(conc_res["top_1_profit_share_pct"], 0.0)
+        self.assertGreater(conc_res["top_3_profit_share_pct"], 0.0)
+        self.assertGreaterEqual(conc_res["top_3_profit_share_pct"], conc_res["top_1_profit_share_pct"])
+
+        # Outlier overfitting case: 1 massive win + small losers
+        outlier_trades = [
+            {"profit_ratio": 0.80},
+            {"profit_ratio": -0.05},
+            {"profit_ratio": -0.04},
+            {"profit_ratio": -0.03},
+        ]
+        outlier_conc = calculate_trade_profit_concentration(outlier_trades)
+        self.assertFalse(outlier_conc["is_profitable_without_top_3"])
+        self.assertEqual(outlier_conc["robustness_rating"], "Severe Outlier Overfitting (Fragile)")
+
+        # 14. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2705,6 +2732,12 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("slippage_sensitivity", strat)
         self.assertIn("breakeven_friction_bps", strat)
         self.assertIn("slippage_resilience_rating", strat)
+        self.assertIn("profit_concentration", strat)
+        self.assertIn("top_3_profit_share_pct", strat)
+        self.assertIn("herfindahl_index", strat)
+        self.assertIn("gini_coefficient", strat)
+        self.assertIn("is_profitable_without_top_3", strat)
+        self.assertIn("concentration_robustness_rating", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
@@ -2716,6 +2749,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", md)
         self.assertIn("롤링 윈도우(Rolling Window) 성과 안정성 분석", md)
         self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 분석", md)
+        self.assertIn("수익 집중도 및 이상치 의존성(Outlier Robustness) 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2731,6 +2765,11 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("consistency_score_pct", csv_str)
         self.assertIn("breakeven_friction_bps", csv_str)
         self.assertIn("slippage_resilience_rating", csv_str)
+        self.assertIn("top_1_profit_share_pct", csv_str)
+        self.assertIn("top_3_profit_share_pct", csv_str)
+        self.assertIn("herfindahl_index", csv_str)
+        self.assertIn("gini_coefficient", csv_str)
+        self.assertIn("concentration_robustness_rating", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2742,6 +2781,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", html_str)
         self.assertIn("롤링 윈도우(Rolling Window) 샤프 및 성과 안정성", html_str)
         self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 곡선", html_str)
+        self.assertIn("수익 집중도 및 이상치 의존성", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:
