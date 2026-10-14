@@ -2538,6 +2538,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_rolling_window_metrics,
             simulate_slippage_fee_sensitivity,
             calculate_trade_profit_concentration,
+            calculate_concurrency_exposure_analysis,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2558,6 +2559,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_rolling_window_metrics([])["rolling_windows_count"], 0)
         self.assertEqual(simulate_slippage_fee_sensitivity([])["breakeven_friction_bps"], 0.0)
         self.assertEqual(calculate_trade_profit_concentration([])["robustness_rating"], "N/A")
+        self.assertEqual(calculate_concurrency_exposure_analysis([])["capital_efficiency_rating"], "N/A")
 
         # 2. Mixed long and short trades
         trades = [
@@ -2705,7 +2707,24 @@ class StrategySourceTests(unittest.TestCase):
         self.assertFalse(outlier_conc["is_profitable_without_top_3"])
         self.assertEqual(outlier_conc["robustness_rating"], "Severe Outlier Overfitting (Fragile)")
 
-        # 14. Full json parsing and reports
+        # 14. Concurrency & capital exposure analysis
+        timed_trades = [
+            {"open_date": "2026-01-01 10:00:00+00:00", "close_date": "2026-01-01 12:00:00+00:00", "profit_ratio": 0.04},
+            {"open_date": "2026-01-01 11:00:00+00:00", "close_date": "2026-01-01 13:00:00+00:00", "profit_ratio": -0.01},
+            {"open_date": "2026-01-01 11:30:00+00:00", "close_date": "2026-01-01 12:30:00+00:00", "profit_ratio": 0.02},
+            {"open_date": "2026-01-02 08:00:00+00:00", "close_date": "2026-01-02 09:00:00+00:00", "profit_ratio": 0.03},
+        ]
+        concur_res = calculate_concurrency_exposure_analysis(timed_trades)
+        self.assertIn("peak_concurrent_trades", concur_res)
+        self.assertIn("avg_concurrent_trades", concur_res)
+        self.assertIn("idle_time_pct", concur_res)
+        self.assertIn("slot_tier_performance", concur_res)
+        self.assertIn("capital_efficiency_rating", concur_res)
+        self.assertEqual(concur_res["peak_concurrent_trades"], 3)
+        self.assertGreater(concur_res["avg_concurrent_trades"], 0.0)
+        self.assertGreater(concur_res["idle_time_pct"], 0.0)
+
+        # 15. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2738,6 +2757,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("gini_coefficient", strat)
         self.assertIn("is_profitable_without_top_3", strat)
         self.assertIn("concentration_robustness_rating", strat)
+        self.assertIn("concurrency_analysis", strat)
+        self.assertIn("peak_concurrent_trades", strat)
+        self.assertIn("avg_concurrent_trades", strat)
+        self.assertIn("capital_efficiency_rating", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
@@ -2750,6 +2773,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("롤링 윈도우(Rolling Window) 성과 안정성 분석", md)
         self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 분석", md)
         self.assertIn("수익 집중도 및 이상치 의존성(Outlier Robustness) 분석", md)
+        self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2770,6 +2794,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("herfindahl_index", csv_str)
         self.assertIn("gini_coefficient", csv_str)
         self.assertIn("concentration_robustness_rating", csv_str)
+        self.assertIn("peak_concurrent_trades", csv_str)
+        self.assertIn("avg_concurrent_trades", csv_str)
+        self.assertIn("idle_time_pct", csv_str)
+        self.assertIn("capital_efficiency_rating", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2782,6 +2810,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("롤링 윈도우(Rolling Window) 샤프 및 성과 안정성", html_str)
         self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 곡선", html_str)
         self.assertIn("수익 집중도 및 이상치 의존성", html_str)
+        self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:

@@ -2015,6 +2015,208 @@ def calculate_trade_profit_concentration(
     }
 
 
+def _extract_trade_open_close_seconds(trade: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Helper to safely extract open and close timestamps in epoch seconds."""
+    open_ts: float | None = None
+    close_ts: float | None = None
+
+    for key in ("open_timestamp", "open_date"):
+        val = trade.get(key)
+        if isinstance(val, (int, float)) and val > 0:
+            open_ts = val / 1000.0 if val > 1e11 else float(val)
+            break
+        elif isinstance(val, str) and val.strip():
+            try:
+                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                open_ts = dt.timestamp()
+                break
+            except Exception:
+                pass
+
+    for key in ("close_timestamp", "close_date"):
+        val = trade.get(key)
+        if isinstance(val, (int, float)) and val > 0:
+            close_ts = val / 1000.0 if val > 1e11 else float(val)
+            break
+        elif isinstance(val, str) and val.strip():
+            try:
+                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                close_ts = dt.timestamp()
+                break
+            except Exception:
+                pass
+
+    if close_ts is None and open_ts is not None:
+        dur = _safe_float(trade.get("trade_duration", trade.get("duration", 0.0)))
+        if dur > 0:
+            close_ts = open_ts + dur * 60.0
+        else:
+            close_ts = open_ts
+
+    if open_ts is not None and close_ts is not None and close_ts < open_ts:
+        close_ts = open_ts
+    return open_ts, close_ts
+
+
+def calculate_concurrency_exposure_analysis(
+    trades: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Analyze concurrent open position overlaps, capital utilization, and slot density performance.
+
+    Evaluates:
+    - peak_concurrent_trades: Maximum number of trades open simultaneously
+    - avg_concurrent_trades: Time-weighted average number of concurrent trades
+    - idle_time_pct: % of backtest duration with 0 active positions (idle cash drag)
+    - active_time_pct: % of backtest duration with at least 1 active position
+    - concurrency_distribution: % of time spent at each concurrency level
+    - slot_tier_performance: Win rate, profit, and expectancy by concurrent slot density at entry
+    - correlation_overload_penalty_pct: Drop in win rate when entering with >=3 concurrent trades vs solo
+    - capital_efficiency_rating: Institutional utilization rating
+    """
+    if not trades:
+        return {
+            "peak_concurrent_trades": 0,
+            "avg_concurrent_trades": 0.0,
+            "idle_time_pct": 0.0,
+            "active_time_pct": 0.0,
+            "concurrency_distribution": {},
+            "slot_tier_performance": {},
+            "correlation_overload_penalty_pct": 0.0,
+            "capital_efficiency_rating": "N/A",
+        }
+
+    valid_intervals: list[tuple[int, float, float, float]] = []  # (trade_idx, open_ts, close_ts, profit)
+    for idx, t in enumerate(trades):
+        o_ts, c_ts = _extract_trade_open_close_seconds(t)
+        if o_ts is not None and c_ts is not None:
+            p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+            valid_intervals.append((idx, o_ts, c_ts, p))
+
+    if not valid_intervals:
+        return {
+            "peak_concurrent_trades": 0,
+            "avg_concurrent_trades": 0.0,
+            "idle_time_pct": 0.0,
+            "active_time_pct": 0.0,
+            "concurrency_distribution": {},
+            "slot_tier_performance": {},
+            "correlation_overload_penalty_pct": 0.0,
+            "capital_efficiency_rating": "N/A",
+        }
+
+    # 1. Timeline event sweep line for duration and time-weighted concurrency
+    events: list[tuple[float, int]] = []
+    min_time = min(item[1] for item in valid_intervals)
+    max_time = max(item[2] for item in valid_intervals)
+    total_duration_s = max_time - min_time
+
+    for _, o_ts, c_ts, _ in valid_intervals:
+        events.append((o_ts, 1))
+        events.append((c_ts, -1))
+
+    # Sort events: if same timestamp, process closes (-1) before opens (+1)
+    events.sort(key=lambda x: (x[0], x[1]))
+
+    time_at_count: dict[int, float] = {}
+    curr_concurrent = 0
+    curr_time = events[0][0] if events else 0.0
+    peak_concurrent = 0
+
+    for ev_time, ev_delta in events:
+        dt = ev_time - curr_time
+        if dt > 0:
+            time_at_count[curr_concurrent] = time_at_count.get(curr_concurrent, 0.0) + dt
+        curr_time = ev_time
+        curr_concurrent += ev_delta
+        if curr_concurrent > peak_concurrent:
+            peak_concurrent = curr_concurrent
+
+    if total_duration_s > 0:
+        idle_s = time_at_count.get(0, 0.0)
+        idle_pct = (idle_s / total_duration_s) * 100.0
+        active_pct = 100.0 - idle_pct
+        avg_concurrent = sum(cnt * dur for cnt, dur in time_at_count.items()) / total_duration_s
+        concurrency_dist = {
+            f"{cnt} Trades": round((dur / total_duration_s) * 100.0, 1)
+            for cnt, dur in sorted(time_at_count.items())
+        }
+    else:
+        idle_pct = 0.0
+        active_pct = 100.0
+        avg_concurrent = float(len(valid_intervals))
+        concurrency_dist = {f"{len(valid_intervals)} Trades": 100.0}
+
+    # 2. Concurrency at entry for each trade
+    SLOT_BUCKETS = [
+        ("Solo (1 Slot)", 1, 1),
+        ("Dual (2 Slots)", 2, 2),
+        ("Moderate (3-4 Slots)", 3, 4),
+        ("Heavy (5+ Slots)", 5, 9999),
+    ]
+
+    bucket_trades: dict[str, list[float]] = {name: [] for name, _, _ in SLOT_BUCKETS}
+
+    for idx, o_ts, c_ts, p in valid_intervals:
+        # Count overlapping active trades at entry time o_ts
+        slot_density = 1 + sum(
+            1 for o_idx, other_o, other_c, _ in valid_intervals
+            if o_idx != idx and other_o <= o_ts < other_c
+        )
+        for b_name, b_min, b_max in SLOT_BUCKETS:
+            if b_min <= slot_density <= b_max:
+                bucket_trades[b_name].append(p)
+                break
+
+    slot_perf: dict[str, dict[str, Any]] = {}
+    for b_name, _, _ in SLOT_BUCKETS:
+        p_list = bucket_trades[b_name]
+        cnt = len(p_list)
+        if cnt == 0:
+            continue
+        wins = [x * 100.0 for x in p_list if x > 1e-6]
+        losses = [abs(x * 100.0) for x in p_list if x < -1e-6]
+        wr = (len(wins) / cnt) * 100.0
+        tot_ret = sum(p_list) * 100.0
+        exp_bps = (sum(p_list) / cnt) * 10000.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+
+        slot_perf[b_name] = {
+            "trades": cnt,
+            "win_rate_pct": round(wr, 2),
+            "total_profit_pct": round(tot_ret, 2),
+            "profit_factor": round(pf, 2),
+            "expectancy_bps": round(exp_bps, 1),
+        }
+
+    # 3. Overload penalty and rating
+    solo_wr = slot_perf.get("Solo (1 Slot)", {}).get("win_rate_pct", 0.0)
+    heavy_wr = slot_perf.get("Moderate (3-4 Slots)", {}).get(
+        "win_rate_pct",
+        slot_perf.get("Heavy (5+ Slots)", {}).get("win_rate_pct", solo_wr)
+    )
+    overload_penalty = max(0.0, round(solo_wr - heavy_wr, 1))
+
+    if avg_concurrent >= 2.0 and idle_pct < 35.0:
+        eff_rating = "High Capital Efficiency (Active Deployment)"
+    elif idle_pct > 65.0:
+        eff_rating = "Underutilized Capital (High Idle Drag)"
+    elif peak_concurrent >= 5 and overload_penalty >= 15.0:
+        eff_rating = "High Congestion Risk (Correlated Stopouts)"
+    else:
+        eff_rating = "Balanced Exposure (Controlled Risk)"
+
+    return {
+        "peak_concurrent_trades": peak_concurrent,
+        "avg_concurrent_trades": round(avg_concurrent, 2),
+        "idle_time_pct": round(idle_pct, 1),
+        "active_time_pct": round(active_pct, 1),
+        "concurrency_distribution": concurrency_dist,
+        "slot_tier_performance": slot_perf,
+        "correlation_overload_penalty_pct": overload_penalty,
+        "capital_efficiency_rating": eff_rating,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -2063,6 +2265,7 @@ def parse_freqtrade_backtest_json(
         rolling_metrics = calculate_rolling_window_metrics(trades, window_size=30)
         slippage_sensitivity = simulate_slippage_fee_sensitivity(trades)
         profit_concentration = calculate_trade_profit_concentration(trades)
+        concurrency_analysis = calculate_concurrency_exposure_analysis(trades)
 
         combined = {
             "strategy": strat_name,
@@ -2101,6 +2304,12 @@ def parse_freqtrade_backtest_json(
             "is_profitable_without_top_3": profit_concentration["is_profitable_without_top_3"],
             "trimmed_profit_decay_pct": profit_concentration["trimmed_profit_decay_pct"],
             "concentration_robustness_rating": profit_concentration["robustness_rating"],
+            "concurrency_analysis": concurrency_analysis,
+            "peak_concurrent_trades": concurrency_analysis["peak_concurrent_trades"],
+            "avg_concurrent_trades": concurrency_analysis["avg_concurrent_trades"],
+            "idle_time_pct": concurrency_analysis["idle_time_pct"],
+            "capital_efficiency_rating": concurrency_analysis["capital_efficiency_rating"],
+            "correlation_overload_penalty_pct": concurrency_analysis["correlation_overload_penalty_pct"],
         }
         strategy_results[strat_name] = combined
 
@@ -2381,6 +2590,31 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             lines.append(f"| **상위 3개 제외 손익비 (Trimmed P.F.)** | `{conc.get('pf_without_top_3', 0.0):.2f}` | 상위 3개 극단치 제외 시 기초 체력 손익비 |")
             lines.append(f"| **상위 3개 제거 수익 감쇄율** | `-{conc.get('trimmed_profit_decay_pct', 0.0):.1f}%` | 상위 3개 이상치 제거 시 수익 감소 비율 |")
 
+    # Detailed Concurrency and capital exposure tables
+    for name, data in analysis_results.items():
+        conc_exp = data.get("concurrency_analysis", {})
+        if conc_exp and conc_exp.get("capital_efficiency_rating") != "N/A":
+            rating = conc_exp.get("capital_efficiency_rating", "N/A")
+            peak_c = conc_exp.get("peak_concurrent_trades", 0)
+            avg_c = conc_exp.get("avg_concurrent_trades", 0.0)
+            idle_p = conc_exp.get("idle_time_pct", 0.0)
+            penalty_p = conc_exp.get("correlation_overload_penalty_pct", 0.0)
+            lines.append("")
+            lines.append(f"### 🔀 전략 `{name}` 동시 보유 포지션(Concurrency) 및 자본 활용도 분석")
+            lines.append(f"- **자본 효율성 등급**: `{rating}` (최대 동시 슬롯: `{peak_c}개`, 가중 평균: `{avg_c:.1f}개`, 유휴 현금 시간: `{idle_p:.1f}%`)")
+            if penalty_p > 0:
+                lines.append(f"- **동시 다발 진입 승률 감쇄(Overload Penalty)**: `-{penalty_p:.1f}%p` (단독 진입 대비 다중 진입 시 승률 하락폭)")
+            slots = conc_exp.get("slot_tier_performance", {})
+            if slots:
+                lines.append("| 동시 진입 밀도 | 거래수 | 승률 | 총 수익률 | 손익비(P.F.) | 기대값(bps) |")
+                lines.append("| :--- | :---: | :---: | :---: | :---: | :---: |")
+                for slot_name, s in slots.items():
+                    lines.append(
+                        f"| **{slot_name}** | {s['trades']}회 | {s['win_rate_pct']:.1f}% | "
+                        f"{s['total_profit_pct']:+.2f}% | {s['profit_factor']:.2f} | "
+                        f"{s['expectancy_bps']:+.1f}bp |"
+                    )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -2400,6 +2634,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
 
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
+    lines.append("- **동시 보유 포지션 및 자본 활용도 (Concurrency & Capital Exposure)**: 백테스트 기간 중 동시에 열려 있던 활성 포지션 수의 시간 가중 평균 및 최대 동시 진입 슬롯(Peak Concurrent Slots)을 추적합니다. 자본이 거래 없이 방치된 유휴 시간 비율(Idle Time %)과 다중 포지션 동시 보유 시 발생하는 시장 충격 동반 손절(Correlated Overload Penalty)을 진단합니다.")
     lines.append("- **수익 집중도 및 이상치 의존성 (Profit Concentration & Outlier Robustness)**: 소수의 대박(Outlier) 거래가 전체 성과를 왜곡했는지 검증하는 분석입니다. 상위 3개 거래를 완전히 제거했을 때도 전략이 여전히 흑자를 유지하는지(Trimmed Net Profit & PF), 그리고 수익 허핀달 지수(HHI)와 지니 계수(Gini)를 측정하여 지속 가능한 유기적 알파인지 과최적화된 요행인지를 엄격히 판별합니다.")
     lines.append("- **시스템 품질 지수 (System Quality Number / SQN, Van Tharp)**: sqrt(N) * (평균 수익률 / 수익률 표준편차). 거래 전략의 통계적 우수성을 종합 평가하는 지표로, 2.0 이상이면 평균, 3.0 이상이면 우수(Excellent), 5.0 이상이면 탁월(Superb), 7.0 이상이면 성배(Holy Grail) 등급으로 분류됩니다.")
     lines.append("- **K-비율 (K-Ratio, Lars Kestner)**: 누적 수익 곡선의 선형 추세 기울기를 표준오차와 sqrt(T)로 정규화한 지표로, 수익 곡선이 노이즈 없이 얼마나 일관되게 우상향하는지 측정합니다.")
@@ -2551,6 +2786,11 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "is_profitable_without_top_3",
         "trimmed_profit_decay_pct",
         "concentration_robustness_rating",
+        "peak_concurrent_trades",
+        "avg_concurrent_trades",
+        "idle_time_pct",
+        "capital_efficiency_rating",
+        "correlation_overload_penalty_pct",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -3178,6 +3418,27 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if conc and conc.get("robustness_rating") != "N/A" else ""
 
+        conc_exp = data.get("concurrency_analysis", {})
+        concurrency_table_html = f"""
+        <h3>🔀 동시 보유 포지션(Concurrency) 및 자본 활용도</h3>
+        <p><strong>자본 효율성 등급:</strong> <span class="badge {('badge-green' if 'High Capital' in conc_exp.get('capital_efficiency_rating', '') else ('badge-yellow' if 'Balanced' in conc_exp.get('capital_efficiency_rating', '') else 'badge-red'))}">{conc_exp.get('capital_efficiency_rating', 'N/A')}</span> | <strong>최대 동시 슬롯:</strong> {conc_exp.get('peak_concurrent_trades', 0)}개 | <strong>시간가중 평균:</strong> {conc_exp.get('avg_concurrent_trades', 0.0):.1f}개 | <strong>유휴 시간:</strong> {conc_exp.get('idle_time_pct', 0.0):.1f}%</p>
+        <table>
+            <thead>
+                <tr><th>동시 진입 밀도</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>손익비</th><th>기대값</th></tr>
+            </thead>
+            <tbody>
+                {''.join(f'''<tr>
+                    <td><strong>{slot_name}</strong></td>
+                    <td>{s.get("trades", 0)}회</td>
+                    <td>{s.get("win_rate_pct", 0.0):.1f}%</td>
+                    <td class="{('positive' if s.get('total_profit_pct', 0.0) >= 0 else 'negative')}">{s.get('total_profit_pct', 0.0):+.2f}%</td>
+                    <td>{s.get("profit_factor", 0.0):.2f}</td>
+                    <td class="{('positive' if s.get('expectancy_bps', 0.0) >= 0 else 'negative')}">{s.get('expectancy_bps', 0.0):+.1f}bp</td>
+                </tr>''' for slot_name, s in conc_exp.get("slot_tier_performance", {}).items()) if conc_exp.get("slot_tier_performance") else '<tr><td colspan="6">동시성 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if conc_exp and conc_exp.get("capital_efficiency_rating") != "N/A" else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -3191,6 +3452,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {rolling_table_html}
             {sens_table_html}
             {conc_table_html}
+            {concurrency_table_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}
