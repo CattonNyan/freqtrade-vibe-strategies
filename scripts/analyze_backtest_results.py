@@ -1811,6 +1811,93 @@ def calculate_stake_amount_tier_breakdown(
     return breakdown
 
 
+def simulate_slippage_fee_sensitivity(
+    trades: list[dict[str, Any]],
+    friction_steps_bps: list[float] | None = None,
+) -> dict[str, Any]:
+    """Stress test strategy performance across incremental slippage and execution fee levels.
+
+    Simulates performance degradation under realistic live exchange friction
+    (taker fees, spread crossing, order book slippage, execution latency).
+
+    Evaluates incremental friction steps (default: 0, 5, 10, 15, 20, 25, 30, 40, 50 bps per trade).
+    Calculates:
+    - breakeven_friction_bps: maximum per-trade cost in bps before strategy expectation drops to zero
+    - sensitivity_curve: list of metric dictionaries for each friction step
+    - resilience_rating: 'High Resilience', 'Moderate Resilience', 'Low Resilience', or 'Fragile'.
+    """
+    if not trades:
+        return {
+            "breakeven_friction_bps": 0.0,
+            "resilience_rating": "N/A",
+            "sensitivity_curve": [],
+        }
+
+    profits = [
+        _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        for t in trades
+    ]
+    if not profits:
+        return {
+            "breakeven_friction_bps": 0.0,
+            "resilience_rating": "N/A",
+            "sensitivity_curve": [],
+        }
+
+    n = len(profits)
+    mean_p = sum(profits) / n if n > 0 else 0.0
+    breakeven_bps = max(0.0, round(mean_p * 10000.0, 1))
+
+    if breakeven_bps >= 35.0:
+        rating = "High Resilience (Institutional Grade)"
+    elif breakeven_bps >= 15.0:
+        rating = "Moderate Resilience (Standard)"
+    elif breakeven_bps >= 5.0:
+        rating = "Low Resilience (Friction Sensitive)"
+    else:
+        rating = "Fragile (Unviable Live Friction)"
+
+    if friction_steps_bps is None:
+        steps = [0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0]
+    else:
+        steps = sorted(friction_steps_bps)
+
+    base_tot_ret = sum(profits) * 100.0
+    curve: list[dict[str, Any]] = []
+
+    for step in steps:
+        friction_dec = step / 10000.0
+        adj_p = [p - friction_dec for p in profits]
+
+        wins = [p for p in adj_p if p > 1e-6]
+        losses = [abs(p) for p in adj_p if p < -1e-6]
+
+        wr = (len(wins) / n) * 100.0 if n > 0 else 0.0
+        tot_ret = sum(adj_p) * 100.0
+        exp_bps = (sum(adj_p) / n) * 10000.0 if n > 0 else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+
+        if abs(base_tot_ret) > 1e-6:
+            decay_pct = ((base_tot_ret - tot_ret) / abs(base_tot_ret)) * 100.0
+        else:
+            decay_pct = 0.0
+
+        curve.append({
+            "friction_bps": float(step),
+            "win_rate_pct": round(wr, 2),
+            "total_return_pct": round(tot_ret, 2),
+            "profit_factor": round(pf, 2),
+            "expectancy_bps": round(exp_bps, 1),
+            "return_decay_pct": round(decay_pct, 1),
+        })
+
+    return {
+        "breakeven_friction_bps": breakeven_bps,
+        "resilience_rating": rating,
+        "sensitivity_curve": curve,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -1857,6 +1944,7 @@ def parse_freqtrade_backtest_json(
         monthly_breakdown = calculate_monthly_breakdown(trades, sort_by=sort_by)
         dd_episodes = calculate_drawdown_episodes(trades)
         rolling_metrics = calculate_rolling_window_metrics(trades, window_size=30)
+        slippage_sensitivity = simulate_slippage_fee_sensitivity(trades)
 
         combined = {
             "strategy": strat_name,
@@ -1879,6 +1967,9 @@ def parse_freqtrade_backtest_json(
             "duration_tier_performance": duration_breakdown,
             "stake_tier_performance": stake_tier_breakdown,
             "monthly_performance": monthly_breakdown,
+            "slippage_sensitivity": slippage_sensitivity,
+            "breakeven_friction_bps": slippage_sensitivity["breakeven_friction_bps"],
+            "slippage_resilience_rating": slippage_sensitivity["resilience_rating"],
         }
         strategy_results[strat_name] = combined
 
@@ -2118,6 +2209,25 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                     f"-{data.get('rolling_mdd_worst_pct', 0.0):.2f}% |"
                 )
 
+    # Detailed Slippage and fee sensitivity stress tables
+    for name, data in analysis_results.items():
+        sens = data.get("slippage_sensitivity", {})
+        curve = sens.get("sensitivity_curve", [])
+        if curve:
+            be_bps = sens.get("breakeven_friction_bps", 0.0)
+            rating = sens.get("resilience_rating", "N/A")
+            lines.append("")
+            lines.append(f"### 📉 전략 `{name}` 슬리피지·수수료 마찰 민감도 스트레스 분석 (Slippage Sensitivity Curve)")
+            lines.append(f"- **손익분기 허용 마찰(Breakeven Friction)**: `{be_bps:.1f} bps` ({rating})")
+            lines.append("| 추가 마찰 (bps) | 승률 | 총 수익률 | 손익비(P.F.) | 기대값(bps) | 수익 감쇄율(%) |")
+            lines.append("| :---: | :---: | :---: | :---: | :---: | :---: |")
+            for row in curve:
+                lines.append(
+                    f"| `+{row['friction_bps']:.0f} bps` | {row['win_rate_pct']:.1f}% | "
+                    f"{row['total_return_pct']:+.2f}% | {row['profit_factor']:.2f} | "
+                    f"{row['expectancy_bps']:+.1f}bp | -{row['return_decay_pct']:.1f}% |"
+                )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -2273,6 +2383,8 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "mc_mdd_max_pct",
         "mc_ruin_threshold_pct",
         "mc_prob_mdd_exceed_pct",
+        "breakeven_friction_bps",
+        "slippage_resilience_rating",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -2849,6 +2961,36 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if rolling_count > 0 else ""
 
+        sens = data.get("slippage_sensitivity", {})
+        curve = sens.get("sensitivity_curve", [])
+        sens_rows = []
+        for row in curve:
+            tot_p = row.get('total_return_pct', 0.0)
+            exp_b = row.get('expectancy_bps', 0.0)
+            sens_rows.append(f"""
+            <tr>
+                <td><strong>+{row.get('friction_bps', 0):.0f} bps</strong></td>
+                <td>{row.get('win_rate_pct', 0.0):.1f}%</td>
+                <td class="{('positive' if tot_p >= 0 else 'negative')}">{tot_p:+.2f}%</td>
+                <td>{row.get('profit_factor', 0.0):.2f}</td>
+                <td class="{('positive' if exp_b >= 0 else 'negative')}">{exp_b:+.1f}bp</td>
+                <td class="negative">-{row.get('return_decay_pct', 0.0):.1f}%</td>
+            </tr>
+            """)
+        be_bps = sens.get("breakeven_friction_bps", 0.0)
+        rating_txt = sens.get("resilience_rating", "N/A")
+        sens_table_html = f"""
+        <h3>📉 슬리피지·수수료 마찰 민감도 스트레스 곡선 (Breakeven: {be_bps:.1f} bps / {rating_txt})</h3>
+        <table>
+            <thead>
+                <tr><th>추가 마찰</th><th>승률</th><th>총 수익률</th><th>손익비</th><th>기대값</th><th>수익 감쇄율</th></tr>
+            </thead>
+            <tbody>
+                {''.join(sens_rows) if sens_rows else '<tr><td colspan="6">민감도 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if curve else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -2860,6 +3002,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {hourly_table_html}
             {monthly_table_html}
             {rolling_table_html}
+            {sens_table_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}

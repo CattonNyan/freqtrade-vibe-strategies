@@ -2536,6 +2536,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_monthly_breakdown,
             calculate_drawdown_episodes,
             calculate_rolling_window_metrics,
+            simulate_slippage_fee_sensitivity,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2554,6 +2555,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_monthly_breakdown([]), {})
         self.assertEqual(calculate_drawdown_episodes([])["total_episodes"], 0)
         self.assertEqual(calculate_rolling_window_metrics([])["rolling_windows_count"], 0)
+        self.assertEqual(simulate_slippage_fee_sensitivity([])["breakeven_friction_bps"], 0.0)
 
         # 2. Mixed long and short trades
         trades = [
@@ -2666,7 +2668,17 @@ class StrategySourceTests(unittest.TestCase):
         tot_vol_share = sum(s["volume_share_pct"] for s in stk_tiers.values())
         self.assertAlmostEqual(tot_vol_share, 100.0, places=0)
 
-        # 12. Full json parsing and reports
+        # 12. Slippage & fee sensitivity stress test
+        sens_res = simulate_slippage_fee_sensitivity(trades)
+        self.assertIn("breakeven_friction_bps", sens_res)
+        self.assertIn("resilience_rating", sens_res)
+        self.assertIn("sensitivity_curve", sens_res)
+        self.assertGreater(sens_res["breakeven_friction_bps"], 0.0)
+        self.assertEqual(len(sens_res["sensitivity_curve"]), 9)
+        curve = sens_res["sensitivity_curve"]
+        self.assertGreaterEqual(curve[0]["total_return_pct"], curve[-1]["total_return_pct"])
+
+        # 13. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2690,6 +2702,9 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("consistency_score_pct", strat)
         self.assertIn("mar_ratio", strat)
         self.assertIn("expectancy_bps", strat)
+        self.assertIn("slippage_sensitivity", strat)
+        self.assertIn("breakeven_friction_bps", strat)
+        self.assertIn("slippage_resilience_rating", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
@@ -2700,6 +2715,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("월별(Monthly Calendar) 거래 성과 분석", md)
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", md)
         self.assertIn("롤링 윈도우(Rolling Window) 성과 안정성 분석", md)
+        self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2713,6 +2729,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("total_drawdown_episodes", csv_str)
         self.assertIn("rolling_sharpe_median", csv_str)
         self.assertIn("consistency_score_pct", csv_str)
+        self.assertIn("breakeven_friction_bps", csv_str)
+        self.assertIn("slippage_resilience_rating", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2723,6 +2741,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("월별(Monthly Calendar) 거래 성과", html_str)
         self.assertIn("주요 낙폭 에피소드(Drawdown Episodes) TOP 5", html_str)
         self.assertIn("롤링 윈도우(Rolling Window) 샤프 및 성과 안정성", html_str)
+        self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 곡선", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:
