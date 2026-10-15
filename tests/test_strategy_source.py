@@ -2539,6 +2539,7 @@ class StrategySourceTests(unittest.TestCase):
             simulate_slippage_fee_sensitivity,
             calculate_trade_profit_concentration,
             calculate_concurrency_exposure_analysis,
+            calculate_mae_mfe_edge_analysis,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2560,6 +2561,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(simulate_slippage_fee_sensitivity([])["breakeven_friction_bps"], 0.0)
         self.assertEqual(calculate_trade_profit_concentration([])["robustness_rating"], "N/A")
         self.assertEqual(calculate_concurrency_exposure_analysis([])["capital_efficiency_rating"], "N/A")
+        self.assertEqual(calculate_mae_mfe_edge_analysis([])["edge_rating"], "N/A")
 
         # 2. Mixed long and short trades
         trades = [
@@ -2724,7 +2726,24 @@ class StrategySourceTests(unittest.TestCase):
         self.assertGreater(concur_res["avg_concurrent_trades"], 0.0)
         self.assertGreater(concur_res["idle_time_pct"], 0.0)
 
-        # 15. Full json parsing and reports
+        # 15. MAE / MFE excursion & edge analysis
+        excursion_trades = [
+            {"pair": "BTC/USDT", "profit_ratio": 0.05, "open_rate": 100.0, "close_rate": 105.0, "min_rate": 98.0, "max_rate": 108.0, "is_short": False},
+            {"pair": "ETH/USDT", "profit_ratio": -0.02, "open_rate": 200.0, "close_rate": 196.0, "min_rate": 194.0, "max_rate": 203.0, "is_short": False},
+            {"pair": "SOL/USDT", "profit_ratio": 0.04, "open_rate": 50.0, "close_rate": 48.0, "min_rate": 47.0, "max_rate": 51.0, "is_short": True},
+        ]
+        mae_mfe_res = calculate_mae_mfe_edge_analysis(excursion_trades)
+        self.assertIn("avg_mae_pct", mae_mfe_res)
+        self.assertIn("avg_mfe_pct", mae_mfe_res)
+        self.assertIn("avg_win_capture_pct", mae_mfe_res)
+        self.assertIn("edge_ratio", mae_mfe_res)
+        self.assertIn("wasted_winners_count", mae_mfe_res)
+        self.assertIn("optimal_sl_suggestion_pct", mae_mfe_res)
+        self.assertEqual(mae_mfe_res["wasted_winners_count"], 1)
+        self.assertGreater(mae_mfe_res["edge_ratio"], 1.0)
+        self.assertGreater(mae_mfe_res["avg_win_capture_pct"], 50.0)
+
+        # 16. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2761,6 +2780,11 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("peak_concurrent_trades", strat)
         self.assertIn("avg_concurrent_trades", strat)
         self.assertIn("capital_efficiency_rating", strat)
+        self.assertIn("mae_mfe_analysis", strat)
+        self.assertIn("avg_mae_pct", strat)
+        self.assertIn("avg_mfe_pct", strat)
+        self.assertIn("edge_ratio", strat)
+        self.assertIn("edge_rating", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
@@ -2774,6 +2798,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 분석", md)
         self.assertIn("수익 집중도 및 이상치 의존성(Outlier Robustness) 분석", md)
         self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도 분석", md)
+        self.assertIn("MAE / MFE 진입 우위(Edge) 및 청산 효율성(Exit Capture) 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2798,6 +2823,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("avg_concurrent_trades", csv_str)
         self.assertIn("idle_time_pct", csv_str)
         self.assertIn("capital_efficiency_rating", csv_str)
+        self.assertIn("avg_mae_pct", csv_str)
+        self.assertIn("avg_mfe_pct", csv_str)
+        self.assertIn("edge_ratio", csv_str)
+        self.assertIn("edge_rating", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2811,6 +2840,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("슬리피지·수수료 마찰 민감도 스트레스 곡선", html_str)
         self.assertIn("수익 집중도 및 이상치 의존성", html_str)
         self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도", html_str)
+        self.assertIn("MAE / MFE 진입 우위 및 청산 효율성", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:

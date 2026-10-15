@@ -2217,6 +2217,165 @@ def calculate_concurrency_exposure_analysis(
     }
 
 
+def calculate_mae_mfe_edge_analysis(
+    trades: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Analyze Maximum Adverse Excursion (MAE), Maximum Favorable Excursion (MFE),
+    edge ratios, exit capture efficiency, and stop-loss placement calibration.
+
+    Evaluates:
+    - avg_mae_pct: Average intra-trade drawdown experienced across all trades
+    - avg_mfe_pct: Average intra-trade peak potential profit across all trades
+    - avg_win_mae_pct: Intra-trade drawdown tolerated on winning trades (pain before gain)
+    - avg_win_mfe_pct: Peak potential run-up achieved on winning trades
+    - avg_win_capture_pct: Exit capture efficiency (realized win return / peak MFE)
+    - avg_loss_mae_pct: Maximum drawdown suffered on losing trades
+    - avg_loss_mfe_pct: Potential profit reached on losing trades prior to exit (surrendered profit)
+    - wasted_winners_count: Number of losing trades that reached >= +1.0% MFE before closing red
+    - wasted_winners_pct: Percentage of losing trades that were wasted winners
+    - edge_ratio: Ratio of favorable excursion to adverse excursion (MFE / |MAE|)
+    - optimal_sl_suggestion_pct: 95th percentile MAE of winning trades + 15% buffer
+    - edge_rating: Qualitative execution and statistical edge rating
+    - capture_distribution: Win trades categorized by capture efficiency tiers
+    """
+    if not trades:
+        return {
+            "avg_mae_pct": 0.0,
+            "avg_mfe_pct": 0.0,
+            "avg_win_mae_pct": 0.0,
+            "avg_win_mfe_pct": 0.0,
+            "avg_win_capture_pct": 0.0,
+            "avg_loss_mae_pct": 0.0,
+            "avg_loss_mfe_pct": 0.0,
+            "wasted_winners_count": 0,
+            "wasted_winners_pct": 0.0,
+            "edge_ratio": 0.0,
+            "optimal_sl_suggestion_pct": 0.0,
+            "edge_rating": "N/A",
+            "capture_distribution": {},
+        }
+
+    records: list[dict[str, float]] = []
+
+    for t in trades:
+        is_short = bool(t.get("is_short", False) or t.get("trade_direction") == "short")
+        o_rate = _safe_float(t.get("open_rate", t.get("open_price", 0.0)))
+        c_rate = _safe_float(t.get("close_rate", t.get("close_price", 0.0)))
+        p_ratio = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        realized_pct = p_ratio * 100.0
+
+        min_rate = t.get("min_rate", t.get("min_price"))
+        max_rate = t.get("max_rate", t.get("max_price"))
+
+        if o_rate > 0:
+            p_min = _safe_float(min_rate) if min_rate is not None else (min(o_rate, c_rate) if c_rate > 0 else o_rate)
+            p_max = _safe_float(max_rate) if max_rate is not None else (max(o_rate, c_rate) if c_rate > 0 else o_rate)
+
+            if not is_short:
+                raw_mae = ((p_min - o_rate) / o_rate) * 100.0
+                raw_mfe = ((p_max - o_rate) / o_rate) * 100.0
+            else:
+                raw_mae = ((o_rate - p_max) / o_rate) * 100.0
+                raw_mfe = ((o_rate - p_min) / o_rate) * 100.0
+        else:
+            if realized_pct >= 0:
+                raw_mfe = realized_pct
+                raw_mae = 0.0
+            else:
+                raw_mfe = 0.0
+                raw_mae = realized_pct
+
+        mae_pct = min(0.0, raw_mae)
+        mfe_pct = max(0.0, raw_mfe)
+
+        if mfe_pct > 1e-4 and realized_pct > 0:
+            cap_ratio = min(100.0, max(0.0, (realized_pct / mfe_pct) * 100.0))
+        elif realized_pct <= 0:
+            cap_ratio = 0.0
+        else:
+            cap_ratio = 100.0
+
+        records.append({
+            "profit_ratio": p_ratio,
+            "realized_pct": realized_pct,
+            "mae_pct": mae_pct,
+            "mfe_pct": mfe_pct,
+            "capture_pct": cap_ratio,
+        })
+
+    n = len(records)
+    wins = [r for r in records if r["profit_ratio"] > 1e-6]
+    losses = [r for r in records if r["profit_ratio"] < -1e-6]
+
+    avg_mae = sum(r["mae_pct"] for r in records) / n
+    avg_mfe = sum(r["mfe_pct"] for r in records) / n
+
+    avg_win_mae = (sum(r["mae_pct"] for r in wins) / len(wins)) if wins else 0.0
+    avg_win_mfe = (sum(r["mfe_pct"] for r in wins) / len(wins)) if wins else 0.0
+    avg_win_cap = (sum(r["capture_pct"] for r in wins) / len(wins)) if wins else 0.0
+
+    avg_loss_mae = (sum(r["mae_pct"] for r in losses) / len(losses)) if losses else 0.0
+    avg_loss_mfe = (sum(r["mfe_pct"] for r in losses) / len(losses)) if losses else 0.0
+
+    wasted_count = sum(1 for r in losses if r["mfe_pct"] >= 1.0)
+    wasted_pct = (wasted_count / len(losses) * 100.0) if losses else 0.0
+
+    abs_mae = abs(avg_mae)
+    if abs_mae > 1e-6:
+        edge_ratio = avg_mfe / abs_mae
+    else:
+        edge_ratio = 999.0 if avg_mfe > 0 else 1.0
+
+    win_maes = [abs(r["mae_pct"]) for r in wins]
+    if win_maes:
+        win_maes.sort()
+        idx = int(0.95 * len(win_maes))
+        idx = min(idx, len(win_maes) - 1)
+        p95 = win_maes[idx]
+        optimal_sl = round(p95 * 1.15, 2)
+    else:
+        optimal_sl = 0.0
+
+    if edge_ratio >= 1.6 and avg_win_cap >= 50.0:
+        rating = "High Edge & Optimal Exit Execution"
+    elif edge_ratio >= 1.2 and avg_win_cap >= 35.0:
+        rating = "Solid Statistical Edge (Healthy Execution)"
+    elif edge_ratio >= 1.0:
+        rating = "Marginal Edge (High Underwater Drag)"
+    else:
+        rating = "Suboptimal Edge (Negative Excursion Drag)"
+
+    cap_tiers = {
+        "Peak Capture (>=70%)": 0,
+        "Good Capture (40-70%)": 0,
+        "Suboptimal Capture (<40%)": 0,
+    }
+    for w in wins:
+        c = w["capture_pct"]
+        if c >= 70.0:
+            cap_tiers["Peak Capture (>=70%)"] += 1
+        elif c >= 40.0:
+            cap_tiers["Good Capture (40-70%)"] += 1
+        else:
+            cap_tiers["Suboptimal Capture (<40%)"] += 1
+
+    return {
+        "avg_mae_pct": round(avg_mae, 2),
+        "avg_mfe_pct": round(avg_mfe, 2),
+        "avg_win_mae_pct": round(avg_win_mae, 2),
+        "avg_win_mfe_pct": round(avg_win_mfe, 2),
+        "avg_win_capture_pct": round(avg_win_cap, 1),
+        "avg_loss_mae_pct": round(avg_loss_mae, 2),
+        "avg_loss_mfe_pct": round(avg_loss_mfe, 2),
+        "wasted_winners_count": wasted_count,
+        "wasted_winners_pct": round(wasted_pct, 1),
+        "edge_ratio": round(edge_ratio, 2),
+        "optimal_sl_suggestion_pct": optimal_sl,
+        "edge_rating": rating,
+        "capture_distribution": cap_tiers,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -2266,6 +2425,7 @@ def parse_freqtrade_backtest_json(
         slippage_sensitivity = simulate_slippage_fee_sensitivity(trades)
         profit_concentration = calculate_trade_profit_concentration(trades)
         concurrency_analysis = calculate_concurrency_exposure_analysis(trades)
+        mae_mfe_analysis = calculate_mae_mfe_edge_analysis(trades)
 
         combined = {
             "strategy": strat_name,
@@ -2310,6 +2470,19 @@ def parse_freqtrade_backtest_json(
             "idle_time_pct": concurrency_analysis["idle_time_pct"],
             "capital_efficiency_rating": concurrency_analysis["capital_efficiency_rating"],
             "correlation_overload_penalty_pct": concurrency_analysis["correlation_overload_penalty_pct"],
+            "mae_mfe_analysis": mae_mfe_analysis,
+            "avg_mae_pct": mae_mfe_analysis["avg_mae_pct"],
+            "avg_mfe_pct": mae_mfe_analysis["avg_mfe_pct"],
+            "avg_win_mae_pct": mae_mfe_analysis["avg_win_mae_pct"],
+            "avg_win_mfe_pct": mae_mfe_analysis["avg_win_mfe_pct"],
+            "avg_win_capture_pct": mae_mfe_analysis["avg_win_capture_pct"],
+            "avg_loss_mae_pct": mae_mfe_analysis["avg_loss_mae_pct"],
+            "avg_loss_mfe_pct": mae_mfe_analysis["avg_loss_mfe_pct"],
+            "wasted_winners_count": mae_mfe_analysis["wasted_winners_count"],
+            "wasted_winners_pct": mae_mfe_analysis["wasted_winners_pct"],
+            "edge_ratio": mae_mfe_analysis["edge_ratio"],
+            "optimal_sl_suggestion_pct": mae_mfe_analysis["optimal_sl_suggestion_pct"],
+            "edge_rating": mae_mfe_analysis["edge_rating"],
         }
         strategy_results[strat_name] = combined
 
@@ -2615,6 +2788,23 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                         f"{s['expectancy_bps']:+.1f}bp |"
                     )
 
+    # Detailed MAE / MFE and Exit Efficiency tables
+    for name, data in analysis_results.items():
+        mae_mfe = data.get("mae_mfe_analysis", {})
+        if mae_mfe and mae_mfe.get("edge_rating") != "N/A":
+            lines.append("")
+            lines.append(f"### 🎯 전략 `{name}` MAE / MFE 진입 우위(Edge) 및 청산 효율성(Exit Capture) 분석")
+            lines.append(f"- **진입 통계적 우위 등급**: `{mae_mfe.get('edge_rating', 'N/A')}` (우위 지수 Edge Ratio: `{mae_mfe.get('edge_ratio', 0.0):.2f}`, MFE/|MAE| 비율)")
+            lines.append(f"- **승리 거래 청산 효율성**: `{mae_mfe.get('avg_win_capture_pct', 0.0):.1f}%` (최대 도달 수익 대비 실제 실현 수익의 회수율)")
+            lines.append(f"- **권장 스탑로스(Optimal SL)**: `-{mae_mfe.get('optimal_sl_suggestion_pct', 0.0):.2f}%` (승리 거래의 95% 분위수 역방향 진폭 기준 노이즈 털림 방지선)")
+            wasted_p = mae_mfe.get("wasted_winners_pct", 0.0)
+            if wasted_p > 0:
+                lines.append(f"- **수익 반납 후 손절 비율(Wasted Winners)**: `{wasted_p:.1f}%` ({mae_mfe.get('wasted_winners_count', 0)}회, +1.0% 이상 도달 후 손실 마감된 거래)")
+            lines.append("| 지표 항목 | 전체 거래 | 승리 거래 (Wins) | 패배 거래 (Losses) |")
+            lines.append("| :--- | :---: | :---: | :---: |")
+            lines.append(f"| **평균 최대 역행 진폭 (Avg MAE)** | `{mae_mfe.get('avg_mae_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_win_mae_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_loss_mae_pct', 0.0):+.2f}%` |")
+            lines.append(f"| **평균 최대 순행 진폭 (Avg MFE)** | `{mae_mfe.get('avg_mfe_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_win_mfe_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_loss_mfe_pct', 0.0):+.2f}%` |")
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -2671,6 +2861,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **런 검정 (Wald-Wolfowitz Runs Test Z-Score, Perry Kaufman)**: 연속된 거래 결과(승/패)의 계열 상관성을 검정하는 통계량으로, Z < -1.96이면 연승/연패 군집(Clustering) 현상을, Z > 1.96이면 승패 교번(Mean-reversion) 특성을, |Z| <= 1.96이면 거래 결과가 통계적으로 독립적임을 나타냅니다.")
     lines.append("- **CPC 지수 (Continuation Protection Criterion)**: 손익비 × 승률 × 손익비율(Win/Loss Ratio)의 복합 척도로, 전략의 장기적인 수익성 지속력을 검증합니다.")
     lines.append("- **RoMaD (Return over Maximum Drawdown)**: 총 누적 수익률을 최대 낙폭(MDD)으로 나눈 지표로, 헤지펀드 및 퀀트 자산배분에서 최대 감내 손실 대비 자본 수익 배수를 직관적으로 평가합니다.")
+    lines.append("- **최대 역행/순행 진폭 및 청산 효율성 (MAE / MFE & Exit Capture Efficiency)**: 각 거래가 진행되는 동안 경험한 최악의 장중 낙폭(MAE, Maximum Adverse Excursion)과 최고의 장중 미실현 수익(MFE, Maximum Favorable Excursion)을 추적합니다. 진입 우위 지수(Edge Ratio = MFE / |MAE|)를 통해 진입 시점의 통계적 우위를 검증하고, 최고점 대비 실제 실현된 수익 비율(Exit Capture %) 및 수익 구간 도달 후 손절로 전환된 거래(Wasted Winners)를 진단하여 최적 스탑로스 배치 기준선을 제시합니다.")
     lines.append("- **몬테카를로 무작위 재배열 시뮬레이션 (Monte Carlo Trade Reshuffle)**: 과거 백테스트 거래들의 순서를 무작위로 수천 번 재배열(Permutation)하여 거래 순서 의존성(Sequence of Returns Risk)을 검증하고, 최악의 연패 구간이 겹쳤을 때 발생 가능한 95% 및 99% 신뢰구간의 잠재적 최대 낙폭(Worst Expected MDD)과 계좌 파산/위험 임계치 초과 확률을 도출합니다.")
     return "\n".join(lines)
 
@@ -2791,6 +2982,18 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "idle_time_pct",
         "capital_efficiency_rating",
         "correlation_overload_penalty_pct",
+        "avg_mae_pct",
+        "avg_mfe_pct",
+        "avg_win_mae_pct",
+        "avg_win_mfe_pct",
+        "avg_win_capture_pct",
+        "avg_loss_mae_pct",
+        "avg_loss_mfe_pct",
+        "wasted_winners_count",
+        "wasted_winners_pct",
+        "edge_ratio",
+        "optimal_sl_suggestion_pct",
+        "edge_rating",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -3439,6 +3642,22 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if conc_exp and conc_exp.get("capital_efficiency_rating") != "N/A" else ""
 
+        mae_mfe = data.get("mae_mfe_analysis", {})
+        mae_mfe_table_html = f"""
+        <h3>🎯 MAE / MFE 진입 우위 및 청산 효율성 (Excursion & Edge)</h3>
+        <p><strong>우위 등급:</strong> <span class="badge {('badge-green' if 'High Edge' in mae_mfe.get('edge_rating', '') else ('badge-primary' if 'Solid' in mae_mfe.get('edge_rating', '') else ('badge-yellow' if 'Marginal' in mae_mfe.get('edge_rating', '') else 'badge-red')))}">{mae_mfe.get('edge_rating', 'N/A')}</span> | <strong>우위 지수 (Edge Ratio):</strong> {mae_mfe.get('edge_ratio', 0.0):.2f} | <strong>승리 거래 청산 효율성:</strong> {mae_mfe.get('avg_win_capture_pct', 0.0):.1f}% | <strong>권장 스탑로스:</strong> -{mae_mfe.get('optimal_sl_suggestion_pct', 0.0):.2f}%</p>
+        <table>
+            <thead>
+                <tr><th>지표 항목</th><th>전체 거래</th><th>승리 거래 (Wins)</th><th>패배 거래 (Losses)</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>평균 최대 역행 진폭 (Avg MAE)</strong></td><td class="negative">{mae_mfe.get('avg_mae_pct', 0.0):+.2f}%</td><td class="negative">{mae_mfe.get('avg_win_mae_pct', 0.0):+.2f}%</td><td class="negative">{mae_mfe.get('avg_loss_mae_pct', 0.0):+.2f}%</td></tr>
+                <tr><td><strong>평균 최대 순행 진폭 (Avg MFE)</strong></td><td class="positive">{mae_mfe.get('avg_mfe_pct', 0.0):+.2f}%</td><td class="positive">{mae_mfe.get('avg_win_mfe_pct', 0.0):+.2f}%</td><td class="positive">{mae_mfe.get('avg_loss_mfe_pct', 0.0):+.2f}%</td></tr>
+                <tr><td><strong>수익 반납 후 손절 (Wasted Winners)</strong></td><td>{mae_mfe.get('wasted_winners_count', 0)}회 ({mae_mfe.get('wasted_winners_pct', 0.0):.1f}%)</td><td>-</td><td class="negative">손실 중 +1.0% 이상 반납분</td></tr>
+            </tbody>
+        </table>
+        """ if mae_mfe and mae_mfe.get("edge_rating") != "N/A" else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -3453,6 +3672,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {sens_table_html}
             {conc_table_html}
             {concurrency_table_html}
+            {mae_mfe_table_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}
