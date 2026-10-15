@@ -2540,6 +2540,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_trade_profit_concentration,
             calculate_concurrency_exposure_analysis,
             calculate_mae_mfe_edge_analysis,
+            calculate_wfo_stability_degradation,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2562,6 +2563,8 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_trade_profit_concentration([])["robustness_rating"], "N/A")
         self.assertEqual(calculate_concurrency_exposure_analysis([])["capital_efficiency_rating"], "N/A")
         self.assertEqual(calculate_mae_mfe_edge_analysis([])["edge_rating"], "N/A")
+        self.assertEqual(calculate_wfo_stability_degradation([])["wfo_stability_rating"], "N/A")
+        self.assertEqual(calculate_wfo_stability_degradation([{"profit_ratio": 0.01}])["wfo_stability_rating"], "N/A")
 
         # 2. Mixed long and short trades
         trades = [
@@ -2743,7 +2746,20 @@ class StrategySourceTests(unittest.TestCase):
         self.assertGreater(mae_mfe_res["edge_ratio"], 1.0)
         self.assertGreater(mae_mfe_res["avg_win_capture_pct"], 50.0)
 
-        # 16. Full json parsing and reports
+        # 16. Walk-Forward (WFO) parameter stability and degradation analysis
+        wfo_res = calculate_wfo_stability_degradation(trades)
+        self.assertIn("wfe_return_pct", wfo_res)
+        self.assertIn("wfe_sharpe_pct", wfo_res)
+        self.assertIn("is_total_profit_pct", wfo_res)
+        self.assertIn("oos_total_profit_pct", wfo_res)
+        self.assertIn("fold_consistency_pct", wfo_res)
+        self.assertIn("wfo_stability_rating", wfo_res)
+        self.assertIn("folds", wfo_res)
+        self.assertGreater(wfo_res["wfe_return_pct"], 0.0)
+        self.assertEqual(wfo_res["fold_consistency_pct"], 100.0)
+        self.assertIn("Excellent", wfo_res["wfo_stability_rating"])
+
+        # 17. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2785,6 +2801,11 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("avg_mfe_pct", strat)
         self.assertIn("edge_ratio", strat)
         self.assertIn("edge_rating", strat)
+        self.assertIn("wfo_stability", strat)
+        self.assertIn("wfe_return_pct", strat)
+        self.assertIn("wfe_sharpe_pct", strat)
+        self.assertIn("fold_consistency_pct", strat)
+        self.assertIn("wfo_stability_rating", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
@@ -2799,6 +2820,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("수익 집중도 및 이상치 의존성(Outlier Robustness) 분석", md)
         self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도 분석", md)
         self.assertIn("MAE / MFE 진입 우위(Edge) 및 청산 효율성(Exit Capture) 분석", md)
+        self.assertIn("워크포워드(WFO) 파라미터 안정성 및 성과 감쇄율(Degradation) 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2827,6 +2849,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("avg_mfe_pct", csv_str)
         self.assertIn("edge_ratio", csv_str)
         self.assertIn("edge_rating", csv_str)
+        self.assertIn("wfe_return_pct", csv_str)
+        self.assertIn("wfe_sharpe_pct", csv_str)
+        self.assertIn("fold_consistency_pct", csv_str)
+        self.assertIn("wfo_stability_rating", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2841,6 +2867,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("수익 집중도 및 이상치 의존성", html_str)
         self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도", html_str)
         self.assertIn("MAE / MFE 진입 우위 및 청산 효율성", html_str)
+        self.assertIn("워크포워드(WFO) 파라미터 안정성 및 성과 감쇄율", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:

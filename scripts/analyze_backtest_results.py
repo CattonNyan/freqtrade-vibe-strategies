@@ -2376,6 +2376,162 @@ def calculate_mae_mfe_edge_analysis(
     }
 
 
+def calculate_wfo_stability_degradation(
+    trades: list[dict[str, Any]],
+    n_folds: int = 4,
+) -> dict[str, Any]:
+    """Analyze Walk-Forward Efficiency (WFE), In-Sample vs Out-of-Sample stability,
+    parameter degradation, and fold consistency across chronological trade history.
+
+    Evaluates:
+    - wfe_return_pct: Walk-Forward Efficiency (OOS Return / IS Return * 100%)
+    - wfe_sharpe_pct: Walk-Forward Sharpe Degradation Ratio
+    - is_total_profit_pct / oos_total_profit_pct: Profit in first half vs second half
+    - is_win_rate_pct / oos_win_rate_pct: Win rate in first half vs second half
+    - is_profit_factor / oos_profit_factor: Profit factor in first half vs second half
+    - is_sharpe / oos_sharpe: Sharpe ratio in first half vs second half
+    - fold_consistency_pct: % of chronological folds that were profitable (>0%)
+    - annualized_decay_pct: Estimated decay rate across sequential folds via linear slope
+    - wfo_stability_rating: 4-tier institutional classification
+    - folds: List of per-fold performance dictionaries
+    """
+    if not trades or len(trades) < 4:
+        return {
+            "wfe_return_pct": 0.0,
+            "wfe_sharpe_pct": 0.0,
+            "is_total_profit_pct": 0.0,
+            "oos_total_profit_pct": 0.0,
+            "is_win_rate_pct": 0.0,
+            "oos_win_rate_pct": 0.0,
+            "is_profit_factor": 0.0,
+            "oos_profit_factor": 0.0,
+            "is_sharpe": 0.0,
+            "oos_sharpe": 0.0,
+            "fold_consistency_pct": 0.0,
+            "annualized_decay_pct": 0.0,
+            "wfo_stability_rating": "N/A",
+            "folds": [],
+        }
+
+    trade_list = []
+    for t in trades:
+        o_ts, _ = _extract_trade_open_close_seconds(t)
+        p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        trade_list.append((o_ts if o_ts is not None else 0.0, p, t))
+
+    trade_list.sort(key=lambda x: x[0])
+    profits = [x[1] for x in trade_list]
+    n_trades = len(profits)
+
+    # 1. In-Sample vs Out-of-Sample (50/50 chronological split)
+    split_idx = n_trades // 2
+    is_profits = profits[:split_idx]
+    oos_profits = profits[split_idx:]
+
+    def _calc_sub_metrics(sub_p: list[float]) -> tuple[float, float, float, float]:
+        if not sub_p:
+            return 0.0, 0.0, 0.0, 0.0
+        tot_pct = sum(sub_p) * 100.0
+        wins = [p for p in sub_p if p > 1e-6]
+        losses = [abs(p) for p in sub_p if p < -1e-6]
+        wr = (len(wins) / len(sub_p)) * 100.0 if sub_p else 0.0
+        pf = (sum(wins) / sum(losses)) if sum(losses) > 0 else (999.0 if sum(wins) > 0 else 0.0)
+        mean_p = sum(sub_p) / len(sub_p)
+        if len(sub_p) > 1:
+            var_p = sum((p - mean_p) ** 2 for p in sub_p) / (len(sub_p) - 1)
+            std_p = math.sqrt(var_p) if var_p > 0 else 0.0
+        else:
+            std_p = 0.0
+        sharpe = (mean_p / std_p) if std_p > 1e-6 else 0.0
+        return tot_pct, wr, pf, sharpe
+
+    is_tot, is_wr, is_pf, is_sh = _calc_sub_metrics(is_profits)
+    oos_tot, oos_wr, oos_pf, oos_sh = _calc_sub_metrics(oos_profits)
+
+    if abs(is_tot) > 1e-4:
+        wfe_ret = (oos_tot / is_tot) * 100.0
+    else:
+        wfe_ret = 100.0 if oos_tot > 0 else 0.0
+
+    if abs(is_sh) > 1e-4:
+        wfe_sharpe = (oos_sh / is_sh) * 100.0
+    else:
+        wfe_sharpe = 100.0 if oos_sh > 0 else 0.0
+
+    # 2. Chronological Folds
+    actual_folds = min(n_folds, n_trades // 2)
+    actual_folds = max(2, actual_folds)
+    fold_size = n_trades / actual_folds
+
+    folds_data = []
+    profitable_folds = 0
+    fold_returns = []
+
+    for k in range(actual_folds):
+        s_idx = int(k * fold_size)
+        e_idx = int((k + 1) * fold_size) if k < (actual_folds - 1) else n_trades
+        chunk = profits[s_idx:e_idx]
+        f_tot, f_wr, f_pf, f_sh = _calc_sub_metrics(chunk)
+        if f_tot > 0:
+            profitable_folds += 1
+        fold_returns.append(f_tot)
+
+        first_t = trade_list[s_idx][2]
+        last_t = trade_list[e_idx - 1][2]
+        d_start = str(first_t.get("open_date", f"Trade #{s_idx + 1}"))[:10]
+        d_end = str(last_t.get("close_date", last_t.get("open_date", f"Trade #{e_idx}")))[:10]
+
+        folds_data.append({
+            "fold_index": k + 1,
+            "period_label": f"Fold {k + 1} ({d_start} ~ {d_end})",
+            "trades_count": len(chunk),
+            "total_profit_pct": round(f_tot, 2),
+            "win_rate_pct": round(f_wr, 1),
+            "profit_factor": round(f_pf, 2),
+            "sharpe_ratio": round(f_sh, 2),
+            "is_profitable": bool(f_tot > 0),
+        })
+
+    consistency_pct = (profitable_folds / actual_folds) * 100.0
+
+    # Trend slope across folds
+    K = actual_folds
+    if K >= 2:
+        mean_x = (K - 1) / 2.0
+        mean_y = sum(fold_returns) / K
+        ss_xx = sum((i - mean_x) ** 2 for i in range(K))
+        ss_xy = sum((i - mean_x) * (fold_returns[i] - mean_y) for i in range(K))
+        decay_pct = (ss_xy / ss_xx) if ss_xx > 1e-9 else 0.0
+    else:
+        decay_pct = 0.0
+
+    if wfe_ret >= 70.0 and consistency_pct >= 75.0 and oos_tot > 0:
+        rating = "Excellent WFO Stability (Robust Alpha)"
+    elif wfe_ret >= 45.0 and consistency_pct >= 50.0 and oos_tot > 0:
+        rating = "Moderate WFO Stability (Controlled Decay)"
+    elif wfe_ret >= 20.0 and oos_tot > 0:
+        rating = "Suboptimal Stability (Noticeable Alpha Decay)"
+    else:
+        rating = "Critical In-Sample Overfit (Fragile Parameter Drift)"
+
+    return {
+        "wfe_return_pct": round(wfe_ret, 1),
+        "wfe_sharpe_pct": round(wfe_sharpe, 1),
+        "is_total_profit_pct": round(is_tot, 2),
+        "oos_total_profit_pct": round(oos_tot, 2),
+        "is_win_rate_pct": round(is_wr, 1),
+        "oos_win_rate_pct": round(oos_wr, 1),
+        "is_profit_factor": round(is_pf, 2),
+        "oos_profit_factor": round(oos_pf, 2),
+        "is_sharpe": round(is_sh, 2),
+        "oos_sharpe": round(oos_sh, 2),
+        "fold_consistency_pct": round(consistency_pct, 1),
+        "annualized_decay_pct": round(decay_pct, 2),
+        "wfo_stability_rating": rating,
+        "folds": folds_data,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -2426,6 +2582,7 @@ def parse_freqtrade_backtest_json(
         profit_concentration = calculate_trade_profit_concentration(trades)
         concurrency_analysis = calculate_concurrency_exposure_analysis(trades)
         mae_mfe_analysis = calculate_mae_mfe_edge_analysis(trades)
+        wfo_stability = calculate_wfo_stability_degradation(trades)
 
         combined = {
             "strategy": strat_name,
@@ -2483,6 +2640,16 @@ def parse_freqtrade_backtest_json(
             "edge_ratio": mae_mfe_analysis["edge_ratio"],
             "optimal_sl_suggestion_pct": mae_mfe_analysis["optimal_sl_suggestion_pct"],
             "edge_rating": mae_mfe_analysis["edge_rating"],
+            "wfo_stability": wfo_stability,
+            "wfe_return_pct": wfo_stability["wfe_return_pct"],
+            "wfe_sharpe_pct": wfo_stability["wfe_sharpe_pct"],
+            "is_total_profit_pct": wfo_stability["is_total_profit_pct"],
+            "oos_total_profit_pct": wfo_stability["oos_total_profit_pct"],
+            "is_win_rate_pct": wfo_stability["is_win_rate_pct"],
+            "oos_win_rate_pct": wfo_stability["oos_win_rate_pct"],
+            "fold_consistency_pct": wfo_stability["fold_consistency_pct"],
+            "annualized_decay_pct": wfo_stability["annualized_decay_pct"],
+            "wfo_stability_rating": wfo_stability["wfo_stability_rating"],
         }
         strategy_results[strat_name] = combined
 
@@ -2805,6 +2972,28 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
             lines.append(f"| **평균 최대 역행 진폭 (Avg MAE)** | `{mae_mfe.get('avg_mae_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_win_mae_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_loss_mae_pct', 0.0):+.2f}%` |")
             lines.append(f"| **평균 최대 순행 진폭 (Avg MFE)** | `{mae_mfe.get('avg_mfe_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_win_mfe_pct', 0.0):+.2f}%` | `{mae_mfe.get('avg_loss_mfe_pct', 0.0):+.2f}%` |")
 
+    # Detailed Walk-Forward (WFO) parameter stability tables
+    for name, data in analysis_results.items():
+        wfo = data.get("wfo_stability", {})
+        if wfo and wfo.get("wfo_stability_rating") != "N/A":
+            lines.append("")
+            lines.append(f"### ⏳ 전략 `{name}` 워크포워드(WFO) 파라미터 안정성 및 성과 감쇄율(Degradation) 분석")
+            lines.append(f"- **WFO 안정성 등급**: `{wfo.get('wfo_stability_rating', 'N/A')}`")
+            lines.append(f"- **워크포워드 효율(WFE %)**: `{wfo.get('wfe_return_pct', 0.0):.1f}%` (In-Sample 대비 Out-of-Sample 성과 유지 비율, 50% 이상 권장)")
+            lines.append(f"- **시계열 구간 일관성(Consistency)**: `{wfo.get('fold_consistency_pct', 0.0):.1f}%` (분할 구간 중 흑자 유지 비율)")
+            lines.append(f"- **인샘플(IS) vs 아웃오브샘플(OOS)**: IS `{wfo.get('is_total_profit_pct', 0.0):+.2f}%` (승률 {wfo.get('is_win_rate_pct', 0.0):.1f}%, PF {wfo.get('is_profit_factor', 0.0):.2f}) ➔ OOS `{wfo.get('oos_total_profit_pct', 0.0):+.2f}%` (승률 {wfo.get('oos_win_rate_pct', 0.0):.1f}%, PF {wfo.get('oos_profit_factor', 0.0):.2f})")
+            folds = wfo.get("folds", [])
+            if folds:
+                lines.append("| 시계열 구간 (Fold) | 거래수 | 승률 | 총 수익률 | 손익비 (PF) | 샤프 지수 | 흑자 여부 |")
+                lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+                for f in folds:
+                    profit_mark = "✅ 흑자" if f.get("is_profitable") else "❌ 적자"
+                    lines.append(
+                        f"| **{f.get('period_label')}** | {f.get('trades_count')}회 | "
+                        f"{f.get('win_rate_pct', 0.0):.1f}% | {f.get('total_profit_pct', 0.0):+.2f}% | "
+                        f"{f.get('profit_factor', 0.0):.2f} | {f.get('sharpe_ratio', 0.0):.2f} | {profit_mark} |"
+                    )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -2862,6 +3051,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("- **CPC 지수 (Continuation Protection Criterion)**: 손익비 × 승률 × 손익비율(Win/Loss Ratio)의 복합 척도로, 전략의 장기적인 수익성 지속력을 검증합니다.")
     lines.append("- **RoMaD (Return over Maximum Drawdown)**: 총 누적 수익률을 최대 낙폭(MDD)으로 나눈 지표로, 헤지펀드 및 퀀트 자산배분에서 최대 감내 손실 대비 자본 수익 배수를 직관적으로 평가합니다.")
     lines.append("- **최대 역행/순행 진폭 및 청산 효율성 (MAE / MFE & Exit Capture Efficiency)**: 각 거래가 진행되는 동안 경험한 최악의 장중 낙폭(MAE, Maximum Adverse Excursion)과 최고의 장중 미실현 수익(MFE, Maximum Favorable Excursion)을 추적합니다. 진입 우위 지수(Edge Ratio = MFE / |MAE|)를 통해 진입 시점의 통계적 우위를 검증하고, 최고점 대비 실제 실현된 수익 비율(Exit Capture %) 및 수익 구간 도달 후 손절로 전환된 거래(Wasted Winners)를 진단하여 최적 스탑로스 배치 기준선을 제시합니다.")
+    lines.append("- **워크포워드 효율 및 파라미터 안정성 (Walk-Forward Efficiency / WFE & Degradation)**: 전체 백테스트 기간을 인샘플(IS, 전반부)과 아웃오브샘플(OOS, 후반부) 및 다중 시계열 구간(Folds)으로 분할하여 파라미터 과최적화와 성과 감쇄율을 측정합니다. WFE(OOS 수익률 / IS 수익률) 50% 이상을 유지하는지, 전 구간에 걸쳐 안정적으로 흑자를 기록하는지(Fold Consistency %) 평가하여 실전 라이브 투입 가능성을 엄격히 판별합니다.")
     lines.append("- **몬테카를로 무작위 재배열 시뮬레이션 (Monte Carlo Trade Reshuffle)**: 과거 백테스트 거래들의 순서를 무작위로 수천 번 재배열(Permutation)하여 거래 순서 의존성(Sequence of Returns Risk)을 검증하고, 최악의 연패 구간이 겹쳤을 때 발생 가능한 95% 및 99% 신뢰구간의 잠재적 최대 낙폭(Worst Expected MDD)과 계좌 파산/위험 임계치 초과 확률을 도출합니다.")
     return "\n".join(lines)
 
@@ -2994,6 +3184,15 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "edge_ratio",
         "optimal_sl_suggestion_pct",
         "edge_rating",
+        "wfe_return_pct",
+        "wfe_sharpe_pct",
+        "is_total_profit_pct",
+        "oos_total_profit_pct",
+        "is_win_rate_pct",
+        "oos_win_rate_pct",
+        "fold_consistency_pct",
+        "annualized_decay_pct",
+        "wfo_stability_rating",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -3658,6 +3857,28 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if mae_mfe and mae_mfe.get("edge_rating") != "N/A" else ""
 
+        wfo = data.get("wfo_stability", {})
+        wfo_table_html = f"""
+        <h3>⏳ 워크포워드(WFO) 파라미터 안정성 및 성과 감쇄율</h3>
+        <p><strong>안정성 등급:</strong> <span class="badge {('badge-green' if 'Excellent' in wfo.get('wfo_stability_rating', '') else ('badge-primary' if 'Moderate' in wfo.get('wfo_stability_rating', '') else 'badge-red'))}">{wfo.get('wfo_stability_rating', 'N/A')}</span> | <strong>WFE 효율:</strong> {wfo.get('wfe_return_pct', 0.0):.1f}% | <strong>구간 일관성:</strong> {wfo.get('fold_consistency_pct', 0.0):.1f}% | <strong>IS ➔ OOS:</strong> {wfo.get('is_total_profit_pct', 0.0):+.2f}% ➔ {wfo.get('oos_total_profit_pct', 0.0):+.2f}%</p>
+        <table>
+            <thead>
+                <tr><th>시계열 구간 (Fold)</th><th>거래수</th><th>승률</th><th>총 수익률</th><th>손익비</th><th>샤프 지수</th><th>흑자 여부</th></tr>
+            </thead>
+            <tbody>
+                {''.join(f'''<tr>
+                    <td><strong>{f.get("period_label")}</strong></td>
+                    <td>{f.get("trades_count")}회</td>
+                    <td>{f.get("win_rate_pct", 0.0):.1f}%</td>
+                    <td class="{('positive' if f.get('total_profit_pct', 0.0) >= 0 else 'negative')}">{f.get('total_profit_pct', 0.0):+.2f}%</td>
+                    <td>{f.get("profit_factor", 0.0):.2f}</td>
+                    <td>{f.get("sharpe_ratio", 0.0):.2f}</td>
+                    <td>{('✅ 흑자' if f.get('is_profitable') else '❌ 적자')}</td>
+                </tr>''' for f in wfo.get("folds", [])) if wfo.get("folds") else '<tr><td colspan="7">구간 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if wfo and wfo.get("wfo_stability_rating") != "N/A" else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -3673,6 +3894,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {conc_table_html}
             {concurrency_table_html}
             {mae_mfe_table_html}
+            {wfo_table_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}
