@@ -2541,6 +2541,7 @@ class StrategySourceTests(unittest.TestCase):
             calculate_concurrency_exposure_analysis,
             calculate_mae_mfe_edge_analysis,
             calculate_wfo_stability_degradation,
+            calculate_holding_time_decay_fatigue,
             calculate_annualized_metrics,
             calculate_trade_expectancy,
             parse_freqtrade_backtest_json,
@@ -2565,6 +2566,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(calculate_mae_mfe_edge_analysis([])["edge_rating"], "N/A")
         self.assertEqual(calculate_wfo_stability_degradation([])["wfo_stability_rating"], "N/A")
         self.assertEqual(calculate_wfo_stability_degradation([{"profit_ratio": 0.01}])["wfo_stability_rating"], "N/A")
+        self.assertEqual(calculate_holding_time_decay_fatigue([])["holding_efficiency_rating"], "N/A")
 
         # 2. Mixed long and short trades
         trades = [
@@ -2759,7 +2761,21 @@ class StrategySourceTests(unittest.TestCase):
         self.assertEqual(wfo_res["fold_consistency_pct"], 100.0)
         self.assertIn("Excellent", wfo_res["wfo_stability_rating"])
 
-        # 17. Full json parsing and reports
+        # 17. Holding Time-Decay and Capital Velocity Analysis
+        hf_res = calculate_holding_time_decay_fatigue(trades)
+        self.assertIn("mean_win_duration_min", hf_res)
+        self.assertIn("mean_loss_duration_min", hf_res)
+        self.assertIn("duration_fatigue_ratio", hf_res)
+        self.assertIn("stale_trades_count", hf_res)
+        self.assertIn("stale_trades_pct", hf_res)
+        self.assertIn("optimal_timeout_hours", hf_res)
+        self.assertIn("peak_velocity_bin", hf_res)
+        self.assertIn("holding_efficiency_rating", hf_res)
+        self.assertIn("duration_bins", hf_res)
+        self.assertGreater(hf_res["mean_win_duration_min"], 0.0)
+        self.assertGreater(hf_res["duration_fatigue_ratio"], 0.0)
+
+        # 18. Full json parsing and reports
         mock_data = {
             "strategy": {
                 "TestDirStrat": {
@@ -2806,6 +2822,10 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("wfe_sharpe_pct", strat)
         self.assertIn("fold_consistency_pct", strat)
         self.assertIn("wfo_stability_rating", strat)
+        self.assertIn("holding_fatigue", strat)
+        self.assertIn("duration_fatigue_ratio", strat)
+        self.assertIn("holding_efficiency_rating", strat)
+        self.assertIn("peak_velocity_bin", strat)
 
         md = generate_markdown_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과 분석", md)
@@ -2821,6 +2841,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도 분석", md)
         self.assertIn("MAE / MFE 진입 우위(Edge) 및 청산 효율성(Exit Capture) 분석", md)
         self.assertIn("워크포워드(WFO) 파라미터 안정성 및 성과 감쇄율(Degradation) 분석", md)
+        self.assertIn("포지션 보유 기간 감쇄(Time-Decay) 및 자본 속도(Velocity) 분석", md)
         self.assertIn("🟢 롱 (Long)", md)
         self.assertIn("🔴 숏 (Short)", md)
 
@@ -2853,6 +2874,9 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("wfe_sharpe_pct", csv_str)
         self.assertIn("fold_consistency_pct", csv_str)
         self.assertIn("wfo_stability_rating", csv_str)
+        self.assertIn("duration_fatigue_ratio", csv_str)
+        self.assertIn("holding_efficiency_rating", csv_str)
+        self.assertIn("optimal_timeout_hours", csv_str)
 
         html_str = generate_html_report(parsed)
         self.assertIn("롱/숏 포지션 방향별 성과", html_str)
@@ -2868,6 +2892,7 @@ class StrategySourceTests(unittest.TestCase):
         self.assertIn("동시 보유 포지션(Concurrency) 및 자본 활용도", html_str)
         self.assertIn("MAE / MFE 진입 우위 및 청산 효율성", html_str)
         self.assertIn("워크포워드(WFO) 파라미터 안정성 및 성과 감쇄율", html_str)
+        self.assertIn("포지션 보유 기간 감쇄(Time-Decay) 및 자본 속도", html_str)
         self.assertIn("MAR 비율 (CAGR / MDD)", html_str)
 
     def test_summarize_strategy_configs_execution_and_order_types(self) -> None:

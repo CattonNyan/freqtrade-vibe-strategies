@@ -2532,6 +2532,207 @@ def calculate_wfo_stability_degradation(
     }
 
 
+def calculate_holding_time_decay_fatigue(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    """Analyze trade holding duration decay, win vs loss duration asymmetry, and capital velocity fatigue.
+
+    Measures:
+    - mean_win_duration_min / mean_loss_duration_min: Holding time asymmetry
+    - duration_fatigue_ratio: Ratio of loss holding duration to win holding duration (>1.5 indicates holding loser drag)
+    - stale_cutoff_min: Cutoff threshold beyond which trades are categorized as stale (2x median win duration)
+    - stale_trades_count / stale_trades_pct: Trades exceeding 2x median win duration
+    - stale_win_rate_pct / fresh_win_rate_pct: Win rate decay in stale holding periods
+    - stale_total_profit_pct / fresh_total_profit_pct: Profit generation of stale vs fresh trades
+    - stale_profit_drag_pct: Profit lost due to stale trade persistence
+    - optimal_timeout_hours: Suggested exit cutoff based on 85th percentile of winning trade durations
+    - peak_velocity_bin: The holding duration bracket generating maximum bps per hour
+    - holding_efficiency_rating: 4-tier institutional holding efficiency rating
+    - duration_bins: Detailed breakdown across 5 duration brackets
+    """
+    if not trades:
+        return {
+            "mean_win_duration_min": 0.0,
+            "mean_loss_duration_min": 0.0,
+            "median_win_duration_min": 0.0,
+            "median_loss_duration_min": 0.0,
+            "duration_fatigue_ratio": 1.0,
+            "stale_cutoff_min": 0.0,
+            "stale_trades_count": 0,
+            "stale_trades_pct": 0.0,
+            "stale_win_rate_pct": 0.0,
+            "fresh_win_rate_pct": 0.0,
+            "stale_total_profit_pct": 0.0,
+            "fresh_total_profit_pct": 0.0,
+            "stale_profit_drag_pct": 0.0,
+            "optimal_timeout_hours": 0.0,
+            "peak_velocity_bin": "N/A",
+            "holding_efficiency_rating": "N/A",
+            "duration_bins": [],
+        }
+
+    def _calc_median(vals: list[float]) -> float:
+        if not vals:
+            return 0.0
+        s = sorted(vals)
+        n = len(s)
+        mid = n // 2
+        return float(s[mid]) if n % 2 == 1 else float((s[mid - 1] + s[mid]) / 2.0)
+
+    def _calc_percentile(vals: list[float], pct: float) -> float:
+        if not vals:
+            return 0.0
+        s = sorted(vals)
+        if len(s) == 1:
+            return float(s[0])
+        k = (len(s) - 1) * (pct / 100.0)
+        f = math.floor(k)
+        c = math.ceil(k)
+        if f == c:
+            return float(s[int(k)])
+        return float(s[int(f)] * (c - k) + s[int(c)] * (k - f))
+
+    trade_records = []
+    win_durations = []
+    loss_durations = []
+
+    for t in trades:
+        dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+        if dur <= 0.0:
+            o_ts, c_ts = _extract_trade_open_close_seconds(t)
+            if o_ts is not None and c_ts is not None and c_ts >= o_ts:
+                dur = (c_ts - o_ts) / 60.0
+            else:
+                dur = 1.0
+        dur = max(0.5, dur)
+
+        p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
+        p_pct = p * 100.0
+        hrs = max(0.0167, dur / 60.0)
+        vel_bps_h = (p * 10000.0) / hrs
+
+        is_w = p > 1e-6
+        is_l = p < -1e-6
+        if is_w:
+            win_durations.append(dur)
+        elif is_l:
+            loss_durations.append(dur)
+
+        trade_records.append({
+            "duration_min": dur,
+            "duration_hrs": hrs,
+            "profit_ratio": p,
+            "profit_pct": p_pct,
+            "velocity_bps_h": vel_bps_h,
+            "is_win": is_w,
+            "is_loss": is_l,
+        })
+
+    n_trades = len(trade_records)
+    mean_win_dur = (sum(win_durations) / len(win_durations)) if win_durations else 0.0
+    mean_loss_dur = (sum(loss_durations) / len(loss_durations)) if loss_durations else 0.0
+    med_win_dur = _calc_median(win_durations)
+    med_loss_dur = _calc_median(loss_durations)
+
+    fatigue_ratio = (mean_loss_dur / max(1.0, mean_win_dur)) if mean_win_dur > 0 else 1.0
+
+    stale_cutoff = max(60.0, 2.0 * med_win_dur) if med_win_dur > 0 else 1440.0
+
+    stale_trades = [r for r in trade_records if r["duration_min"] > stale_cutoff]
+    fresh_trades = [r for r in trade_records if r["duration_min"] <= stale_cutoff]
+
+    stale_count = len(stale_trades)
+    stale_pct = (stale_count / n_trades) * 100.0 if n_trades > 0 else 0.0
+
+    stale_wins = [r for r in stale_trades if r["is_win"]]
+    fresh_wins = [r for r in fresh_trades if r["is_win"]]
+    stale_wr = (len(stale_wins) / stale_count) * 100.0 if stale_count > 0 else 0.0
+    fresh_wr = (len(fresh_wins) / len(fresh_trades)) * 100.0 if fresh_trades else 0.0
+
+    stale_tot_p = sum(r["profit_pct"] for r in stale_trades)
+    fresh_tot_p = sum(r["profit_pct"] for r in fresh_trades)
+    stale_drag = stale_tot_p if stale_tot_p < 0 else 0.0
+
+    BRACKETS = [
+        ("Fast Scalp (< 30m)", 0.0, 30.0),
+        ("Short (30m - 2h)", 30.0, 120.0),
+        ("Medium (2h - 8h)", 120.0, 480.0),
+        ("Extended (8h - 24h)", 480.0, 1440.0),
+        ("Stale (> 24h)", 1440.0, float("inf")),
+    ]
+
+    bins_data = []
+    best_vel = -999999.0
+    best_vel_bin = "N/A"
+
+    for label, min_m, max_m in BRACKETS:
+        chunk = [r for r in trade_records if min_m <= r["duration_min"] < max_m]
+        cnt = len(chunk)
+        if cnt > 0:
+            w_cnt = sum(1 for r in chunk if r["is_win"])
+            wr = (w_cnt / cnt) * 100.0
+            tot_p = sum(r["profit_pct"] for r in chunk)
+            avg_p = tot_p / cnt
+            avg_vel = sum(r["velocity_bps_h"] for r in chunk) / cnt
+            win_p = sum(r["profit_pct"] for r in chunk if r["is_win"])
+            loss_p = abs(sum(r["profit_pct"] for r in chunk if r["is_loss"]))
+            pf = (win_p / loss_p) if loss_p > 0 else (999.0 if win_p > 0 else 0.0)
+
+            if avg_vel > best_vel:
+                best_vel = avg_vel
+                best_vel_bin = label
+        else:
+            wr = 0.0
+            tot_p = 0.0
+            avg_p = 0.0
+            avg_vel = 0.0
+            pf = 0.0
+
+        bins_data.append({
+            "bracket": label,
+            "trades_count": cnt,
+            "share_pct": round((cnt / n_trades) * 100.0, 1) if n_trades > 0 else 0.0,
+            "win_rate_pct": round(wr, 1),
+            "total_profit_pct": round(tot_p, 2),
+            "avg_profit_pct": round(avg_p, 2),
+            "velocity_bps_per_hour": round(avg_vel, 1),
+            "profit_factor": round(pf, 2),
+        })
+
+    if stale_count > 0 and stale_tot_p < 0 and win_durations:
+        opt_timeout_hrs = round(_calc_percentile(win_durations, 85.0) / 60.0, 1)
+        opt_timeout_hrs = max(0.5, opt_timeout_hrs)
+    else:
+        opt_timeout_hrs = 0.0
+
+    if fatigue_ratio <= 1.25 and stale_pct <= 15.0 and (stale_tot_p >= 0 or stale_count == 0):
+        rating = "High-Velocity Edge (Crisp Exits, Zero Stale Drag)"
+    elif fatigue_ratio <= 1.8 and fresh_tot_p > 0:
+        rating = "Moderate Holding Efficiency (Controlled Decay)"
+    elif fatigue_ratio > 1.8 and stale_tot_p < 0:
+        rating = "Holding Fatigue Warning (Asymmetric Loser Drag)"
+    else:
+        rating = "Severe Zombie Trade Trap (Chronic Stale Capital Loss)"
+
+    return {
+        "mean_win_duration_min": round(mean_win_dur, 1),
+        "mean_loss_duration_min": round(mean_loss_dur, 1),
+        "median_win_duration_min": round(med_win_dur, 1),
+        "median_loss_duration_min": round(med_loss_dur, 1),
+        "duration_fatigue_ratio": round(fatigue_ratio, 2),
+        "stale_cutoff_min": round(stale_cutoff, 1),
+        "stale_trades_count": stale_count,
+        "stale_trades_pct": round(stale_pct, 1),
+        "stale_win_rate_pct": round(stale_wr, 1),
+        "fresh_win_rate_pct": round(fresh_wr, 1),
+        "stale_total_profit_pct": round(stale_tot_p, 2),
+        "fresh_total_profit_pct": round(fresh_tot_p, 2),
+        "stale_profit_drag_pct": round(stale_drag, 2),
+        "optimal_timeout_hours": opt_timeout_hrs,
+        "peak_velocity_bin": best_vel_bin,
+        "holding_efficiency_rating": rating,
+        "duration_bins": bins_data,
+    }
+
+
 def parse_freqtrade_backtest_json(
     json_data: dict[str, Any],
     sort_by: str | None = None,
@@ -2583,6 +2784,7 @@ def parse_freqtrade_backtest_json(
         concurrency_analysis = calculate_concurrency_exposure_analysis(trades)
         mae_mfe_analysis = calculate_mae_mfe_edge_analysis(trades)
         wfo_stability = calculate_wfo_stability_degradation(trades)
+        holding_fatigue = calculate_holding_time_decay_fatigue(trades)
 
         combined = {
             "strategy": strat_name,
@@ -2650,6 +2852,16 @@ def parse_freqtrade_backtest_json(
             "fold_consistency_pct": wfo_stability["fold_consistency_pct"],
             "annualized_decay_pct": wfo_stability["annualized_decay_pct"],
             "wfo_stability_rating": wfo_stability["wfo_stability_rating"],
+            "holding_fatigue": holding_fatigue,
+            "mean_win_duration_min": holding_fatigue["mean_win_duration_min"],
+            "mean_loss_duration_min": holding_fatigue["mean_loss_duration_min"],
+            "duration_fatigue_ratio": holding_fatigue["duration_fatigue_ratio"],
+            "stale_trades_count": holding_fatigue["stale_trades_count"],
+            "stale_trades_pct": holding_fatigue["stale_trades_pct"],
+            "stale_total_profit_pct": holding_fatigue["stale_total_profit_pct"],
+            "optimal_timeout_hours": holding_fatigue["optimal_timeout_hours"],
+            "peak_velocity_bin": holding_fatigue["peak_velocity_bin"],
+            "holding_efficiency_rating": holding_fatigue["holding_efficiency_rating"],
         }
         strategy_results[strat_name] = combined
 
@@ -2994,6 +3206,29 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
                         f"{f.get('profit_factor', 0.0):.2f} | {f.get('sharpe_ratio', 0.0):.2f} | {profit_mark} |"
                     )
 
+    # Detailed Holding Time-Decay & Capital Velocity tables
+    for name, data in analysis_results.items():
+        hf = data.get("holding_fatigue", {})
+        if hf and hf.get("holding_efficiency_rating") != "N/A":
+            lines.append("")
+            lines.append(f"### ⏱️ 전략 `{name}` 포지션 보유 기간 감쇄(Time-Decay) 및 자본 속도(Velocity) 분석")
+            lines.append(f"- **보유 효율성 등급**: `{hf.get('holding_efficiency_rating', 'N/A')}`")
+            lines.append(f"- **승패 보유 시간 비대칭(Fatigue Ratio)**: `{hf.get('duration_fatigue_ratio', 1.0):.2f}x` (승리 평균 {hf.get('mean_win_duration_min', 0.0):.1f}분 vs 손실 평균 {hf.get('mean_loss_duration_min', 0.0):.1f}분, 1.5배 초과 시 손실 방치 경고)")
+            lines.append(f"- **정체(Stale) 포지션 잠식**: {hf.get('stale_trades_count', 0)}회 ({hf.get('stale_trades_pct', 0.0):.1f}%) ➔ 누적 손익 `{hf.get('stale_total_profit_pct', 0.0):+.2f}%` (승률 {hf.get('stale_win_rate_pct', 0.0):.1f}% vs 신선 구간 {hf.get('fresh_win_rate_pct', 0.0):.1f}%)")
+            timeout_str = f"`{hf.get('optimal_timeout_hours')}시간` (승리 거래 85% 청산 기준선)" if hf.get('optimal_timeout_hours', 0.0) > 0 else "불필요 (시간 경과 시에도 양호한 기대값 유지)"
+            lines.append(f"- **권장 최대 보유 타임아웃 (Stop Timeout)**: {timeout_str}")
+            lines.append(f"- **최고 자본 속도 구간 (Peak Velocity)**: `{hf.get('peak_velocity_bin', 'N/A')}`")
+            bins = hf.get("duration_bins", [])
+            if bins:
+                lines.append("| 보유 기간 구간 (Bracket) | 거래수 | 비중 | 승률 | 총 수익률 | 건당 평균 | 자본 속도 (bps/h) | 손익비 |")
+                lines.append("| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
+                for b in bins:
+                    lines.append(
+                        f"| **{b.get('bracket')}** | {b.get('trades_count')}회 | {b.get('share_pct', 0.0):.1f}% | "
+                        f"{b.get('win_rate_pct', 0.0):.1f}% | {b.get('total_profit_pct', 0.0):+.2f}% | "
+                        f"{b.get('avg_profit_pct', 0.0):+.2f}% | `{b.get('velocity_bps_per_hour', 0.0):+.1f}` | {b.get('profit_factor', 0.0):.2f} |"
+                    )
+
     # Detailed Monte Carlo sequence risk tables
     has_mc = any(data.get("mc_iterations", 0) > 0 for data in analysis_results.values())
     if has_mc:
@@ -3014,6 +3249,7 @@ def generate_markdown_report(analysis_results: dict[str, Any]) -> str:
     lines.append("")
     lines.append("### 💡 지표 설명 (Methodology)")
     lines.append("- **동시 보유 포지션 및 자본 활용도 (Concurrency & Capital Exposure)**: 백테스트 기간 중 동시에 열려 있던 활성 포지션 수의 시간 가중 평균 및 최대 동시 진입 슬롯(Peak Concurrent Slots)을 추적합니다. 자본이 거래 없이 방치된 유휴 시간 비율(Idle Time %)과 다중 포지션 동시 보유 시 발생하는 시장 충격 동반 손절(Correlated Overload Penalty)을 진단합니다.")
+    lines.append("- **포지션 보유 시간 감쇄 및 자본 속도 (Holding Time-Decay & Capital Velocity)**: 포지션 보유 시간이 길어질수록 시간당 기대 수익(bps/hour)과 승률이 어떻게 감쇄하는지 프로파일링합니다. 이익 거래 대비 손실 거래를 비정상적으로 오래 끌고 가는지(Fatigue Ratio = 손실 평균 보유시간 / 승리 평균 보유시간) 진단하고, 흑자 거래의 85%가 실현되는 시점을 기반으로 자본을 불필요하게 묶어두는 좀비 포지션을 방지하기 위한 권장 강제 청산 타임아웃(Optimal Stop Timeout)을 도출합니다.")
     lines.append("- **수익 집중도 및 이상치 의존성 (Profit Concentration & Outlier Robustness)**: 소수의 대박(Outlier) 거래가 전체 성과를 왜곡했는지 검증하는 분석입니다. 상위 3개 거래를 완전히 제거했을 때도 전략이 여전히 흑자를 유지하는지(Trimmed Net Profit & PF), 그리고 수익 허핀달 지수(HHI)와 지니 계수(Gini)를 측정하여 지속 가능한 유기적 알파인지 과최적화된 요행인지를 엄격히 판별합니다.")
     lines.append("- **시스템 품질 지수 (System Quality Number / SQN, Van Tharp)**: sqrt(N) * (평균 수익률 / 수익률 표준편차). 거래 전략의 통계적 우수성을 종합 평가하는 지표로, 2.0 이상이면 평균, 3.0 이상이면 우수(Excellent), 5.0 이상이면 탁월(Superb), 7.0 이상이면 성배(Holy Grail) 등급으로 분류됩니다.")
     lines.append("- **K-비율 (K-Ratio, Lars Kestner)**: 누적 수익 곡선의 선형 추세 기울기를 표준오차와 sqrt(T)로 정규화한 지표로, 수익 곡선이 노이즈 없이 얼마나 일관되게 우상향하는지 측정합니다.")
@@ -3193,6 +3429,15 @@ def export_quant_analysis_csv(analysis_results: dict[str, Any]) -> str:
         "fold_consistency_pct",
         "annualized_decay_pct",
         "wfo_stability_rating",
+        "mean_win_duration_min",
+        "mean_loss_duration_min",
+        "duration_fatigue_ratio",
+        "stale_trades_count",
+        "stale_trades_pct",
+        "stale_total_profit_pct",
+        "optimal_timeout_hours",
+        "peak_velocity_bin",
+        "holding_efficiency_rating",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
@@ -3879,6 +4124,30 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         </table>
         """ if wfo and wfo.get("wfo_stability_rating") != "N/A" else ""
 
+        hf = data.get("holding_fatigue", {})
+        timeout_desc = f"{hf.get('optimal_timeout_hours')}시간 (85% 청산 기준)" if hf.get('optimal_timeout_hours', 0.0) > 0 else "불필요 (시간 경과 시에도 안정적)"
+        holding_fatigue_html = f"""
+        <h3>⏱️ 포지션 보유 기간 감쇄(Time-Decay) 및 자본 속도(Velocity)</h3>
+        <p><strong>보유 효율 등급:</strong> <span class="badge {('badge-green' if 'High-Velocity' in hf.get('holding_efficiency_rating', '') else ('badge-primary' if 'Moderate' in hf.get('holding_efficiency_rating', '') else 'badge-red'))}">{hf.get('holding_efficiency_rating', 'N/A')}</span> | <strong>승패 보유 비대칭(Fatigue Ratio):</strong> {hf.get('duration_fatigue_ratio', 1.0):.2f}x (승리 {hf.get('mean_win_duration_min', 0.0):.1f}분 vs 손실 {hf.get('mean_loss_duration_min', 0.0):.1f}분) | <strong>정체 포지션:</strong> {hf.get('stale_trades_count', 0)}회 ({hf.get('stale_trades_pct', 0.0):.1f}%, 누적 {hf.get('stale_total_profit_pct', 0.0):+.2f}%) | <strong>권장 타임아웃:</strong> {timeout_desc}</p>
+        <table>
+            <thead>
+                <tr><th>보유 기간 구간 (Bracket)</th><th>거래수</th><th>비중</th><th>승률</th><th>총 수익률</th><th>건당 평균</th><th>자본 속도 (bps/h)</th><th>손익비</th></tr>
+            </thead>
+            <tbody>
+                {''.join(f'''<tr>
+                    <td><strong>{b.get("bracket")}</strong></td>
+                    <td>{b.get("trades_count")}회</td>
+                    <td>{b.get("share_pct", 0.0):.1f}%</td>
+                    <td>{b.get("win_rate_pct", 0.0):.1f}%</td>
+                    <td class="{('positive' if b.get('total_profit_pct', 0.0) >= 0 else 'negative')}">{b.get('total_profit_pct', 0.0):+.2f}%</td>
+                    <td class="{('positive' if b.get('avg_profit_pct', 0.0) >= 0 else 'negative')}">{b.get('avg_profit_pct', 0.0):+.2f}%</td>
+                    <td><code>{b.get('velocity_bps_per_hour', 0.0):+.1f}</code></td>
+                    <td>{b.get("profit_factor", 0.0):.2f}</td>
+                </tr>''' for b in hf.get("duration_bins", [])) if hf.get("duration_bins") else '<tr><td colspan="8">보유 구간 데이터 없음</td></tr>'}
+            </tbody>
+        </table>
+        """ if hf and hf.get("holding_efficiency_rating") != "N/A" else ""
+
         sections.append(f"""
         <section class="strategy-section">
             <h2>📈 전략: <span class="strategy-title">{name}</span></h2>
@@ -3895,6 +4164,7 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
             {concurrency_table_html}
             {mae_mfe_table_html}
             {wfo_table_html}
+            {holding_fatigue_html}
             {dd_episodes_html}
             {exit_table_html}
             {pair_table_html}
