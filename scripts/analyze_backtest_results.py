@@ -54,6 +54,60 @@ def _percentile(values: list[float], pct: float) -> float:
     return d0 + d1
 
 
+def _extract_trade_open_close_seconds(trade: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Helper to safely extract open and close timestamps in epoch seconds."""
+    open_ts: float | None = None
+    close_ts: float | None = None
+
+    for key in ("open_timestamp", "open_date"):
+        val = trade.get(key)
+        if isinstance(val, (int, float)) and val > 0:
+            open_ts = val / 1000.0 if val > 1e11 else float(val)
+            break
+        elif isinstance(val, str) and val.strip():
+            try:
+                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                open_ts = dt.timestamp()
+                break
+            except Exception:
+                pass
+
+    for key in ("close_timestamp", "close_date"):
+        val = trade.get(key)
+        if isinstance(val, (int, float)) and val > 0:
+            close_ts = val / 1000.0 if val > 1e11 else float(val)
+            break
+        elif isinstance(val, str) and val.strip():
+            try:
+                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                close_ts = dt.timestamp()
+                break
+            except Exception:
+                pass
+
+    if close_ts is None and open_ts is not None:
+        dur = _safe_float(trade.get("trade_duration", trade.get("duration", 0.0)))
+        if dur > 0:
+            close_ts = open_ts + dur * 60.0
+        else:
+            close_ts = open_ts
+
+    if open_ts is not None and close_ts is not None and close_ts < open_ts:
+        close_ts = open_ts
+    return open_ts, close_ts
+
+
+def _extract_trade_duration_min(trade: dict[str, Any]) -> float:
+    """Safely extract trade holding duration in minutes, falling back to open/close timestamp delta."""
+    dur = _safe_float(trade.get("trade_duration", trade.get("duration", 0.0)))
+    if dur > 0.0:
+        return dur
+    o_ts, c_ts = _extract_trade_open_close_seconds(trade)
+    if o_ts is not None and c_ts is not None and c_ts > o_ts:
+        return (c_ts - o_ts) / 60.0
+    return max(0.0, dur)
+
+
 def calculate_ulcer_and_drawdown_metrics(trade_profits: list[float]) -> dict[str, float]:
     """Calculate cumulative equity curve, max drawdown, Ulcer Index, and Pain Index from trade profit percentages.
 
@@ -560,7 +614,7 @@ def calculate_trade_expectancy(trades: list[dict[str, Any]]) -> dict[str, Any]:
     for t in trades:
         # Freqtrade trade profit percentage is typically in 'profit_ratio' (0.05 = 5%)
         profit = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-        duration_min = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+        duration_min = _extract_trade_duration_min(t)
         durations.append(duration_min)
 
         if profit > 1e-6:
@@ -826,7 +880,7 @@ def calculate_exit_reason_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -906,7 +960,7 @@ def calculate_pair_performance_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -989,7 +1043,7 @@ def calculate_direction_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -1081,7 +1135,7 @@ def calculate_day_of_week_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -1179,7 +1233,7 @@ def calculate_hourly_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -1251,7 +1305,7 @@ def calculate_duration_tier_breakdown(
     groups: dict[str, list[dict[str, Any]]] = {tier[0]: [] for tier in TIER_DEFINITIONS}
 
     for t in trades:
-        dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+        dur = _extract_trade_duration_min(t)
         for tier_name, min_d, max_d in TIER_DEFINITIONS:
             if min_d <= dur < max_d:
                 groups[tier_name].append(t)
@@ -1270,7 +1324,7 @@ def calculate_duration_tier_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -1375,7 +1429,7 @@ def calculate_monthly_breakdown(
         profits = []
         for t in t_list:
             p = _safe_float(t.get("profit_ratio", t.get("profit_pct", 0.0) / 100.0 if "profit_pct" in t else 0.0))
-            dur = _safe_float(t.get("trade_duration", t.get("duration", 0.0)))
+            dur = _extract_trade_duration_min(t)
             profits.append(p)
             durations.append(dur)
             if p > 1e-6:
@@ -2015,49 +2069,6 @@ def calculate_trade_profit_concentration(
     }
 
 
-def _extract_trade_open_close_seconds(trade: dict[str, Any]) -> tuple[float | None, float | None]:
-    """Helper to safely extract open and close timestamps in epoch seconds."""
-    open_ts: float | None = None
-    close_ts: float | None = None
-
-    for key in ("open_timestamp", "open_date"):
-        val = trade.get(key)
-        if isinstance(val, (int, float)) and val > 0:
-            open_ts = val / 1000.0 if val > 1e11 else float(val)
-            break
-        elif isinstance(val, str) and val.strip():
-            try:
-                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
-                open_ts = dt.timestamp()
-                break
-            except Exception:
-                pass
-
-    for key in ("close_timestamp", "close_date"):
-        val = trade.get(key)
-        if isinstance(val, (int, float)) and val > 0:
-            close_ts = val / 1000.0 if val > 1e11 else float(val)
-            break
-        elif isinstance(val, str) and val.strip():
-            try:
-                dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
-                close_ts = dt.timestamp()
-                break
-            except Exception:
-                pass
-
-    if close_ts is None and open_ts is not None:
-        dur = _safe_float(trade.get("trade_duration", trade.get("duration", 0.0)))
-        if dur > 0:
-            close_ts = open_ts + dur * 60.0
-        else:
-            close_ts = open_ts
-
-    if open_ts is not None and close_ts is not None and close_ts < open_ts:
-        close_ts = open_ts
-    return open_ts, close_ts
-
-
 def calculate_concurrency_exposure_analysis(
     trades: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -2188,13 +2199,15 @@ def calculate_concurrency_exposure_analysis(
             "expectancy_bps": round(exp_bps, 1),
         }
 
-    # 3. Overload penalty and rating
-    solo_wr = slot_perf.get("Solo (1 Slot)", {}).get("win_rate_pct", 0.0)
-    heavy_wr = slot_perf.get("Moderate (3-4 Slots)", {}).get(
-        "win_rate_pct",
-        slot_perf.get("Heavy (5+ Slots)", {}).get("win_rate_pct", solo_wr)
-    )
-    overload_penalty = max(0.0, round(solo_wr - heavy_wr, 1))
+    # 3. Overload penalty and rating (combine all >=3 slot trades vs Solo/Dual baseline)
+    base_wr = slot_perf.get("Solo (1 Slot)", slot_perf.get("Dual (2 Slots)", {})).get("win_rate_pct", 0.0)
+    multi_trades = bucket_trades["Moderate (3-4 Slots)"] + bucket_trades["Heavy (5+ Slots)"]
+    if multi_trades and ("Solo (1 Slot)" in slot_perf or "Dual (2 Slots)" in slot_perf):
+        multi_wins = sum(1 for x in multi_trades if x > 1e-6)
+        heavy_wr = (multi_wins / len(multi_trades)) * 100.0
+        overload_penalty = max(0.0, round(base_wr - heavy_wr, 1))
+    else:
+        overload_penalty = 0.0
 
     if avg_concurrent >= 2.0 and idle_pct < 35.0:
         eff_rating = "High Capital Efficiency (Active Deployment)"
@@ -2448,12 +2461,12 @@ def calculate_wfo_stability_degradation(
     is_tot, is_wr, is_pf, is_sh = _calc_sub_metrics(is_profits)
     oos_tot, oos_wr, oos_pf, oos_sh = _calc_sub_metrics(oos_profits)
 
-    if abs(is_tot) > 1e-4:
+    if is_tot > 1e-4:
         wfe_ret = (oos_tot / is_tot) * 100.0
     else:
         wfe_ret = 100.0 if oos_tot > 0 else 0.0
 
-    if abs(is_sh) > 1e-4:
+    if is_sh > 1e-4:
         wfe_sharpe = (oos_sh / is_sh) * 100.0
     else:
         wfe_sharpe = 100.0 if oos_sh > 0 else 0.0
@@ -2740,6 +2753,8 @@ def parse_freqtrade_backtest_json(
     monte_carlo: bool = False,
     mc_iterations: int = 1000,
     mc_threshold_pct: float = 20.0,
+    rolling_window: int = 30,
+    wfo_folds: int = 4,
 ) -> dict[str, Any]:
     """Parse strategy results dictionary from Freqtrade backtest JSON."""
     strategy_results = {}
@@ -2778,12 +2793,12 @@ def parse_freqtrade_backtest_json(
         stake_tier_breakdown = calculate_stake_amount_tier_breakdown(trades, sort_by=sort_by)
         monthly_breakdown = calculate_monthly_breakdown(trades, sort_by=sort_by)
         dd_episodes = calculate_drawdown_episodes(trades)
-        rolling_metrics = calculate_rolling_window_metrics(trades, window_size=30)
+        rolling_metrics = calculate_rolling_window_metrics(trades, window_size=rolling_window)
         slippage_sensitivity = simulate_slippage_fee_sensitivity(trades)
         profit_concentration = calculate_trade_profit_concentration(trades)
         concurrency_analysis = calculate_concurrency_exposure_analysis(trades)
         mae_mfe_analysis = calculate_mae_mfe_edge_analysis(trades)
-        wfo_stability = calculate_wfo_stability_degradation(trades)
+        wfo_stability = calculate_wfo_stability_degradation(trades, n_folds=wfo_folds)
         holding_fatigue = calculate_holding_time_decay_fatigue(trades)
 
         combined = {
@@ -4211,9 +4226,10 @@ def generate_html_report(analysis_results: dict[str, Any]) -> str:
         .negative {{ color: var(--red) !important; }}
         .badge {{ display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 500; border-radius: 10px; margin-left: 6px; }}
         .badge-primary {{ background: rgba(88, 166, 255, 0.15); color: var(--primary); border: 1px solid rgba(88, 166, 255, 0.3); }}
-        .badge-success {{ background: rgba(63, 185, 80, 0.15); color: var(--green); border: 1px solid rgba(63, 185, 80, 0.3); }}
-        .badge-warning {{ background: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.3); }}
-        .badge-danger {{ background: rgba(248, 81, 73, 0.15); color: var(--red); border: 1px solid rgba(248, 81, 73, 0.3); }}
+        .badge-success, .badge-green {{ background: rgba(63, 185, 80, 0.15); color: var(--green); border: 1px solid rgba(63, 185, 80, 0.3); }}
+        .badge-warning, .badge-yellow {{ background: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.3); }}
+        .badge-danger, .badge-red {{ background: rgba(248, 81, 73, 0.15); color: var(--red); border: 1px solid rgba(248, 81, 73, 0.3); }}
+        .badge-muted {{ background: rgba(139, 148, 158, 0.15); color: #8b949e; border: 1px solid rgba(139, 148, 158, 0.3); }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 20px; font-size: 13px; }}
         th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }}
         th {{ background: var(--bg); color: #8b949e; font-weight: 600; }}
@@ -4383,6 +4399,18 @@ def main():
         help="Minimum trade count threshold for exit reason and pair tables (default: 1)",
     )
     parser.add_argument(
+        "--rolling-window",
+        type=int,
+        default=30,
+        help="Rolling window trade count for stability analysis (default: 30)",
+    )
+    parser.add_argument(
+        "--wfo-folds",
+        type=int,
+        default=4,
+        help="Number of chronological folds for Walk-Forward Optimization stability analysis (default: 4)",
+    )
+    parser.add_argument(
         "--monte-carlo",
         "-mc",
         action="store_true",
@@ -4412,6 +4440,8 @@ def main():
         monte_carlo=args.monte_carlo,
         mc_iterations=args.mc_iterations,
         mc_threshold_pct=args.mc_threshold,
+        rolling_window=args.rolling_window,
+        wfo_folds=args.wfo_folds,
     )
     md_content = generate_markdown_report(results)
 

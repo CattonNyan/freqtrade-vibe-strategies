@@ -140,7 +140,7 @@ Get-Help .\tests\Test-PowerShellScripts.ps1 -Detailed
   -QuantHtml
 
 # 독립 퀀트 리스크 분석기 실행 (보유기간 감쇄·자본속도·타임아웃/WFO 파라미터 안정성·WFE 효율·감쇄율/동시성·자본활용도/MAE·MFE 진입우위·청산효율성/수익 집중도/슬리피지 민감도/롤링 윈도우/낙폭 에피소드/베팅규모별/포지션 방향별/월별/요일별/시간대별/보유기간별 성과 분석, .zip 압축 아카이브, .json 파일 및 --latest 최신 결과 자동 탐색 지원)
-python .\scripts\analyze_backtest_results.py --latest --output report.md --json report.json --csv report.csv --html report.html --sort-by profit --min-trades 3
+python .\scripts\analyze_backtest_results.py --latest --output report.md --json report.json --csv report.csv --html report.html --sort-by profit --min-trades 3 --rolling-window 30 --wfo-folds 4
 python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\ --html report.html
 python .\scripts\analyze_backtest_results.py .\user_data\backtest_results\backtest-result.zip --csv report.csv
 

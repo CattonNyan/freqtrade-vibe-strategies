@@ -2995,13 +2995,106 @@ class StrategySourceTests(unittest.TestCase):
 
         html_out = format_config_html(synth_configs, include_stats=True)
         self.assertIn("거래소 스탑로스 (Exchange SL)", html_out)
+        self.assertIn("커스텀 스탑로스", html_out)
+        self.assertNotIn("커스텀 스톱로스", html_out)
         self.assertIn("트레일링 오프셋 보호", html_out)
         self.assertIn("시장가 주문 채택", html_out)
         self.assertIn("거래소 SL", html_out)
         self.assertIn("주문 유형", html_out)
 
+    def test_audit_edge_cases_and_html_badges(self):
+        import sys
+        scripts_dir = str(ROOT / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        from analyze_backtest_results import (
+            _extract_trade_duration_min,
+            calculate_concurrency_exposure_analysis,
+            calculate_duration_tier_breakdown,
+            calculate_trade_expectancy,
+            calculate_wfo_stability_degradation,
+            generate_html_report,
+            parse_freqtrade_backtest_json,
+        )
+
+        # 1. WFO negative IS and negative OOS sign-inversion guard
+        all_losing_trades = [
+            {"profit_ratio": -0.02, "open_timestamp": 1700000000000 + i * 3600000, "close_timestamp": 1700001800000 + i * 3600000}
+            for i in range(12)
+        ]
+        wfo_losing = calculate_wfo_stability_degradation(all_losing_trades, n_folds=3)
+        self.assertLess(wfo_losing["is_total_profit_pct"], 0.0)
+        self.assertLess(wfo_losing["oos_total_profit_pct"], 0.0)
+        # Must be 0.0% rather than positive ratio from negative / negative!
+        self.assertEqual(wfo_losing["wfe_return_pct"], 0.0)
+        self.assertEqual(wfo_losing["wfe_sharpe_pct"], 0.0)
+        self.assertEqual(len(wfo_losing["folds"]), 3)
+
+        # 2. Trade duration fallback from timestamps when trade_duration is omitted
+        ts_only_trades = [
+            {
+                "profit_ratio": 0.03,
+                "open_date": "2026-01-01 00:00:00",
+                "close_date": "2026-01-01 02:30:00",  # 150 minutes
+            },
+            {
+                "profit_ratio": -0.01,
+                "open_timestamp": 1704067200000,
+                "close_timestamp": 1704069000000,  # 30 minutes
+            },
+        ]
+        self.assertAlmostEqual(_extract_trade_duration_min(ts_only_trades[0]), 150.0, places=2)
+        self.assertAlmostEqual(_extract_trade_duration_min(ts_only_trades[1]), 30.0, places=2)
+        exp_metrics = calculate_trade_expectancy(ts_only_trades)
+        self.assertAlmostEqual(exp_metrics["avg_duration_min"], 90.0, places=1)
+        dur_tiers = calculate_duration_tier_breakdown(ts_only_trades)
+        self.assertEqual(dur_tiers["1h - 4h (Intraday)"]["trades"], 1)
+        self.assertEqual(dur_tiers["15m - 1h (Short)"]["trades"], 1)
+
+        # 3. Multi-slot concurrency overload penalty across Moderate (3-4) + Heavy (5+)
+        # Slots 1, 2, 3, 4 win (100% win rate in Solo, Dual, and Moderate 3-4 Slots)
+        # Slots 5, 6 lose (0% win rate in Heavy 5+ Slots)
+        # Combined >=3 slots (Moderate + Heavy): 2 wins + 2 losses = 50% win rate -> 50.0% penalty vs 100% Solo!
+        overlap_trades = []
+        for i in range(6):
+            overlap_trades.append({
+                "profit_ratio": 0.03 if i < 4 else -0.02,
+                "open_timestamp": (3000 + i) * 1000,
+                "close_timestamp": 4000 * 1000,
+            })
+        conc_res = calculate_concurrency_exposure_analysis(overlap_trades)
+        self.assertEqual(conc_res["peak_concurrent_trades"], 6)
+        self.assertEqual(conc_res["slot_tier_performance"]["Moderate (3-4 Slots)"]["win_rate_pct"], 100.0)
+        self.assertEqual(conc_res["slot_tier_performance"]["Heavy (5+ Slots)"]["win_rate_pct"], 0.0)
+        self.assertAlmostEqual(conc_res["correlation_overload_penalty_pct"], 50.0, places=1)
+
+        # 4. Custom rolling_window and wfo_folds in parse_freqtrade_backtest_json + HTML badge CSS classes
+        raw_bt = {
+            "strategy": {
+                "TestStrat": {
+                    "trades": [
+                        {
+                            "pair": "BTC/USDT",
+                            "profit_ratio": 0.02 if i % 2 == 0 else -0.005,
+                            "open_timestamp": (1700000000 + i * 3600) * 1000,
+                            "close_timestamp": (1700001800 + i * 3600) * 1000,
+                        }
+                        for i in range(20)
+                    ]
+                }
+            }
+        }
+        parsed = parse_freqtrade_backtest_json(raw_bt, rolling_window=5, wfo_folds=5)
+        self.assertEqual(parsed["TestStrat"]["rolling_window_size"], 5)
+        self.assertEqual(len(parsed["TestStrat"]["wfo_stability"]["folds"]), 5)
+
+        html_report = generate_html_report(parsed)
+        for css_cls in (".badge-green", ".badge-yellow", ".badge-red", ".badge-muted"):
+            self.assertIn(css_cls, html_report)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

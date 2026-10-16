@@ -569,7 +569,7 @@ def format_config_html(configs: list[dict[str, object]], include_stats: bool = T
                 <div class="stat-value">{stats.get('market_order_pct', 0.0)}% <span class="stat-sub">({stats.get('market_order_count', 0)}개)</span></div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">커스텀 스톱로스</div>
+                <div class="stat-label">커스텀 스탑로스</div>
                 <div class="stat-value">{stats['custom_stoploss_pct']}% <span class="stat-sub">({stats['custom_stoploss_count']}개)</span></div>
             </div>
             <div class="stat-card">
